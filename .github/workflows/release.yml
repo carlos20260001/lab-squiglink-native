@@ -19,10 +19,10 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  linux:
-    name: Build and stage Linux release
+  create-draft:
+    name: Prepare draft release
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 15
     steps:
       - name: Validate release tag
         env:
@@ -34,70 +34,141 @@ jobs:
           fi
         shell: bash
 
-      - name: Check out source
-        uses: actions/checkout@v4
-
-      - name: Install stable Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Build Linux release
-        run: ./build.sh
-        shell: bash
-
-      - name: Package Linux release
-        run: |
-          set -eu
-          mkdir -p staging/CrinGraph dist
-          cp target/release/crigraph-native staging/CrinGraph/
-          cp -a data data_hp config-examples README.md LICENSE staging/CrinGraph/
-          tar -czf dist/cringraph-linux-x86_64.tar.gz -C staging CrinGraph
-        shell: bash
-
-      - name: Create draft release with Linux bundle
+      - name: Create draft release
         uses: softprops/action-gh-release@v2
-        timeout-minutes: 15
+        timeout-minutes: 10
         with:
           tag_name: ${{ github.event.inputs.release_tag || github.ref_name }}
           name: ${{ github.event.inputs.release_tag || github.ref_name }}
           target_commitish: ${{ github.sha }}
           draft: true
           generate_release_notes: true
-          fail_on_unmatched_files: true
           overwrite_files: true
-          files: dist/cringraph-linux-x86_64.tar.gz
 
-  windows:
-    name: Build Windows release and publish
-    runs-on: windows-latest
-    needs: linux
-    timeout-minutes: 30
+  linux:
+    name: Build Linux ${{ matrix.arch }}
+    needs: create-draft
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            arch: x86_64
+          - target: i686-unknown-linux-gnu
+            arch: x86
+          - target: armv7-unknown-linux-gnueabihf
+            arch: armhf
+          - target: aarch64-unknown-linux-gnu
+            arch: aarch64
     steps:
       - name: Check out source
         uses: actions/checkout@v4
 
       - name: Install stable Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install cross-compilation tool
+        if: matrix.target != 'x86_64-unknown-linux-gnu'
+        run: cargo install cross --locked
+        shell: bash
+
+      - name: Build release
+        run: ./build.sh "${{ matrix.target }}"
+        shell: bash
+
+      - name: Package Linux release
+        run: |
+          set -eu
+          mkdir -p "staging/CrinGraph" dist
+          cp "target/${{ matrix.target }}/release/crigraph-native" staging/CrinGraph/
+          cp -a data data_hp config-examples README.md LICENSE staging/CrinGraph/
+          tar -czf "dist/cringraph-linux-${{ matrix.arch }}.tar.gz" -C staging CrinGraph
+        shell: bash
+
+      - name: Upload release bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: cringraph-linux-${{ matrix.arch }}
+          path: dist/cringraph-linux-${{ matrix.arch }}.tar.gz
+          if-no-files-found: error
+          retention-days: 1
+
+  windows:
+    name: Build Windows ${{ matrix.arch }}
+    needs: create-draft
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: i686-pc-windows-msvc
+            arch: x86
+            runner: windows-latest
+          - target: x86_64-pc-windows-msvc
+            arch: x86_64
+            runner: windows-latest
+          - target: aarch64-pc-windows-msvc
+            arch: arm64
+            runner: windows-11-arm
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Install stable Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
 
       - name: Build Windows release
-        run: .\build.cmd
+        run: .\build.cmd ${{ matrix.target }}
         shell: pwsh
 
       - name: Package Windows release
         run: |
           $ErrorActionPreference = "Stop"
           New-Item -ItemType Directory -Force staging/CrinGraph, dist | Out-Null
-          Copy-Item target/release/crigraph-native.exe staging/CrinGraph/
+          Copy-Item "target/${{ matrix.target }}/release/crigraph-native.exe" staging/CrinGraph/
           Copy-Item data, data_hp, config-examples, README.md, LICENSE staging/CrinGraph/ -Recurse
-          Compress-Archive -Path staging/CrinGraph -DestinationPath dist/cringraph-windows-x86_64.zip -Force
+          Compress-Archive -Path staging/CrinGraph -DestinationPath "dist/cringraph-windows-${{ matrix.arch }}.zip" -Force
         shell: pwsh
 
-      - name: Upload Windows bundle and publish release
+      - name: Upload release bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: cringraph-windows-${{ matrix.arch }}
+          path: dist/cringraph-windows-${{ matrix.arch }}.zip
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    name: Publish all architecture bundles
+    needs:
+      - create-draft
+      - linux
+      - windows
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Download release bundles
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: Publish release with all bundles
         uses: softprops/action-gh-release@v2
         timeout-minutes: 15
         with:
           tag_name: ${{ github.event.inputs.release_tag || github.ref_name }}
           name: ${{ github.event.inputs.release_tag || github.ref_name }}
           target_commitish: ${{ github.sha }}
-          fail_on_unmatched_files: true
           overwrite_files: true
-          files: dist/cringraph-windows-x86_64.zip
+          fail_on_unmatched_files: true
+          files: |
+            release-assets/cringraph-linux-*.tar.gz
+            release-assets/cringraph-windows-*.zip

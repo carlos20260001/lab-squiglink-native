@@ -65,7 +65,18 @@ For an optimized Linux build:
 cargo build --release
 ```
 
-Or use the repository build script with `./build.sh`.
+The release workflow also builds Linux x86_64, x86 (i686), ARM hard-float
+(armhf), and ARM64 (aarch64) packages. To build a particular Rust target
+yourself, pass its target triple to the script (cross targets require the
+appropriate toolchain; the workflow uses `cross` for non-host Linux targets):
+
+```bash
+./build.sh i686-unknown-linux-gnu
+./build.sh armv7-unknown-linux-gnueabihf
+./build.sh aarch64-unknown-linux-gnu
+```
+
+Without a target argument, `./build.sh` builds for the current machine.
 
 #### Windows
 
@@ -81,7 +92,13 @@ cargo build --release
 The Windows executable is created at `target\release\crigraph-native.exe`.
 Build on Windows to produce a Windows executable; binaries are platform-specific.
 You can run `build.cmd` from Command Prompt or PowerShell as a build-script
-alternative.
+alternative. The workflow publishes Windows x86 (32-bit), x86_64, and ARM64
+binaries. The x86 build targets `i686-pc-windows-msvc` and is intended for
+Windows 10 32-bit; ARM64 builds run on GitHub's public ARM64 Windows runner.
+To choose a target explicitly, pass `i686-pc-windows-msvc`,
+`x86_64-pc-windows-msvc`, or `aarch64-pc-windows-msvc` to `build.cmd`.
+The 32-bit executable is written to
+`target\i686-pc-windows-msvc\release\crigraph-native.exe`.
 
 #### macOS
 
@@ -119,15 +136,16 @@ Pushing a version tag such as `v1.0.0` starts the GitHub Actions release
 workflow. You can also run **Build and release** manually from the Actions tab:
 select the source branch or tag, then enter a version tag such as `v1.0.1`.
 Manual runs create or update that release tag at the selected source commit.
-The workflow builds Linux x86_64 and Windows x86_64 packages using `build.sh`
-and `build.cmd`, then attaches a Linux `.tar.gz` and a Windows `.zip` directly
-to a GitHub Release. These are the release downloads; they are not nested inside
-GitHub Actions artifact archives. Each bundle contains the executable and
-sample measurement databases. Run the executable from its extracted `CrinGraph`
-folder so the bundled `data/` and `data_hp/` directories are available. The
-workflow stages a draft release after the Linux build and publishes it when
-the Windows bundle upload succeeds; a failed build leaves it as a draft for
-inspection or retry.
+The workflow builds Linux x86_64, x86, armhf, and aarch64 packages, plus Windows
+x86 (32-bit), x86_64, and ARM64 packages. It attaches the four Linux `.tar.gz`
+and three Windows `.zip` bundles directly to a GitHub Release. These are the
+release downloads; they are not nested inside GitHub Actions artifact archives.
+Each bundle contains the executable and sample measurement databases. Run the
+executable from its extracted `CrinGraph` folder so the bundled `data/` and
+`data_hp/` directories are available. The workflow creates a draft release
+before building and publishes it only after all architecture builds and
+uploads succeed; failed builds leave the release as a draft for inspection or
+retry.
 
 ### Configuration
 

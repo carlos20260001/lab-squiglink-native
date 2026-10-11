@@ -15,11 +15,24 @@ if errorlevel 1 (
     exit /b 1
 )
 
-cargo build --release
+if "%~2" NEQ "" (
+    echo Usage: build.cmd [Rust target triple] 1>&2
+    popd
+    endlocal
+    exit /b 2
+)
+
+if "%~1"=="" (
+    cargo build --release
+    set "OUTPUT=target\release\crigraph-native.exe"
+) else (
+    cargo build --release --target "%~1"
+    set "OUTPUT=target\%~1\release\crigraph-native.exe"
+)
 if errorlevel 1 goto build_failed
 
 echo.
-echo Build complete: %CD%\target\release\crigraph-native.exe
+echo Build complete: %CD%\%OUTPUT%
 popd
 endlocal
 exit /b 0
