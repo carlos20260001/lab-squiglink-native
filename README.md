@@ -116,7 +116,10 @@ build the project.
 ### Automated release builds
 
 Pushing a version tag such as `v1.0.0` starts the GitHub Actions release
-workflow. It builds Linux x86_64 and Windows x86_64 packages using `build.sh`
+workflow. You can also run **Build and release** manually from the Actions tab:
+select the source branch or tag, then enter a version tag such as `v1.0.1`.
+Manual runs create or update that release tag at the selected source commit.
+The workflow builds Linux x86_64 and Windows x86_64 packages using `build.sh`
 and `build.cmd`, then attaches a Linux `.tar.gz` and a Windows `.zip` directly
 to a GitHub Release. These are the release downloads; they are not nested inside
 GitHub Actions artifact archives. Each bundle contains the executable and
