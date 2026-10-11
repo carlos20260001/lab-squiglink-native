@@ -105,4 +105,4 @@ File a Github issue here for topics related to the project. You can also
 reach me by the email in my Github profile and the [LICENSE](LICENSE).
 I can sometimes be found on
 [Crin's Discord server](https://discord.gg/CtTqcCb) where I am
-creatively named Marshall.
+creatively named Marshall. (Web Frontend Original Developer)
