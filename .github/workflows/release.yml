@@ -1,0 +1,87 @@
+name: Build and release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.platform }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux-x86_64
+            runner: ubuntu-latest
+          - platform: windows-x86_64
+            runner: windows-latest
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Install stable Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build Linux release
+        if: runner.os == 'Linux'
+        run: ./build.sh
+        shell: bash
+
+      - name: Build Windows release
+        if: runner.os == 'Windows'
+        run: .\build.cmd
+        shell: pwsh
+
+      - name: Package Linux release
+        if: runner.os == 'Linux'
+        run: |
+          set -eu
+          mkdir -p staging/CrinGraph dist
+          cp target/release/crigraph-native staging/CrinGraph/
+          cp -a data data_hp config-examples README.md LICENSE staging/CrinGraph/
+          tar -czf dist/cringraph-linux-x86_64.tar.gz -C staging CrinGraph
+        shell: bash
+
+      - name: Package Windows release
+        if: runner.os == 'Windows'
+        run: |
+          $ErrorActionPreference = "Stop"
+          New-Item -ItemType Directory -Force staging/CrinGraph, dist | Out-Null
+          Copy-Item target/release/crigraph-native.exe staging/CrinGraph/
+          Copy-Item data, data_hp, config-examples, README.md, LICENSE staging/CrinGraph/ -Recurse
+          Compress-Archive -Path staging/CrinGraph -DestinationPath dist/cringraph-windows-x86_64.zip -Force
+        shell: pwsh
+
+      - name: Upload release bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: cringraph-${{ matrix.platform }}
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    name: Publish GitHub release
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download platform bundles
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: Publish release and attach bundles
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: gh release create "$RELEASE_TAG" release-assets/* --title "$RELEASE_TAG" --generate-notes
+        shell: bash

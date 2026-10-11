@@ -113,6 +113,15 @@ They are local build artifacts, excluded from Git, and should not be included
 in source commits or releases as source files. Cargo recreates them when you
 build the project.
 
+### Automated release builds
+
+Pushing a version tag such as `v1.0.0` starts the GitHub Actions release
+workflow. It builds Linux x86_64 and Windows x86_64 packages using `build.sh`
+and `build.cmd`, then attaches the Linux `.tar.gz` and Windows `.zip` bundles
+to a GitHub Release. Each bundle contains the executable and sample measurement
+databases. Run the executable from its extracted `CrinGraph` folder so the
+bundled `data/` and `data_hp/` directories are available.
+
 ### Configuration
 
 The app reads a single `config.toml` from the current user's standard
