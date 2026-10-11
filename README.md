@@ -38,7 +38,23 @@ This repository includes some sample data so that the tool can be shown
 through Github pages. Sometimes I use this to show people features
 before they're adopted on Crin's site.
 
-[View some sample graphs.](https://mlochbaum.github.io/CrinGraph/graph.html)
+[View some sample graphs.](https://mlochbaum.github.io/CrinGraph/old/graph.html)
+
+The original JavaScript/HTML web app is archived in [`old/`](old/). The
+actively maintained application is the native Rust/egui app.
+
+### Building the native app
+
+Build and run the desktop application with Cargo:
+
+```sh
+cargo run
+```
+
+Generated executables and intermediate build files are written to `target/`.
+They are local build artifacts, excluded from Git, and should not be included
+in source commits or releases as source files. Cargo recreates them when you
+build the project.
 
 Because Crinacle's frequency response measurements are not public, the
 sample response curves shown are synthesized. They are not real

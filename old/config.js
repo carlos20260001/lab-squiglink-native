@@ -1,6 +1,6 @@
 // Configuration options
 const init_phones = ["HTH67"],                      // Optional. Which graphs to display on initial load. Note: Share URLs will override this set
-      DIR = "data/",                                // Directory where graph files are stored
+      DIR = "../data/",                             // Directory where graph files are stored
       data_format = "AudioTools",                   // Accepts "AudioTools," "REW," or "other"
       default_channels = ["L","R"],                 // Which channels to display. Avoid javascript errors if loading just one channel per phone
       default_normalization = "dB",                 // Sets default graph normalization mode. Accepts "dB" or "Hz"
@@ -12,10 +12,10 @@ const init_phones = ["HTH67"],                      // Optional. Which graphs to
       alt_animated = false,                         // Determines if new graphs are drawn with a 1-second animation, or appear instantly
       alt_header = false,                           // Display a configurable header at the top of the alt layout
       alt_tutorial = false,                         // Display a configurable frequency response guide below the graph
-      site_url = 'graph.html',                      // URL of your graph "homepage"
+      site_url = 'old/graph.html',                  // URL of your graph "homepage"
       share_url = true,                             // If true, enables shareable URLs
       watermark_text = "CrinGraph",                 // Optional. Watermark appears behind graphs
-      watermark_image_url = "cringraph-logo.svg",   // Optional. If image file is in same directory as config, can be just the filename
+      watermark_image_url = "../cringraph-logo.svg", // Optional. Image paths are relative to the old/ page
       page_title = "CrinGraph",                     // Optional. Appended to the page title if share URLs are enabled
       page_description = "View and compare frequency response graphs for earphones",
       accessories = false,                          // If true, displays specified HTML at the bottom of the page. Configure further below
@@ -99,10 +99,10 @@ function setLayout() {
     }
 
     if ( !alt_layout ) {
-        applyStylesheet("style.css");
+        applyStylesheet("../style.css");
     } else {
-        applyStylesheet("style-alt.css");
-        applyStylesheet("style-alt-theme.css");
+        applyStylesheet("../style-alt.css");
+        applyStylesheet("../style-alt-theme.css");
     }
 }
 setLayout();
@@ -149,15 +149,15 @@ const
     widgets = `
         <div class="accessories-widgets">
             <div class="widget">
-                <img width="200" src="cringraph-logo.svg"/>
+                <img width="200" src="../cringraph-logo.svg"/>
             </div>
 
             <div class="widget">
-                <img width="200" src="cringraph-logo.svg"/>
+                <img width="200" src="../cringraph-logo.svg"/>
             </div>
 
             <div class="widget">
-                <img width="200" src="cringraph-logo.svg"/>
+                <img width="200" src="../cringraph-logo.svg"/>
             </div>
         </div>
     `,
@@ -242,7 +242,7 @@ setupGraphAnalytics();
 
 
 // If alt_header is enabled, these are the items added to the header
-let headerLogoImgUrl = "cringraph-logo.svg",
+let headerLogoImgUrl = "../cringraph-logo.svg",
     headerLinks = [
     {
         name: "Sample",

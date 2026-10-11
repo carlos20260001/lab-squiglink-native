@@ -21,7 +21,7 @@ able to help with:
   CrinGraph repository includes sample data so it can function on its
   own. Once I had the data I just set the source to "master branch" in
   the settings under "Github Pages", and Github put the page at
-  https://mlochbaum.github.io/CrinGraph/graph.html. You can show your
+  https://mlochbaum.github.io/CrinGraph/old/graph.html. You can show your
   graphs in the same way by forking my repository and making the changes
   described here, then changing the "Github Pages" setting like I did.
 
@@ -30,7 +30,7 @@ able to help with:
 These are the things you definitely need to change to make sure your
 page works and isn't claiming it's crinacle.com.
 
-* Set `DIR` in `config.js` and place your graphs and `phone_book.json`
+* Set `DIR` in `old/config.js` and place your graphs and `phone_book.json`
   there.
 * Remove or change the watermark.
 * Remove the `targets`, replace them with your own, or get permission
@@ -40,15 +40,15 @@ page works and isn't claiming it's crinacle.com.
 
 ## Configuring CrinGraph
 
-The main page used to display graphs is [graph.html](graph.html), which
+The archived web app's main page is [old/graph.html](old/graph.html), which
 defines the basic structure of a page and then includes a bunch of
 Javascript files that do the real work (at the end of the file).
-[graph_free.html](graph_free.html) is identical but uses a different 
+[old/graph_free.html](old/graph_free.html) is identical but uses a different
 configuration file to remove some functionality. You will only need to
 use it if you intend to have both a free and a paid graph tool.
 
 Ideally all configuration can be done simply by changing
-[config.js](config.js). However, there are currently not very many
+[old/config.js](old/config.js). However, there are currently not very many
 configuration options. Ask if there's something you want to change but
 can't!
 
@@ -98,7 +98,7 @@ be unrestricted.
 
 The following parameters are used to allow multiple samples per channel
 and different channel configurations than L/R. For example,
-`config_hp.js` is intended for headphones and shows only the right
+`old/config_hp.js` is intended for headphones and shows only the right
 channel with five samples per channel.
 
 * `default_channels` is a list of channels in each measurement: it
