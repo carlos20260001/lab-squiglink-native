@@ -117,10 +117,14 @@ build the project.
 
 Pushing a version tag such as `v1.0.0` starts the GitHub Actions release
 workflow. It builds Linux x86_64 and Windows x86_64 packages using `build.sh`
-and `build.cmd`, then attaches the Linux `.tar.gz` and Windows `.zip` bundles
-to a GitHub Release. Each bundle contains the executable and sample measurement
-databases. Run the executable from its extracted `CrinGraph` folder so the
-bundled `data/` and `data_hp/` directories are available.
+and `build.cmd`, then attaches a Linux `.tar.gz` and a Windows `.zip` directly
+to a GitHub Release. These are the release downloads; they are not nested inside
+GitHub Actions artifact archives. Each bundle contains the executable and
+sample measurement databases. Run the executable from its extracted `CrinGraph`
+folder so the bundled `data/` and `data_hp/` directories are available. The
+workflow stages a draft release after the Linux build and publishes it when
+the Windows bundle upload succeeds; a failed build leaves it as a draft for
+inspection or retry.
 
 ### Configuration
 
