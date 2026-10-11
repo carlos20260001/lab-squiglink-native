@@ -45,11 +45,33 @@ actively maintained application is the native Rust/egui app.
 
 ### Building the native app
 
-Build and run the desktop application with Cargo:
+#### GNU/Linux
 
-```sh
+With Rust and Cargo installed, build and run the desktop application:
+
+```bash
 cargo run
 ```
+
+For an optimized Linux build:
+
+```bash
+cargo build --release
+```
+
+#### Windows
+
+Install [Rust](https://www.rust-lang.org/tools/install) with the MSVC toolchain,
+and [Visual Studio C++ Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/)
+with the **Desktop development with C++** workload. From PowerShell, run:
+
+```powershell
+cargo build --release
+.\target\release\crigraph-native.exe
+```
+
+The Windows executable is created at `target\release\crigraph-native.exe`.
+Build on Windows to produce a Windows executable; binaries are platform-specific.
 
 Generated executables and intermediate build files are written to `target/`.
 They are local build artifacts, excluded from Git, and should not be included
@@ -59,6 +81,8 @@ build the project.
 ### Native app screenshot
 
 ![CrinGraph native app showing a frequency response graph](assets/Screenshots/Cringraph-native-screenshot-1.png)
+
+*Screenshot captured on GNU/Linux.*
 
 Because Crinacle's frequency response measurements are not public, the
 sample response curves shown are synthesized. They are not real

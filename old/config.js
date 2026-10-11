@@ -99,10 +99,10 @@ function setLayout() {
     }
 
     if ( !alt_layout ) {
-        applyStylesheet("../style.css");
+        applyStylesheet("style.css");
     } else {
-        applyStylesheet("../style-alt.css");
-        applyStylesheet("../style-alt-theme.css");
+        applyStylesheet("style-alt.css");
+        applyStylesheet("style-alt-theme.css");
     }
 }
 setLayout();
