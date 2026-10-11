@@ -80,7 +80,6 @@ jobs:
         with:
           tag_name: ${{ github.ref_name }}
           name: ${{ github.ref_name }}
-          draft: false
           fail_on_unmatched_files: true
           overwrite_files: true
           files: dist/cringraph-windows-x86_64.zip
