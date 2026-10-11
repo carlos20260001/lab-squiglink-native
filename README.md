@@ -56,6 +56,10 @@ They are local build artifacts, excluded from Git, and should not be included
 in source commits or releases as source files. Cargo recreates them when you
 build the project.
 
+### Native app screenshot
+
+![CrinGraph native app showing a frequency response graph](assets/Screenshots/Cringraph-native-screenshot-1.png)
+
 Because Crinacle's frequency response measurements are not public, the
 sample response curves shown are synthesized. They are not real
 headphones and you can't listen to them. To reduce potential
@@ -120,4 +124,5 @@ File a Github issue here for topics related to the project. You can also
 reach me by the email in my Github profile and the [LICENSE](LICENSE).
 I can sometimes be found on
 [Crin's Discord server](https://discord.gg/CtTqcCb) where I am
-creatively named Marshall.
+creatively named Marshall. (Original CrinGraph Web Project)
+I Don't Currenly have any discord account :-)
