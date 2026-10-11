@@ -43,6 +43,12 @@ before they're adopted on Crin's site.
 The original JavaScript/HTML web app is archived in [`old/`](old/). The
 actively maintained application is the native Rust/egui app.
 
+The native interface uses [egui](https://github.com/emilk/egui), an immediate-mode
+GUI library for Rust, with [eframe](https://github.com/emilk/egui/tree/master/crates/eframe)
+providing the native application framework. They are third-party open-source
+projects; CrinGraph's measurement processing and graph implementation are
+separate project code.
+
 ### Building the native app
 
 #### GNU/Linux
@@ -72,6 +78,30 @@ cargo build --release
 
 The Windows executable is created at `target\release\crigraph-native.exe`.
 Build on Windows to produce a Windows executable; binaries are platform-specific.
+
+#### macOS
+
+The Rust application has no platform-specific code, and its GUI dependencies
+resolve for both Apple Silicon and Intel macOS targets. macOS builds have not
+been runtime-tested in this GNU/Linux environment.
+
+Install Rust with [rustup](https://www.rust-lang.org/tools/install) and the
+[Xcode Command Line Tools](https://developer.apple.com/xcode/resources/). Then,
+in Terminal, build and run:
+
+```bash
+xcode-select --install
+cargo run
+```
+
+To build an optimized macOS executable:
+
+```bash
+cargo build --release
+```
+
+The executable is created at `target/release/crigraph-native`. Build on macOS
+to produce a native macOS binary; binaries are platform-specific.
 
 Generated executables and intermediate build files are written to `target/`.
 They are local build artifacts, excluded from Git, and should not be included
@@ -141,6 +171,16 @@ The graph tool displays:
 * Temporarily hide or unhide a graph
 * PIN a headphone to avoid losing it while adding others
 * Click the little dots at the bottom left to change a single headphone's [color](Documentation.md#colors)
+
+## Trademarks
+
+Windows is a trademark of Microsoft Corporation. Apple and macOS are trademarks
+of Apple Inc., registered in the U.S. and other countries and regions.
+Linux is the registered trademark of Linus Torvalds in the U.S. and other countries.
+GNU refers to the GNU Project and its software, principally sponsored by the Free Software Foundation, Inc.
+These names are used only to identify supported platforms and software; this
+project is not affiliated with or endorsed by Microsoft Corporation, Apple Inc.,
+Linus Torvalds, the GNU Project, or the Free Software Foundation, Inc.
 
 ## Contact
 
