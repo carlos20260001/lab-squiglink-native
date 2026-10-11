@@ -1,0 +1,9 @@
+# Example for Windows:
+# Copy to %APPDATA%\cringraph\config.toml and replace the example user
+# directory with your checkout location. Forward slashes are valid in TOML.
+[measurements]
+database_dir = "C:/Users/YourName/source/repos/CrinGraph-native/data"
+headphone_database_dir = "C:/Users/YourName/source/repos/CrinGraph-native/data_hp"
+
+[defaults]
+smoothing_octaves = 5

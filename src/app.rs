@@ -8,8 +8,38 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 const MAX_ACTIVE_CURVES: usize = 8;
+const MAX_SMOOTH_LEVEL: usize = 12;
+const CONFIG_DIRECTORY_NAME: &str = "cringraph";
 const SHARE_URI_PREFIX: &str = "cringraph://state/v1/";
 const MAX_SHARE_URI_LENGTH: usize = 65_536;
+
+#[derive(Clone, Debug, Deserialize, Default, PartialEq, Eq, Serialize)]
+#[serde(default, deny_unknown_fields)]
+struct AppConfig {
+    measurements: MeasurementConfig,
+    defaults: DefaultConfig,
+}
+
+#[derive(Clone, Debug, Deserialize, Default, PartialEq, Eq, Serialize)]
+#[serde(default, deny_unknown_fields)]
+struct MeasurementConfig {
+    database_dir: Option<PathBuf>,
+    headphone_database_dir: Option<PathBuf>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
+#[serde(default, deny_unknown_fields)]
+struct DefaultConfig {
+    smoothing_octaves: usize,
+}
+
+impl Default for DefaultConfig {
+    fn default() -> Self {
+        Self {
+            smoothing_octaves: 5,
+        }
+    }
+}
 
 struct TutorialSegment {
     title: &'static str,
@@ -248,13 +278,32 @@ impl CrinGraphApp {
     }
 
     fn load_measurements(&mut self) -> anyhow::Result<()> {
-        let (mut curves, _) = data::load_data(Path::new("data"))?;
-        let mut phone_books = vec![data::load_phone_book(Path::new("data/phone_book.json"))?];
-        if Path::new("data_hp").is_dir() {
-            let (headphone_curves, _) = data::load_data(Path::new("data_hp"))?;
+        let config_path = app_config_path()?;
+        let config = initialize_app_config_from(&config_path)?;
+        validate_app_config(&config)?;
+        self.smooth_level = config.defaults.smoothing_octaves;
+
+        let database_dir = resolve_measurement_dir(
+            config.measurements.database_dir.as_deref(),
+            Path::new("data"),
+            &config_path,
+        );
+        let (mut curves, _) = data::load_data(&database_dir)?;
+        let mut phone_books = vec![data::load_phone_book(
+            &database_dir.join("phone_book.json"),
+        )?];
+
+        let headphone_database_dir = resolve_measurement_dir(
+            config.measurements.headphone_database_dir.as_deref(),
+            Path::new("data_hp"),
+            &config_path,
+        );
+        if config.measurements.headphone_database_dir.is_some() || headphone_database_dir.is_dir() {
+            let (headphone_curves, _) = data::load_data(&headphone_database_dir)?;
             curves.extend(headphone_curves);
-            if Path::new("data_hp/phone_book.json").is_file() {
-                phone_books.push(data::load_phone_book(Path::new("data_hp/phone_book.json"))?);
+            let phone_book_path = headphone_database_dir.join("phone_book.json");
+            if phone_book_path.is_file() {
+                phone_books.push(data::load_phone_book(&phone_book_path)?);
             }
         }
         curves.sort_by(|left, right| {
@@ -653,8 +702,11 @@ impl CrinGraphApp {
                 ui.checkbox(&mut self.show_labels, "Labels")
                     .on_hover_text("Curve labels are auto-spaced; drag a label to position it.");
                 ui.checkbox(&mut self.inspect_mode, "Inspect");
-                ui.checkbox(&mut self.debug_hooks, "Debug hooks")
-                    .on_hover_text("Show egui widget diagnostics when hovering controls.");
+                ui.add_enabled(
+                    cfg!(debug_assertions),
+                    egui::Checkbox::new(&mut self.debug_hooks, "Debug hooks"),
+                )
+                .on_hover_text("Show egui widget diagnostics when hovering controls.");
                 if ui
                     .button(if self.dark_mode {
                         "Light theme"
@@ -1164,6 +1216,7 @@ impl CrinGraphApp {
 
 impl eframe::App for CrinGraphApp {
     fn update(&mut self, ctx: &Context, _frame: &mut eframe::Frame) {
+        #[cfg(debug_assertions)]
         ctx.set_debug_on_hover(self.debug_hooks);
         if self.screenshot_pending {
             ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot);
@@ -1377,11 +1430,107 @@ fn preferences_path() -> anyhow::Result<PathBuf> {
     let config_dir = dirs::config_dir().ok_or_else(|| {
         anyhow::anyhow!("the operating system did not provide a config directory")
     })?;
+    Ok(config_dir
+        .join(CONFIG_DIRECTORY_NAME)
+        .join("preferences.json"))
+}
+
+fn app_config_path() -> anyhow::Result<PathBuf> {
+    let config_dir = dirs::config_dir().ok_or_else(|| {
+        anyhow::anyhow!("the operating system did not provide a config directory")
+    })?;
+    Ok(config_dir.join(CONFIG_DIRECTORY_NAME).join("config.toml"))
+}
+
+fn legacy_preferences_path() -> anyhow::Result<PathBuf> {
+    let config_dir = dirs::config_dir().ok_or_else(|| {
+        anyhow::anyhow!("the operating system did not provide a config directory")
+    })?;
     Ok(config_dir.join("CrinGraph-native").join("preferences.json"))
 }
 
+fn read_app_config_from(path: &Path) -> anyhow::Result<AppConfig> {
+    match std::fs::read_to_string(path) {
+        Ok(contents) => Ok(toml::from_str(&contents)?),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(AppConfig::default()),
+        Err(error) => Err(error.into()),
+    }
+}
+
+fn initialize_app_config_from(path: &Path) -> anyhow::Result<AppConfig> {
+    match std::fs::read_to_string(path) {
+        Ok(contents) => Ok(toml::from_str(&contents)?),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            let config = default_app_config()?;
+            let directory = path
+                .parent()
+                .ok_or_else(|| anyhow::anyhow!("configuration path has no parent directory"))?;
+            std::fs::create_dir_all(directory)?;
+            let contents = toml::to_string_pretty(&config)?;
+            let mut file = match std::fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(path)
+            {
+                Ok(file) => file,
+                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+                    return read_app_config_from(path);
+                }
+                Err(error) => return Err(error.into()),
+            };
+            use std::io::Write;
+            file.write_all(contents.as_bytes())?;
+            file.sync_all()?;
+            Ok(config)
+        }
+        Err(error) => Err(error.into()),
+    }
+}
+
+fn default_app_config() -> anyhow::Result<AppConfig> {
+    let working_directory = std::env::current_dir()?;
+    let headphone_database_dir = working_directory.join("data_hp");
+    Ok(AppConfig {
+        measurements: MeasurementConfig {
+            database_dir: Some(working_directory.join("data")),
+            headphone_database_dir: headphone_database_dir
+                .is_dir()
+                .then_some(headphone_database_dir),
+        },
+        defaults: DefaultConfig::default(),
+    })
+}
+
+fn validate_app_config(config: &AppConfig) -> anyhow::Result<()> {
+    if config.defaults.smoothing_octaves > MAX_SMOOTH_LEVEL {
+        anyhow::bail!("configured smoothing_octaves must be between 0 and {MAX_SMOOTH_LEVEL}");
+    }
+    Ok(())
+}
+
+fn resolve_measurement_dir(
+    configured: Option<&Path>,
+    fallback: &Path,
+    config_path: &Path,
+) -> PathBuf {
+    let Some(path) = configured else {
+        return fallback.to_path_buf();
+    };
+    if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        config_path
+            .parent()
+            .unwrap_or_else(|| Path::new("."))
+            .join(path)
+    }
+}
+
 fn read_preferences() -> anyhow::Result<Option<Preferences>> {
-    read_preferences_from(&preferences_path()?)
+    if let Some(preferences) = read_preferences_from(&preferences_path()?)? {
+        return Ok(Some(preferences));
+    }
+    read_preferences_from(&legacy_preferences_path()?)
 }
 
 fn read_preferences_from(path: &Path) -> anyhow::Result<Option<Preferences>> {
@@ -1673,9 +1822,10 @@ fn prepare_curve(
 mod tests {
     use super::{
         apply_baseline, build_groups, decode_share_uri, encode_share_uri, group_has_imbalance,
-        interpolate_db, matches_search, prepare_channels, read_preferences_from,
-        write_preferences_to, ChannelMode, CrinGraphApp, DisplayCurve, Preferences, SavedGroup,
-        MAX_SHARE_URI_LENGTH, TUTORIAL_SEGMENTS,
+        initialize_app_config_from, interpolate_db, matches_search, prepare_channels,
+        read_app_config_from, read_preferences_from, resolve_measurement_dir, validate_app_config,
+        write_preferences_to, AppConfig, ChannelMode, CrinGraphApp, DisplayCurve, Preferences,
+        SavedGroup, MAX_SHARE_URI_LENGTH, MAX_SMOOTH_LEVEL, TUTORIAL_SEGMENTS,
     };
     use crigraph_native::data::{CurveInfo, FRPoint};
     use crigraph_native::graph::ZoomRegion;
@@ -1685,6 +1835,134 @@ mod tests {
     fn default_smoothing_matches_the_original_graph_setting() {
         assert_eq!(Preferences::default().smooth_level, 5);
         assert_eq!(CrinGraphApp::default().smooth_level, 5);
+    }
+
+    #[test]
+    fn app_config_sets_measurement_directories_and_default_smoothing() {
+        let directory = std::env::temp_dir().join(format!(
+            "cringraph-config-test-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&directory).unwrap();
+        let path = directory.join("config.toml");
+        std::fs::write(
+            &path,
+            r#"
+[measurements]
+database_dir = "measurements"
+headphone_database_dir = "headphones"
+
+[defaults]
+smoothing_octaves = 3
+"#,
+        )
+        .unwrap();
+
+        let config = read_app_config_from(&path).unwrap();
+        assert_eq!(config.defaults.smoothing_octaves, 3);
+        assert_eq!(
+            resolve_measurement_dir(
+                config.measurements.database_dir.as_deref(),
+                Path::new("data"),
+                &path
+            ),
+            directory.join("measurements")
+        );
+        assert_eq!(
+            resolve_measurement_dir(
+                config.measurements.headphone_database_dir.as_deref(),
+                Path::new("data_hp"),
+                &path
+            ),
+            directory.join("headphones")
+        );
+        let absolute_path = directory.join("external-headphones");
+        assert_eq!(
+            resolve_measurement_dir(Some(&absolute_path), Path::new("data_hp"), &path),
+            absolute_path
+        );
+        std::fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn platform_config_examples_are_valid_toml_schemas() {
+        let examples = [
+            "config-examples/windows/config.toml",
+            "config-examples/linux/config.toml",
+            "config-examples/macos/config.toml",
+        ];
+        for example in examples {
+            let path = Path::new(env!("CARGO_MANIFEST_DIR")).join(example);
+            let config = read_app_config_from(&path).unwrap();
+            validate_app_config(&config).unwrap();
+            assert!(config.measurements.database_dir.is_some());
+            assert!(config.measurements.headphone_database_dir.is_some());
+            assert_eq!(config.defaults.smoothing_octaves, 5);
+        }
+    }
+
+    #[test]
+    fn missing_app_config_uses_defaults_and_out_of_range_smoothing_is_rejected() {
+        let directory = std::env::temp_dir().join(format!(
+            "cringraph-config-default-test-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&directory).unwrap();
+        let path = directory.join("missing.toml");
+        let config = read_app_config_from(&path).unwrap();
+        assert_eq!(config, AppConfig::default());
+        assert_eq!(config.defaults.smoothing_octaves, 5);
+
+        std::fs::write(
+            &path,
+            format!("[defaults]\nsmoothing_octaves = {}\n", MAX_SMOOTH_LEVEL + 1),
+        )
+        .unwrap();
+        let config = read_app_config_from(&path).unwrap();
+        assert!(config.defaults.smoothing_octaves > MAX_SMOOTH_LEVEL);
+        assert!(validate_app_config(&config).is_err());
+        std::fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn first_run_creates_config_with_sample_paths_and_preserves_existing_config() {
+        let directory = std::env::temp_dir().join(format!(
+            "cringraph-config-create-test-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let path = directory.join("config.toml");
+        let config = initialize_app_config_from(&path).unwrap();
+        let generated_contents = std::fs::read_to_string(&path).unwrap();
+        let current_directory = std::env::current_dir().unwrap();
+        assert_eq!(
+            config.measurements.database_dir,
+            Some(current_directory.join("data"))
+        );
+        assert!(generated_contents.contains("database_dir"));
+        assert!(generated_contents.contains("smoothing_octaves = 5"));
+
+        let second_read = initialize_app_config_from(&path).unwrap();
+        assert_eq!(second_read, config);
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), generated_contents);
+
+        let user_config = "[defaults]\nsmoothing_octaves = 2\n";
+        std::fs::write(&path, user_config).unwrap();
+        let user_config_parsed = initialize_app_config_from(&path).unwrap();
+        assert_eq!(user_config_parsed.defaults.smoothing_octaves, 2);
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), user_config);
+        std::fs::remove_dir_all(directory).unwrap();
     }
 
     #[test]

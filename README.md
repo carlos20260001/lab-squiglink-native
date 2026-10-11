@@ -65,6 +65,8 @@ For an optimized Linux build:
 cargo build --release
 ```
 
+Or use the repository build script with `./build.sh`.
+
 #### Windows
 
 Install [Rust](https://www.rust-lang.org/tools/install) with the MSVC toolchain,
@@ -78,6 +80,8 @@ cargo build --release
 
 The Windows executable is created at `target\release\crigraph-native.exe`.
 Build on Windows to produce a Windows executable; binaries are platform-specific.
+You can run `build.cmd` from Command Prompt or PowerShell as a build-script
+alternative.
 
 #### macOS
 
@@ -102,11 +106,62 @@ cargo build --release
 
 The executable is created at `target/release/crigraph-native`. Build on macOS
 to produce a native macOS binary; binaries are platform-specific.
+You can also build with `./build.sh`.
 
 Generated executables and intermediate build files are written to `target/`.
 They are local build artifacts, excluded from Git, and should not be included
 in source commits or releases as source files. Cargo recreates them when you
 build the project.
+
+### Configuration
+
+The app reads a single `config.toml` from the current user's standard
+application configuration directory:
+
+| Platform | Configuration file |
+| --- | --- |
+| Windows | `%APPDATA%\cringraph\config.toml` |
+| GNU/Linux | `$XDG_CONFIG_HOME/cringraph/config.toml`, normally `~/.config/cringraph/config.toml` |
+| macOS | `~/Library/Application Support/cringraph/config.toml` |
+
+On first launch, the app creates `config.toml` if it is missing; it does not
+replace an existing config. The generated `database_dir` points to the `data/`
+folder in the launch working directory, and `headphone_database_dir` is added
+when a `data_hp/` folder is present there. Keep the included measurement folders
+with the project, or edit the generated file to use their new location.
+
+Platform-specific starter schemas with example paths to the included sample
+databases are available in [`config-examples/`](config-examples/):
+
+* [Windows](config-examples/windows/config.toml)
+* [GNU/Linux](config-examples/linux/config.toml)
+* [macOS](config-examples/macos/config.toml)
+
+Replace the example checkout paths with the actual location of your measurement
+folders. These are templates, not automatically installed files; do not copy
+them over an existing config unless you intend to replace your own settings.
+The config supports default smoothing as well:
+
+```toml
+[measurements]
+# Paths may be absolute or relative to the directory containing config.toml.
+database_dir = "/path/to/data"
+headphone_database_dir = "/path/to/data_hp"
+
+[defaults]
+# Fractional-octave smoothing level accepted by the UI: 0 through 12.
+smoothing_octaves = 5
+```
+
+`database_dir` must contain the primary measurement files and its
+`phone_book.json`. `headphone_database_dir` is optional; when set, it points to
+the additional headphone database (and may contain its own `phone_book.json`).
+If either path is omitted, the app keeps its development defaults of `data/`
+and `data_hp/` relative to the working directory; the additional database is
+skipped if `data_hp/` is absent. With no config file, the default smoothing is
+5. Saved UI preferences in the same app configuration directory take precedence
+over `smoothing_octaves`; preferences from the previous `CrinGraph-native`
+configuration folder are also read for migration.
 
 ### Native app screenshot
 

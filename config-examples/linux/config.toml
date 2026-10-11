@@ -1,0 +1,9 @@
+# Example for GNU/Linux:
+# Copy to ${XDG_CONFIG_HOME:-$HOME/.config}/cringraph/config.toml and
+# replace the example home directory with your checkout location.
+[measurements]
+database_dir = "/home/yourname/src/CrinGraph-native/data"
+headphone_database_dir = "/home/yourname/src/CrinGraph-native/data_hp"
+
+[defaults]
+smoothing_octaves = 5

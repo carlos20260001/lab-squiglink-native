@@ -1,0 +1,9 @@
+# Example for macOS:
+# Copy to ~/Library/Application Support/cringraph/config.toml and replace
+# the example home directory with your checkout location.
+[measurements]
+database_dir = "/Users/yourname/Projects/CrinGraph-native/data"
+headphone_database_dir = "/Users/yourname/Projects/CrinGraph-native/data_hp"
+
+[defaults]
+smoothing_octaves = 5
