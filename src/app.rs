@@ -1682,7 +1682,9 @@ fn target_category(target: &str) -> &'static str {
         "Antdroid" | "Bad Guy" | "Banbeucmas" | "Crinacle" | "Precogvision" | "Super Review" => {
             "Reviewer targets"
         }
-        "Harman" | "Rtings" | "Sonarworks" | "IEF \"Harman\"" => "Preference targets",
+        "Harman" | "Rtings" | "Sonarworks" | "IEF \"Harman\"" | "IEF Harman" => {
+            "Preference targets"
+        }
         _ => "Other targets",
     }
 }
@@ -1823,9 +1825,10 @@ mod tests {
     use super::{
         apply_baseline, build_groups, decode_share_uri, encode_share_uri, group_has_imbalance,
         initialize_app_config_from, interpolate_db, matches_search, prepare_channels,
-        read_app_config_from, read_preferences_from, resolve_measurement_dir, validate_app_config,
-        write_preferences_to, AppConfig, ChannelMode, CrinGraphApp, DisplayCurve, Preferences,
-        SavedGroup, MAX_SHARE_URI_LENGTH, MAX_SMOOTH_LEVEL, TUTORIAL_SEGMENTS,
+        read_app_config_from, read_preferences_from, resolve_measurement_dir, target_category,
+        validate_app_config, write_preferences_to, AppConfig, ChannelMode, CrinGraphApp,
+        DisplayCurve, Preferences, SavedGroup, MAX_SHARE_URI_LENGTH, MAX_SMOOTH_LEVEL,
+        TUTORIAL_SEGMENTS,
     };
     use crigraph_native::data::{CurveInfo, FRPoint};
     use crigraph_native::graph::ZoomRegion;
@@ -1835,6 +1838,11 @@ mod tests {
     fn default_smoothing_matches_the_original_graph_setting() {
         assert_eq!(Preferences::default().smooth_level, 5);
         assert_eq!(CrinGraphApp::default().smooth_level, 5);
+    }
+
+    #[test]
+    fn windows_safe_ief_harman_filename_retains_target_category() {
+        assert_eq!(target_category("IEF Harman"), "Preference targets");
     }
 
     #[test]
