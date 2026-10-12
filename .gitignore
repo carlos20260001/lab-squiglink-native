@@ -3,4 +3,5 @@ data_mrs/*
 ARCHITECTURE.md
 /target/
 /dist/
+/.venv/
 .impeccable/*
