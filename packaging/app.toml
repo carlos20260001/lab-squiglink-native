@@ -1,0 +1,11 @@
+[application]
+name = "CrinGraph"
+binary_name = "crigraph-native"
+identifier = "io.cringraph.native"
+description = "Compare headphone frequency response measurements."
+category = "AudioVideo;Audio;"
+startup_wm_class = "crigraph-native"
+macos_bundle_name = "CrinGraph-native.app"
+
+[assets]
+icon_svg = "../assets/cringraph-app-icon.svg"

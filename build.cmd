@@ -24,15 +24,18 @@ if "%~2" NEQ "" (
 
 if "%~1"=="" (
     cargo build --release
-    set "OUTPUT=target\release\crigraph-native.exe"
+    set "BINARY=target\release\crigraph-native.exe"
 ) else (
     cargo build --release --target "%~1"
-    set "OUTPUT=target\%~1\release\crigraph-native.exe"
+    set "BINARY=target\%~1\release\crigraph-native.exe"
 )
 if errorlevel 1 goto build_failed
 
+cargo run --release --bin app-bundle -- package windows "%BINARY%" dist\windows
+if errorlevel 1 goto build_failed
+
 echo.
-echo Build complete: %CD%\%OUTPUT%
+echo Build and package complete: %CD%\dist\windows
 popd
 endlocal
 exit /b 0

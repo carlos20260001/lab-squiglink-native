@@ -702,11 +702,9 @@ impl CrinGraphApp {
                 ui.checkbox(&mut self.show_labels, "Labels")
                     .on_hover_text("Curve labels are auto-spaced; drag a label to position it.");
                 ui.checkbox(&mut self.inspect_mode, "Inspect");
-                ui.add_enabled(
-                    cfg!(debug_assertions),
-                    egui::Checkbox::new(&mut self.debug_hooks, "Debug hooks"),
-                )
-                .on_hover_text("Show egui widget diagnostics when hovering controls.");
+                #[cfg(debug_assertions)]
+                ui.checkbox(&mut self.debug_hooks, "Debug hooks")
+                    .on_hover_text("Show egui widget diagnostics when hovering controls.");
                 if ui
                     .button(if self.dark_mode {
                         "Light theme"

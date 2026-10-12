@@ -19,7 +19,7 @@ in this repository. The native Rust/egui application does not link or bundle
 D3.js; it implements its graph rendering in Rust. `old/graphtool.js` is the
 CrinGraph application code that calls the D3 APIs, not a copy of D3 itself.
 
-D3.js 5.x (loaded from https://d3js.org/d3.v5.min.js)
+D3.js
 Copyright 2010-2017 Mike Bostock
 License: BSD 3-Clause
 
@@ -49,7 +49,6 @@ ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 D3 Selection Multi 1.x
-(loaded from https://d3js.org/d3-selection-multi.v1.min.js)
 Copyright (c) 2010-2016, Michael Bostock
 License: BSD 3-Clause
 All rights reserved.
@@ -82,3 +81,7 @@ Fuse.js 3.4.4
 (loaded from https://cdnjs.cloudflare.com/ajax/libs/fuse.js/3.4.4/fuse.min.js)
 License: Apache License 2.0
 Its license text is available at https://unpkg.com/fuse.js@3.4.4/LICENSE.
+
+Fuse.js is used by the archived web pages in old/ and is loaded from a
+CDN. The native application has a separate Rust fuzzy-search implementation intended
+to provide similar search behavior.

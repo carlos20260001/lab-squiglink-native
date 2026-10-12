@@ -125,10 +125,31 @@ The executable is created at `target/release/crigraph-native`. Build on macOS
 to produce a native macOS binary; binaries are platform-specific.
 You can also build with `./build.sh`.
 
-Generated executables and intermediate build files are written to `target/`.
-They are local build artifacts, excluded from Git, and should not be included
-in source commits or releases as source files. Cargo recreates them when you
-build the project.
+#### App identity and bundles
+
+`packaging/app.toml` is the shared application manifest. It supplies the
+display name, application identifier, desktop metadata, and path to the master
+SVG icon in `assets/`. Cargo's build script rasterizes that SVG into density
+specific PNGs and Windows ICO/macOS ICNS files; the native window uses the
+same app name, application ID, and icon.
+
+Use the platform build scripts to create distributable app folders in `dist/`:
+
+```bash
+./build.sh
+```
+
+On Windows, run `build.cmd`; it also creates a relocatable `CrinGraph.lnk`
+shortcut beside the executable. The Linux bundle includes a desktop entry with
+its startup WM class and hicolor icons. A macOS build creates
+`dist/macos/CrinGraph-native.app`, including its `Info.plist`, `.icns` icon,
+and bundled measurement data. Build bundles on their respective operating
+systems.
+
+Generated executables and intermediate build files are written to `target/`;
+platform packages are written to `dist/`. They are local build artifacts,
+excluded from Git, and should not be included in source commits as source files.
+Cargo and the build scripts recreate them when you build the project.
 
 ### Automated release builds
 
@@ -136,13 +157,14 @@ Pushing a version tag such as `v1.0.0` starts the GitHub Actions release
 workflow. You can also run **Build and release** manually from the Actions tab:
 select the source branch or tag, then enter a version tag such as `v1.0.1`.
 Manual runs create or update that release tag at the selected source commit.
-The workflow builds Linux x86_64, x86, armhf, and aarch64 packages, plus Windows
-x86 (32-bit), x86_64, and ARM64 packages. It attaches the four Linux `.tar.gz`
-and three Windows `.zip` bundles directly to a GitHub Release. These are the
+The workflow builds Linux x86_64, x86, armhf, and aarch64 packages, Windows x86
+(32-bit), x86_64, and ARM64 packages, and macOS ARM64 and x86_64 app bundles.
+It attaches the Linux `.tar.gz`, Windows `.zip`, and macOS `.zip` bundles
+directly to a GitHub Release. These are the
 release downloads; they are not nested inside GitHub Actions artifact archives.
-Each bundle contains the executable and sample measurement databases. Run the
-executable from its extracted `CrinGraph` folder so the bundled `data/` and
-`data_hp/` directories are available. The workflow creates a draft release
+Each bundle contains the app identity assets and sample measurement databases.
+Run the executable from its extracted `CrinGraph` folder so the bundled `data/`
+and `data_hp/` directories are available. The workflow creates a draft release
 before building and publishes it only after all architecture builds and
 uploads succeed; failed builds leave the release as a draft for inspection or
 retry.

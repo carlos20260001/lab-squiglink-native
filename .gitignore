@@ -2,3 +2,5 @@ data_mrs/*
 .DS_Store
 ARCHITECTURE.md
 /target/
+/dist/
+.impeccable/*

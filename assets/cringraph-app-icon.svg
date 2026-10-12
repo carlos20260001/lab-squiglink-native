@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 120 120">
+  <defs>
+    <linearGradient id="glass" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f4f5f6" stop-opacity=".96"/>
+      <stop offset=".52" stop-color="#cbd0d4" stop-opacity=".92"/>
+      <stop offset="1" stop-color="#929aa2" stop-opacity=".96"/>
+    </linearGradient>
+    <linearGradient id="green" x1=".15" y1=".05" x2=".85" y2="1">
+      <stop offset="0" stop-color="#25bd68"/>
+      <stop offset="1" stop-color="#118d4b"/>
+    </linearGradient>
+    <linearGradient id="blue" x1=".18" y1=".04" x2=".82" y2="1">
+      <stop offset="0" stop-color="#2d60a8"/>
+      <stop offset="1" stop-color="#1a437e"/>
+    </linearGradient>
+    <linearGradient id="glassSheen" x1="0" y1="0" x2=".9" y2="1">
+      <stop offset="0" stop-color="#fff" stop-opacity=".22"/>
+      <stop offset=".42" stop-color="#fff" stop-opacity=".04"/>
+      <stop offset="1" stop-color="#fff" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="tileShadow" x="-18%" y="-18%" width="136%" height="145%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="1.5"/>
+      <feOffset dy="1.5"/>
+      <feComponentTransfer>
+        <feFuncA type="linear" slope=".2"/>
+      </feComponentTransfer>
+      <feMerge>
+        <feMergeNode/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <clipPath id="tile">
+      <rect x="3" y="3" width="114" height="114" rx="27"/>
+    </clipPath>
+  </defs>
+
+  <rect x="3" y="3" width="114" height="114" rx="27" fill="url(#glass)" filter="url(#tileShadow)"/>
+  <g clip-path="url(#tile)">
+    <path d="M3 13 Q60 -1 117 13 V44 Q60 26 3 46Z" fill="url(#glassSheen)"/>
+    <g transform="translate(-2.4 -12) scale(1.04 1.2)" stroke-linejoin="round">
+      <path fill="url(#green)" d="M83.18 43.33h-.96c-5.54 0-10.45 2.71-13.48 6.88-.41.56-1.28.44-1.51-.22-1.05-3.1-2.6-6.04-4.57-8.65-.26-.35-.23-.84.08-1.14 5.02-4.93 11.89-7.98 19.48-7.98.46 0 .91.01 1.36.03 7.12.34 6.73 11.08-.4 11.08z"/>
+      <path fill="url(#green)" d="M57.34 78.67c.26.34.23.83-.08 1.13-5.02 4.93-11.89 7.98-19.48 7.98-13.44 0-24.64-9.54-27.22-22.22C10.19 63.76 10 61.9 10 60v-.38c.04-2.88 2.44-5.18 5.32-5.18h.48c3.01 0 5.32 2.49 5.31 5.5V60c0 1.96.33 3.82.96 5.56 2.29 6.47 8.47 11.11 15.71 11.11 5.54 0 10.45-2.71 13.48-6.88.41-.56 1.28-.44 1.51.22 1.05 3.11 2.59 6.05 4.57 8.66z"/>
+      <path fill="url(#blue)" d="M110 60c0 1.9-.19 3.76-.56 5.56-2.58 12.68-13.78 22.22-27.22 22.22-9.09 0-17.16-4.37-22.22-11.11-2.43-3.23-4.17-7.01-5-11.11-.37-1.8-.56-3.66-.56-5.56 0-1.96-.33-3.82-.96-5.56-2.29-6.47-8.47-11.11-15.71-11.11h-1.12c-7.17 0-7.49-10.71-.33-11.07.48-.02.96-.04 1.45-.04 9.09 0 17.16 4.37 22.22 11.11 2.43 3.23 4.17 7.01 5 11.11.37 1.8.56 3.66.56 5.56 0 1.96.33 3.82.96 5.56 2.29 6.47 8.47 11.11 15.71 11.11s13.42-4.64 15.71-11.11h-4.6c-3.07 0-5.56-2.49-5.56-5.56s2.49-5.56 5.56-5.56h11.12c3.04 0 5.54 2.45 5.54 5.5V60z"/>
+    </g>
+  </g>
+  <rect x="3.5" y="3.5" width="113" height="113" rx="26.5" fill="none" stroke="#fff" stroke-opacity=".42" stroke-width=".8"/>
+</svg>

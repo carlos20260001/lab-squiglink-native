@@ -83,10 +83,8 @@ jobs:
       - name: Package Linux release
         run: |
           set -eu
-          mkdir -p "staging/CrinGraph" dist
-          cp "target/${{ matrix.target }}/release/crigraph-native" staging/CrinGraph/
-          cp -a data data_hp config-examples README.md LICENSE staging/CrinGraph/
-          tar -czf "dist/cringraph-linux-${{ matrix.arch }}.tar.gz" -C staging CrinGraph
+          mkdir -p dist
+          tar -czf "dist/cringraph-linux-${{ matrix.arch }}.tar.gz" -C dist/linux CrinGraph
         shell: bash
 
       - name: Upload release bundle
@@ -131,10 +129,8 @@ jobs:
       - name: Package Windows release
         run: |
           $ErrorActionPreference = "Stop"
-          New-Item -ItemType Directory -Force staging/CrinGraph, dist | Out-Null
-          Copy-Item "target/${{ matrix.target }}/release/crigraph-native.exe" staging/CrinGraph/
-          Copy-Item data, data_hp, config-examples, README.md, LICENSE staging/CrinGraph/ -Recurse
-          Compress-Archive -Path staging/CrinGraph -DestinationPath "dist/cringraph-windows-${{ matrix.arch }}.zip" -Force
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Compress-Archive -Path dist/windows/CrinGraph -DestinationPath "dist/cringraph-windows-${{ matrix.arch }}.zip" -Force
         shell: pwsh
 
       - name: Upload release bundle
@@ -145,12 +141,49 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
+  macos:
+    name: Build macOS ${{ matrix.arch }}
+    needs: create-draft
+    runs-on: macos-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: aarch64-apple-darwin
+            arch: arm64
+          - target: x86_64-apple-darwin
+            arch: x86_64
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Install stable Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Build and bundle macOS app
+        run: ./build.sh "${{ matrix.target }}"
+
+      - name: Archive macOS app
+        run: ditto -c -k --sequesterRsrc --keepParent dist/macos/CrinGraph-native.app "dist/cringraph-macos-${{ matrix.arch }}.zip"
+
+      - name: Upload release bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: cringraph-macos-${{ matrix.arch }}
+          path: dist/cringraph-macos-${{ matrix.arch }}.zip
+          if-no-files-found: error
+          retention-days: 1
+
   publish:
     name: Publish all architecture bundles
     needs:
       - create-draft
       - linux
       - windows
+      - macos
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -172,3 +205,4 @@ jobs:
           files: |
             release-assets/cringraph-linux-*.tar.gz
             release-assets/cringraph-windows-*.zip
+            release-assets/cringraph-macos-*.zip
