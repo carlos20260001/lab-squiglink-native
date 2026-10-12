@@ -2,7 +2,7 @@ use crigraph_native::color::target_color;
 use crigraph_native::data::{self, CurveInfo, FRPoint, PhoneBook};
 use crigraph_native::graph::{export_svg as render_svg, GraphCanvas, PlotCurve, ZoomRegion};
 use crigraph_native::processing::{self, NormParams, SmoothingParams};
-use egui::{Color32, Context, RichText};
+use egui::{Color32, Context, RichText, Ui};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
@@ -660,14 +660,14 @@ impl CrinGraphApp {
         }
     }
 
-    fn toolbar(&mut self, ctx: &Context) {
+    fn toolbar(&mut self, ui: &mut Ui) {
         let previous_processing_settings = (
             self.phon_normalization,
             self.target_phon,
             self.target_hz,
             self.smooth_level,
         );
-        egui::TopBottomPanel::top("toolbar").show(ctx, |ui| {
+        egui::Panel::top("toolbar").show(ui, |ui| {
             ui.horizontal_wrapped(|ui| {
                 ui.heading("CrinGraph");
                 ui.separator();
@@ -768,7 +768,7 @@ impl CrinGraphApp {
                 }
             });
         });
-        ctx.set_visuals(if self.dark_mode {
+        ui.ctx().set_visuals(if self.dark_mode {
             egui::Visuals::dark()
         } else {
             egui::Visuals::light()
@@ -883,15 +883,15 @@ impl CrinGraphApp {
         Ok(())
     }
 
-    fn selector_panel(&mut self, ctx: &Context) {
+    fn selector_panel(&mut self, ui: &mut Ui) {
         if !self.show_measurements {
             return;
         }
-        egui::SidePanel::left("selector")
+        egui::Panel::left("selector")
             .resizable(true)
-            .default_width(250.0)
-            .width_range(190.0..=420.0)
-            .show(ctx, |ui| {
+            .default_size(250.0)
+            .size_range(190.0..=420.0)
+            .show(ui, |ui| {
                 ui.heading("Measurements");
                 ui.label(format!(
                     "{} selected (limit {MAX_ACTIVE_CURVES})",
@@ -976,15 +976,15 @@ impl CrinGraphApp {
             });
     }
 
-    fn manager_panel(&mut self, ctx: &Context) {
+    fn manager_panel(&mut self, ui: &mut Ui) {
         if !self.show_manager {
             return;
         }
-        egui::SidePanel::right("curve_manager")
+        egui::Panel::right("curve_manager")
             .resizable(true)
-            .default_width(245.0)
-            .width_range(190.0..=360.0)
-            .show(ctx, |ui| {
+            .default_size(245.0)
+            .size_range(190.0..=360.0)
+            .show(ui, |ui| {
                 ui.heading("Active curves");
                 if self.active.is_empty() && self.active_targets.is_empty() {
                     ui.label("Select up to eight measurements.");
@@ -1133,8 +1133,8 @@ impl CrinGraphApp {
             });
     }
 
-    fn central_panel(&mut self, ctx: &Context) {
-        egui::CentralPanel::default().show(ctx, |ui| {
+    fn central_panel(&mut self, ui: &mut Ui) {
+        egui::CentralPanel::default().show(ui, |ui| {
             if let Some(error) = &self.processing_error {
                 ui.colored_label(Color32::LIGHT_RED, error);
             }
@@ -1213,11 +1213,12 @@ impl CrinGraphApp {
 }
 
 impl eframe::App for CrinGraphApp {
-    fn update(&mut self, ctx: &Context, _frame: &mut eframe::Frame) {
+    fn ui(&mut self, ui: &mut Ui, _frame: &mut eframe::Frame) {
+        let ctx = ui.ctx().clone();
         #[cfg(debug_assertions)]
         ctx.set_debug_on_hover(self.debug_hooks);
         if self.screenshot_pending {
-            ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot);
+            ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(egui::UserData::default()));
             self.screenshot_pending = false;
         }
         if !self.loaded {
@@ -1229,12 +1230,12 @@ impl eframe::App for CrinGraphApp {
         if self.dirty {
             self.rebuild_display_curves();
         }
-        self.toolbar(ctx);
-        self.share_window(ctx);
-        self.tutorial_window(ctx);
-        self.selector_panel(ctx);
-        self.manager_panel(ctx);
-        self.central_panel(ctx);
+        self.toolbar(ui);
+        self.share_window(&ctx);
+        self.tutorial_window(&ctx);
+        self.selector_panel(ui);
+        self.manager_panel(ui);
+        self.central_panel(ui);
         if self.loaded && self.load_error.is_none() {
             self.persist_preferences_if_changed();
         }
@@ -1256,7 +1257,7 @@ impl eframe::App for CrinGraphApp {
                 }
             }
         }
-        egui::TopBottomPanel::bottom("status").show(ctx, |ui| {
+        egui::Panel::bottom("status").show(ui, |ui| {
             ui.horizontal(|ui| {
                 ui.label(format!(
                     "{} active · {} total · {} Hz–{} Hz",
@@ -2351,6 +2352,7 @@ smoothing_octaves = 3
         let _ = std::fs::remove_dir_all(&directory);
         let image = egui::ColorImage {
             size: [2, 1],
+            source_size: egui::vec2(2.0, 1.0),
             pixels: vec![
                 egui::Color32::from_rgb(255, 0, 0),
                 egui::Color32::from_rgb(0, 255, 0),
