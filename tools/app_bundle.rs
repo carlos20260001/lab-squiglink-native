@@ -199,9 +199,11 @@ fn package_macos(
         contents.join("Info.plist"),
         format!(
             "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n<plist version=\"1.0\"><dict>\n<key>CFBundleName</key><string>{}</string>\n<key>CFBundleDisplayName</key><string>{}</string>\n<key>CFBundleIdentifier</key><string>{}</string>\n<key>CFBundleExecutable</key><string>{}</string>\n<key>CFBundleIconFile</key><string>{}</string>\n<key>CFBundlePackageType</key><string>APPL</string>\n<key>CFBundleShortVersionString</key><string>{}</string>\n<key>CFBundleVersion</key><string>{}</string>\n</dict></plist>\n",
+            xml_escape(&manifest.application.name),
+            xml_escape(&manifest.application.name),
             xml_escape(&manifest.application.identifier),
             xml_escape(&manifest.application.binary_name),
-            xml_escape(&manifest.application.name),
+            "CrinGraph.icns",
             env!("CARGO_PKG_VERSION"),
             env!("CARGO_PKG_VERSION"),
         ),
