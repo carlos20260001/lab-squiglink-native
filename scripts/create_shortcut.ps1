@@ -14,5 +14,4 @@ $shortcut.TargetPath = $target
 $shortcut.WorkingDirectory = $TargetDirectory
 $shortcut.IconLocation = "$ExecutableName,0"
 $shortcut.Description = $Description
-$shortcut.RelativePath(".")
 $shortcut.Save()
