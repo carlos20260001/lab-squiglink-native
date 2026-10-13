@@ -162,6 +162,7 @@ struct Preferences {
     show_measurements: bool,
     show_manager: bool,
     label_positions: BTreeMap<String, [f32; 2]>,
+    label_layout: squiglab::graph::LabelLayout,
     tutorial_segment: Option<usize>,
     y_scale: f32,
     curve_color_offsets: BTreeMap<String, usize>,
@@ -184,6 +185,7 @@ impl Default for Preferences {
             show_measurements: true,
             show_manager: true,
             label_positions: BTreeMap::new(),
+            label_layout: squiglab::graph::LabelLayout::default(),
             tutorial_segment: None,
             y_scale: 1.0,
             curve_color_offsets: BTreeMap::new(),
@@ -241,6 +243,7 @@ pub struct CrinGraphApp {
     show_measurements: bool,
     show_manager: bool,
     label_positions: BTreeMap<String, [f32; 2]>,
+    label_layout: squiglab::graph::LabelLayout,
     tutorial_segment: Option<usize>,
     y_scale: f32,
     curve_color_offsets: BTreeMap<String, usize>,
@@ -290,6 +293,7 @@ impl Default for CrinGraphApp {
             show_measurements: true,
             show_manager: true,
             label_positions: BTreeMap::new(),
+            label_layout: squiglab::graph::LabelLayout::default(),
             tutorial_segment: None,
             y_scale: 1.0,
             curve_color_offsets: BTreeMap::new(),
@@ -453,6 +457,7 @@ impl CrinGraphApp {
         self.variant_choices.clear();
         self.baseline = None;
         self.label_positions = preferences.label_positions.clone();
+        self.label_layout = preferences.label_layout;
         self.tutorial_segment = preferences.tutorial_segment;
         self.y_scale = preferences.y_scale;
         self.curve_color_offsets = preferences.curve_color_offsets.clone();
@@ -531,6 +536,7 @@ impl CrinGraphApp {
             show_measurements: self.show_measurements,
             show_manager: self.show_manager,
             label_positions: self.label_positions.clone(),
+            label_layout: self.label_layout,
             tutorial_segment: self.tutorial_segment,
             y_scale: self.y_scale,
             curve_color_offsets: self.curve_color_offsets.clone(),
@@ -767,6 +773,15 @@ impl CrinGraphApp {
                 // ---- View toggles ----
                 ui.checkbox(&mut self.show_labels, "Labels")
                     .on_hover_text("Curve labels are auto-spaced; drag a label to position it.");
+                if self.show_labels
+                    && cgui::action_button(
+                        ui,
+                        self.label_layout.short_name(),
+                        "Group labels in a corner like squig.link, or keep each beside its curve",
+                    )
+                {
+                    self.label_layout = self.label_layout.next();
+                }
                 ui.checkbox(&mut self.inspect_mode, "Inspect")
                     .on_hover_text("Read the exact dB value under the cursor at a frequency.");
                 #[cfg(debug_assertions)]
@@ -1304,6 +1319,7 @@ impl CrinGraphApp {
                 show_labels: self.show_labels,
                 inspect_mode: self.inspect_mode,
                 label_positions: &self.label_positions,
+                label_layout: self.label_layout,
                 tutorial_band: self.tutorial_segment.map(|index| {
                     let segment = &TUTORIAL_SEGMENTS[index];
                     (segment.title, segment.range_hz)

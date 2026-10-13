@@ -44,12 +44,60 @@ pub struct GraphInteraction {
     pub y_scale: Option<f32>,
 }
 
+/// How curve labels are arranged when the user has not dragged them.
+///
+/// The reference tool groups up to a handful of labels into one corner so they
+/// read as a legend, because its page scrolls and an end-anchored label would
+/// end up far from the graph. `CurveEnd` keeps each label beside its own curve,
+/// which is the more precise arrangement when the graph is the whole window.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Deserialize, Serialize)]
+pub enum LabelLayout {
+    CurveEnd,
+    #[default]
+    CornerBottomLeft,
+    CornerBottomRight,
+    CornerTopLeft,
+}
+
+impl LabelLayout {
+    /// Label for the toolbar toggle, cycling through the layouts.
+    pub fn next(self) -> Self {
+        match self {
+            LabelLayout::CornerBottomLeft => LabelLayout::CornerBottomRight,
+            LabelLayout::CornerBottomRight => LabelLayout::CornerTopLeft,
+            LabelLayout::CornerTopLeft => LabelLayout::CurveEnd,
+            LabelLayout::CurveEnd => LabelLayout::CornerBottomLeft,
+        }
+    }
+
+    /// Short name for a control.
+    pub fn short_name(self) -> &'static str {
+        match self {
+            LabelLayout::CornerBottomLeft => "Labels: corner",
+            LabelLayout::CornerBottomRight => "Labels: corner",
+            LabelLayout::CornerTopLeft => "Labels: corner",
+            LabelLayout::CurveEnd => "Labels: curve",
+        }
+    }
+
+    /// Which corner, for the tooltip.
+    pub fn corner_name(self) -> &'static str {
+        match self {
+            LabelLayout::CornerBottomLeft => "bottom-left",
+            LabelLayout::CornerBottomRight => "bottom-right",
+            LabelLayout::CornerTopLeft => "top-left",
+            LabelLayout::CurveEnd => "",
+        }
+    }
+}
+
 pub struct GraphCanvas<'a> {
     pub zoom: ZoomRegion,
     pub smooth_level: usize,
     pub show_labels: bool,
     pub inspect_mode: bool,
     pub label_positions: &'a BTreeMap<String, [f32; 2]>,
+    pub label_layout: LabelLayout,
     pub tutorial_band: Option<(&'a str, (f32, f32))>,
     /// Named frequency regions drawn beneath the axis at all times, so the
     /// graph is readable as a map even when the tutorial is closed.
@@ -425,12 +473,21 @@ impl GraphCanvas<'_> {
             plot_rect,
         );
         let mut updated_label_positions = BTreeMap::new();
-        for (key, endpoint, size, color, galley) in label_candidates {
+        for (index, (key, endpoint, size, color, galley)) in
+            label_candidates.into_iter().enumerate()
+        {
             let normalized = self.label_positions.get(key).copied();
             let mut top_left = normalized.map_or_else(
                 || {
-                    let y = default_positions.get(key).copied().unwrap_or(endpoint.y);
-                    Pos2::new((endpoint.x + 6.0).min(plot_rect.right() - size.x), y)
+                    if self.label_layout == LabelLayout::CurveEnd {
+                        let y = default_positions.get(key).copied().unwrap_or(endpoint.y);
+                        Pos2::new((endpoint.x + 6.0).min(plot_rect.right() - size.x), y)
+                    } else {
+                        // Grouped: stack the first few labels in one corner as a
+                        // legend. Any beyond the cap keep following their curve,
+                        // so a large selection still gets labelled.
+                        Self::corner_label_position(self.label_layout, index, size, plot_rect)
+                    }
                 },
                 |position| {
                     Pos2::new(
@@ -609,6 +666,41 @@ impl GraphCanvas<'_> {
             hover_hz,
             label_positions: updated_label_positions,
             y_scale: updated_y_scale,
+        }
+    }
+
+    /// How many labels to group in the corner before letting the rest follow
+    /// their curves. The reference tool groups about five.
+    const MAX_GROUPED_LABELS: usize = 6;
+
+    /// Stack a label in the chosen corner, one per line from the corner inward.
+    fn corner_label_position(
+        corner: LabelLayout,
+        index: usize,
+        size: Vec2,
+        plot_rect: Rect,
+    ) -> Pos2 {
+        // Inset clears the y-axis labels on the left and the tick text on the
+        // right, so the block never sits under either.
+        let inset = egui::vec2(10.0, 8.0);
+        let line = TypeStep::Body.size() + 8.0;
+        let row = index.min(Self::MAX_GROUPED_LABELS - 1) as f32;
+
+        match corner {
+            // CurveEnd never reaches here; the caller branches on it first.
+            LabelLayout::CurveEnd => Pos2::ZERO,
+            LabelLayout::CornerBottomLeft => Pos2::new(
+                plot_rect.left() + inset.x + 26.0,
+                plot_rect.bottom() - inset.y - size.y - row * line,
+            ),
+            LabelLayout::CornerBottomRight => Pos2::new(
+                plot_rect.right() - inset.x - size.x - 26.0,
+                plot_rect.bottom() - inset.y - size.y - row * line,
+            ),
+            LabelLayout::CornerTopLeft => Pos2::new(
+                plot_rect.left() + inset.x + 26.0,
+                plot_rect.top() + inset.y + 16.0 + row * line,
+            ),
         }
     }
 
@@ -1019,6 +1111,35 @@ mod tests {
         assert!(tops[0] >= plot.top());
         assert!(tops[2] + 12.0 <= plot.bottom());
         assert!(tops.windows(2).all(|pair| pair[1] - pair[0] >= 14.0));
+    }
+
+    #[test]
+    fn grouped_labels_stack_in_the_corner_without_overlapping() {
+        let plot = Rect::from_min_max(pos2(0.0, 0.0), pos2(400.0, 600.0));
+        let corner = crate::graph::LabelLayout::CornerBottomLeft;
+        let tops: Vec<egui::Pos2> = (0..4)
+            .map(|index| {
+                crate::graph::GraphCanvas::corner_label_position(
+                    corner,
+                    index,
+                    egui::vec2(60.0, 18.0),
+                    plot,
+                )
+            })
+            .collect();
+        // Inside the plot, inset from the left and the bottom, one line apart.
+        for position in &tops {
+            assert!(position.x >= plot.left());
+            assert!(position.y >= plot.top());
+            assert!(position.x + 60.0 <= plot.right());
+            assert!(position.y + 18.0 <= plot.bottom());
+        }
+        assert!(
+            tops.windows(2).all(|pair| pair[0].y - pair[1].y >= 18.0),
+            "labels overlapped: {tops:?}"
+        );
+        // Highest label is closest to the bottom, matching the reference tool.
+        assert!(tops[0].y > tops[3].y);
     }
 
     #[test]
