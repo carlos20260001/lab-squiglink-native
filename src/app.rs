@@ -768,11 +768,6 @@ impl CrinGraphApp {
                 }
             });
         });
-        ui.ctx().set_visuals(if self.dark_mode {
-            egui::Visuals::dark()
-        } else {
-            egui::Visuals::light()
-        });
         self.dirty |= previous_processing_settings
             != (
                 self.phon_normalization,
@@ -1217,6 +1212,7 @@ impl eframe::App for CrinGraphApp {
         let ctx = ui.ctx().clone();
         #[cfg(debug_assertions)]
         ctx.set_debug_on_hover(self.debug_hooks);
+        crigraph_native::theme::ensure_ready(&ctx, self.dark_mode);
         if self.screenshot_pending {
             ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(egui::UserData::default()));
             self.screenshot_pending = false;
