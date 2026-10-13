@@ -623,11 +623,7 @@ impl CrinGraphApp {
                         }
                         output.push(DisplayCurve {
                             group_index,
-                            label: if channel_name.is_empty() {
-                                format!("{} · {}", group.name, variant.name)
-                            } else {
-                                format!("{} · {} · {}", group.name, variant.name, channel_name)
-                            },
+                            label: curve_label(&group.name, &variant.name, channel_name),
                             points,
                             target: group.target,
                         });
@@ -1567,6 +1563,27 @@ fn build_groups(phone_books: &[PhoneBook], curves: &[CurveInfo]) -> Vec<Measurem
     groups
 }
 
+/// Compose the label drawn beside a curve.
+///
+/// The reference tool shows one measurement name, optionally suffixed with the
+/// channel, e.g. "Softears Karma (L)". Concatenating the model name with the
+/// variant name instead produced labels like "GAR5 · GarG5 · R", which repeat
+/// the same word twice whenever a model has a single variant. Prefer the variant
+/// name, since it is the more specific of the two, and only fall back to the
+/// model name when no variant is named.
+fn curve_label(model: &str, variant: &str, channel_name: String) -> String {
+    let name = if variant.is_empty() || variant == model {
+        model.to_owned()
+    } else {
+        variant.to_owned()
+    };
+    if channel_name.is_empty() {
+        name
+    } else {
+        format!("{name} ({channel_name})")
+    }
+}
+
 fn group_key(group: &MeasurementGroup) -> String {
     format!("{}\u{1f}{}", group.brand, group.name)
 }
@@ -1998,6 +2015,20 @@ mod tests {
     fn default_smoothing_matches_the_original_graph_setting() {
         assert_eq!(Preferences::default().smooth_level, 5);
         assert_eq!(CrinGraphApp::default().smooth_level, 5);
+    }
+
+    #[test]
+    fn curve_labels_do_not_repeat_the_model_name() {
+        assert_eq!(curve_label("GAR5", "GarG5", String::new()), "GarG5");
+        assert_eq!(curve_label("GAR5", "GarG5", "R".to_owned()), "GarG5 (R)");
+        // A model whose single variant carries its own name is not echoed twice.
+        assert_eq!(curve_label("GAR5", "GAR5", String::new()), "GAR5");
+        assert_eq!(curve_label("HTH67", "HTH67", "R".to_owned()), "HTH67 (R)");
+        // With no variant named, the model name stands on its own.
+        assert_eq!(
+            curve_label("SoftCheeks", "", "Avg".to_owned()),
+            "SoftCheeks (Avg)"
+        );
     }
 
     #[test]
