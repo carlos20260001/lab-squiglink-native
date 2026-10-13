@@ -899,6 +899,7 @@ impl CrinGraphApp {
     }
 
     fn selector_panel(&mut self, ui: &mut Ui) {
+        use crigraph_native::ui as cgui;
         if !self.show_measurements {
             return;
         }
@@ -907,16 +908,22 @@ impl CrinGraphApp {
             .default_size(250.0)
             .size_range(190.0..=420.0)
             .show(ui, |ui| {
-                ui.heading("Measurements");
-                ui.label(format!(
-                    "{} selected (limit {MAX_ACTIVE_CURVES})",
-                    self.active.len()
-                ));
+                let palette = crigraph_native::theme::Palette::resolve(ui.visuals().dark_mode);
+                crigraph_native::ui::section_header(
+                    ui,
+                    "Library",
+                    Some(&format!("{}/{}", self.active.len(), MAX_ACTIVE_CURVES)),
+                );
+                ui.add_space(cgui::Spacing::TIGHT);
                 ui.add(
                     egui::TextEdit::singleline(&mut self.search)
-                        .hint_text("Search measurements and targets"),
+                        .hint_text("Search measurements and targets")
+                        .font(crigraph_native::theme::font(
+                            crigraph_native::theme::TypeStep::Body,
+                        ))
+                        .text_color(palette.text_primary),
                 );
-                ui.separator();
+                ui.add_space(cgui::Spacing::TIGHT);
 
                 if let Some(error) = &self.load_error {
                     ui.colored_label(Color32::LIGHT_RED, error);
@@ -949,40 +956,67 @@ impl CrinGraphApp {
                 }
                 let mut toggles = Vec::new();
                 egui::ScrollArea::vertical().show(ui, |ui| {
+                    cgui::section_header(ui, "Measurements", None);
+                    ui.add_space(cgui::Spacing::MICRO);
                     for (brand, models) in measurements {
-                        ui.collapsing(format!("{brand} ({})", models.len()), |ui| {
-                            for (index, model_name) in models {
-                                let mut selected = self.active.contains(&index);
-                                let response = ui.add_enabled(
-                                    !self.pinned.contains(&index)
-                                        && (selected || self.active.len() < MAX_ACTIVE_CURVES),
-                                    egui::Checkbox::new(&mut selected, model_name),
-                                );
-                                if response.changed() {
-                                    toggles.push(index);
+                        ui.collapsing(
+                            RichText::new(format!("{brand} ({})", models.len())).strong(),
+                            |ui| {
+                                ui.spacing_mut().item_spacing.y = cgui::Spacing::TIGHT;
+                                for (index, model_name) in models {
+                                    let mut selected = self.active.contains(&index);
+                                    let response = ui.add_enabled(
+                                        !self.pinned.contains(&index)
+                                            && (selected || self.active.len() < MAX_ACTIVE_CURVES),
+                                        egui::Checkbox::new(
+                                            &mut selected,
+                                            RichText::new(model_name).size(
+                                                crigraph_native::theme::TypeStep::Body.size(),
+                                            ),
+                                        ),
+                                    );
+                                    if response.changed() {
+                                        toggles.push(index);
+                                    }
                                 }
-                            }
-                        });
+                            },
+                        );
                     }
+                    ui.add_space(cgui::Spacing::TIGHT);
                     ui.separator();
-                    ui.heading("Targets");
-                    ui.label(format!("{} selected", self.active_targets.len()));
+                    cgui::section_header(
+                        ui,
+                        "Targets",
+                        Some(&self.active_targets.len().to_string()),
+                    );
+                    ui.add_space(cgui::Spacing::MICRO);
                     for (category, models) in targets {
-                        ui.collapsing(format!("{category} ({})", models.len()), |ui| {
-                            for (index, target_name) in models {
-                                let mut selected = self.active_targets.contains(&index);
-                                if ui
-                                    .add_enabled(
-                                        !self.pinned.contains(&index) || !selected,
-                                        egui::Checkbox::new(&mut selected, target_name),
-                                    )
-                                    .on_hover_text("Target curves do not use a measurement slot.")
-                                    .changed()
-                                {
-                                    toggles.push(index);
+                        ui.collapsing(
+                            RichText::new(format!("{category} ({})", models.len())).strong(),
+                            |ui| {
+                                ui.spacing_mut().item_spacing.y = cgui::Spacing::TIGHT;
+                                for (index, target_name) in models {
+                                    let mut selected = self.active_targets.contains(&index);
+                                    if ui
+                                        .add_enabled(
+                                            !self.pinned.contains(&index) || !selected,
+                                            egui::Checkbox::new(
+                                                &mut selected,
+                                                RichText::new(target_name).size(
+                                                    crigraph_native::theme::TypeStep::Body.size(),
+                                                ),
+                                            ),
+                                        )
+                                        .on_hover_text(
+                                            "Target curves do not use a measurement slot.",
+                                        )
+                                        .changed()
+                                    {
+                                        toggles.push(index);
+                                    }
                                 }
-                            }
-                        });
+                            },
+                        );
                     }
                     for index in toggles {
                         self.toggle_curve(index);
@@ -992,9 +1026,11 @@ impl CrinGraphApp {
     }
 
     fn manager_panel(&mut self, ui: &mut Ui) {
+        use crigraph_native::ui as cgui;
         if !self.show_manager {
             return;
         }
+        let palette = crigraph_native::theme::Palette::resolve(ui.visuals().dark_mode);
         egui::Panel::right("curve_manager")
             .resizable(true)
             .default_size(245.0)
@@ -1006,7 +1042,7 @@ impl CrinGraphApp {
                     "Active curves",
                     (count > 0).then_some(&count.to_string()),
                 );
-                ui.add_space(crigraph_native::ui::Spacing::TIGHT);
+                ui.add_space(cgui::Spacing::TIGHT);
                 if self.active.is_empty() && self.active_targets.is_empty() {
                     ui.label("Select up to eight measurements.");
                     return;
@@ -1021,131 +1057,176 @@ impl CrinGraphApp {
                         .collect::<Vec<_>>()
                     {
                         let group = self.groups[index].clone();
-                        ui.horizontal(|ui| {
-                            let color = self.curve_color(index);
-                            let (swatch, _) = ui
-                                .allocate_exact_size(egui::vec2(12.0, 12.0), egui::Sense::hover());
-                            ui.painter().circle_filled(swatch.center(), 5.0, color);
-                            ui.vertical(|ui| {
-                                ui.label(RichText::new(&group.name).color(color));
-                                ui.small(&group.brand);
-                            });
-                            if !group.target && ui.small_button("Color").clicked() {
-                                let offset = self
-                                    .curve_color_offsets
-                                    .entry(group_key(&group))
-                                    .or_default();
-                                *offset = offset.wrapping_add(1);
-                            }
-                        });
-                        if group.variants.len() > 1 {
-                            let mut selected_variant = self
-                                .variant_choices
-                                .get(&index)
-                                .copied()
-                                .unwrap_or(0)
-                                .min(group.variants.len() - 1);
-                            egui::ComboBox::from_id_salt(("variant", index))
-                                .selected_text(&group.variants[selected_variant].name)
-                                .show_ui(ui, |ui| {
-                                    for (variant_index, variant) in
-                                        group.variants.iter().enumerate()
-                                    {
-                                        ui.selectable_value(
-                                            &mut selected_variant,
-                                            variant_index,
-                                            &variant.name,
-                                        );
-                                    }
+                        let color = self.curve_color(index);
+                        // One card per curve: identity on the first line, the
+                        // controls that operate on it on the next. The card
+                        // keeps a long control row from colliding with the next
+                        // curve's name.
+                        egui::Frame::group(ui.style())
+                            .fill(palette.surface_raised)
+                            .corner_radius(egui::CornerRadius::same(
+                                crigraph_native::theme::RADIUS_CONTROL as u8,
+                            ))
+                            .inner_margin(egui::Margin::same(6))
+                            .show(ui, |ui| {
+                                ui.set_width(ui.available_width());
+                                ui.spacing_mut().item_spacing.y = cgui::Spacing::TIGHT;
+                                // Identity line: swatch, name, brand, color cycle.
+                                ui.horizontal(|ui| {
+                                    let (swatch, _) = ui.allocate_exact_size(
+                                        egui::vec2(10.0, 10.0),
+                                        egui::Sense::hover(),
+                                    );
+                                    ui.painter().circle_filled(swatch.center(), 5.0, color);
+                                    ui.label(
+                                        RichText::new(&group.name)
+                                            .strong()
+                                            .size(
+                                                crigraph_native::theme::TypeStep::Body.size(),
+                                            )
+                                            .color(color),
+                                    );
+                                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                        if !group.target
+                                            && cgui::action_button(
+                                                ui,
+                                                "Recolor",
+                                                "Cycle this curve's color",
+                                            )
+                                        {
+                                            let offset = self
+                                                .curve_color_offsets
+                                                .entry(group_key(&group))
+                                                .or_default();
+                                            *offset = offset.wrapping_add(1);
+                                        }
+                                    });
                                 });
-                            if self.variant_choices.get(&index).copied().unwrap_or(0)
-                                != selected_variant
-                            {
-                                self.variant_choices.insert(index, selected_variant);
-                                self.dirty = true;
-                            }
-                        }
-                        ui.horizontal(|ui| {
-                            let mut baseline = self.baseline == Some(index);
-                            if ui.checkbox(&mut baseline, "Baseline").changed() {
-                                self.baseline = baseline.then_some(index);
-                                self.dirty = true;
-                            }
-                            let mut pinned = self.pinned.contains(&index);
-                            if ui.checkbox(&mut pinned, "Pin").changed() {
-                                if pinned {
-                                    self.pinned.insert(index);
-                                } else {
-                                    self.pinned.remove(&index);
+                                if !group.brand.is_empty() {
+                                    ui.label(
+                                        RichText::new(&group.brand)
+                                            .size(crigraph_native::theme::TypeStep::Micro.size())
+                                            .color(palette.text_tertiary),
+                                    );
                                 }
-                            }
-                        });
-                        ui.horizontal_wrapped(|ui| {
-                            if !group.target {
-                                for (mode, label) in [
-                                    (ChannelMode::Left, "L"),
-                                    (ChannelMode::Right, "R"),
-                                    (ChannelMode::Both, "Both"),
-                                    (ChannelMode::Average, "Avg"),
-                                ] {
-                                    if ui
-                                        .selectable_label(
-                                            self.channel_modes
-                                                .get(&index)
-                                                .copied()
-                                                .unwrap_or_default()
-                                                == mode,
-                                            label,
-                                        )
-                                        .clicked()
+                                // Variant chooser, when the model has more than one.
+                                if group.variants.len() > 1 {
+                                    let mut selected_variant = self
+                                        .variant_choices
+                                        .get(&index)
+                                        .copied()
+                                        .unwrap_or(0)
+                                        .min(group.variants.len() - 1);
+                                    egui::ComboBox::from_id_salt(("variant", index))
+                                        .selected_text(&group.variants[selected_variant].name)
+                                        .show_ui(ui, |ui| {
+                                            for (variant_index, variant) in
+                                                group.variants.iter().enumerate()
+                                            {
+                                                ui.selectable_value(
+                                                    &mut selected_variant,
+                                                    variant_index,
+                                                    &variant.name,
+                                                );
+                                            }
+                                        });
+                                    if self.variant_choices.get(&index).copied().unwrap_or(0)
+                                        != selected_variant
                                     {
-                                        self.channel_modes.insert(index, mode);
+                                        self.variant_choices.insert(index, selected_variant);
                                         self.dirty = true;
                                     }
                                 }
-                                let variant_index = self
-                                    .variant_choices
-                                    .get(&index)
-                                    .copied()
-                                    .unwrap_or(0)
-                                    .min(group.variants.len() - 1);
-                                if group_has_imbalance(
-                                    &self.curves,
-                                    &group.variants[variant_index].curve_indices,
-                                ) {
-                                    ui.colored_label(Color32::YELLOW, "!");
-                                }
-                            }
-                            let mut hidden = self.hidden.contains(&index);
-                            if ui.checkbox(&mut hidden, "Hide").changed() {
-                                if hidden {
-                                    self.hidden.insert(index);
-                                } else {
-                                    self.hidden.remove(&index);
-                                }
-                                self.dirty = true;
-                            }
-                            let offset = self.offsets.entry(index).or_default();
-                            if ui
-                                .add(egui::DragValue::new(offset).speed(0.1).suffix(" dB"))
-                                .changed()
-                            {
-                                self.dirty = true;
-                            }
-                            let remove = ui.add_enabled(
-                                !self.pinned.contains(&index),
-                                egui::Button::new("Remove"),
-                            );
-                            let remove = if self.pinned.contains(&index) {
-                                remove.on_hover_text("Unpin this curve before removing it.")
-                            } else {
-                                remove
-                            };
-                            if remove.clicked() {
-                                removals.push(index);
-                            }
-                        });
-                        ui.separator();
+                                // Controls row: channel choice, imbalance flag,
+                                // visibility, offset, remove.
+                                ui.horizontal_wrapped(|ui| {
+                                    ui.spacing_mut().item_spacing.y = cgui::Spacing::TIGHT;
+                                    if !group.target {
+                                        for (mode, label) in [
+                                            (ChannelMode::Left, "L"),
+                                            (ChannelMode::Right, "R"),
+                                            (ChannelMode::Both, "Both"),
+                                            (ChannelMode::Average, "Avg"),
+                                        ] {
+                                            if ui
+                                                .selectable_label(
+                                                    self.channel_modes
+                                                        .get(&index)
+                                                        .copied()
+                                                        .unwrap_or_default()
+                                                        == mode,
+                                                    label,
+                                                )
+                                                .clicked()
+                                            {
+                                                self.channel_modes.insert(index, mode);
+                                                self.dirty = true;
+                                            }
+                                        }
+                                        let variant_index = self
+                                            .variant_choices
+                                            .get(&index)
+                                            .copied()
+                                            .unwrap_or(0)
+                                            .min(group.variants.len() - 1);
+                                        if group_has_imbalance(
+                                            &self.curves,
+                                            &group.variants[variant_index].curve_indices,
+                                        ) {
+                                            ui.colored_label(palette.warning, "!")
+                                                .on_hover_text(
+                                                    "Left and right channels differ beyond the imbalance threshold.",
+                                                );
+                                        }
+                                    }
+                                    let mut baseline = self.baseline == Some(index);
+                                    if ui.checkbox(&mut baseline, "Baseline").changed() {
+                                        self.baseline = baseline.then_some(index);
+                                        self.dirty = true;
+                                    }
+                                    let mut pinned = self.pinned.contains(&index);
+                                    if ui.checkbox(&mut pinned, "Pin").changed() {
+                                        if pinned {
+                                            self.pinned.insert(index);
+                                        } else {
+                                            self.pinned.remove(&index);
+                                        }
+                                    }
+                                    let mut hidden = self.hidden.contains(&index);
+                                    if ui.checkbox(&mut hidden, "Hide").changed() {
+                                        if hidden {
+                                            self.hidden.insert(index);
+                                        } else {
+                                            self.hidden.remove(&index);
+                                        }
+                                        self.dirty = true;
+                                    }
+                                    let offset = self.offsets.entry(index).or_default();
+                                    if ui
+                                        .add(
+                                            egui::DragValue::new(offset)
+                                                .speed(0.1)
+                                                .suffix(" dB"),
+                                        )
+                                        .changed()
+                                    {
+                                        self.dirty = true;
+                                    }
+                                    let remove = ui.add_enabled(
+                                        !self.pinned.contains(&index),
+                                        egui::Button::new("Remove"),
+                                    );
+                                    let remove = if self.pinned.contains(&index) {
+                                        remove.on_hover_text("Unpin this curve before removing it.")
+                                    } else {
+                                        remove
+                                    };
+                                    if remove.clicked() {
+                                        removals.push(index);
+                                    }
+                                });
+                            });
+                        ui.add_space(cgui::Spacing::TIGHT);
                     }
                     for index in removals {
                         self.toggle_curve(index);
