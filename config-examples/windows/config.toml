@@ -1,6 +1,11 @@
 # Example for Windows:
 # Copy to %APPDATA%\squiglab\config.toml and replace the example user
 # directory with your checkout location. Forward slashes are valid in TOML.
+# Optional: label the rig these measurements were taken on. Drawn in the
+# top-right corner of the graph. Must be a top-level key, above any
+# [section] header.
+# rig_description = "clone IEC 711"
+
 [measurements]
 database_dir = "C:/Users/YourName/source/repos/squiglab/data"
 headphone_database_dir = "C:/Users/YourName/source/repos/squiglab/data_hp"

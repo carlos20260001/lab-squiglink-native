@@ -51,7 +51,19 @@ pub struct GraphCanvas<'a> {
     pub inspect_mode: bool,
     pub label_positions: &'a BTreeMap<String, [f32; 2]>,
     pub tutorial_band: Option<(&'a str, (f32, f32))>,
+    /// Named frequency regions drawn beneath the axis at all times, so the
+    /// graph is readable as a map even when the tutorial is closed.
+    pub bands: &'a [FrequencyBand],
+    /// Optional provenance caption drawn in the top-right corner of the graph.
+    pub rig_description: Option<&'a str>,
     pub y_scale: f32,
+}
+
+/// A named region of the frequency axis.
+#[derive(Clone, Copy)]
+pub struct FrequencyBand {
+    pub title: &'static str,
+    pub range_hz: (f32, f32),
 }
 
 pub fn export_svg(
@@ -235,8 +247,10 @@ impl GraphCanvas<'_> {
         let axis_font = || theme::font(TypeStep::Caption);
         let label_font = || theme::font_bold(TypeStep::Body);
         let plot_rect = Rect::from_min_max(
+            // Left room for the dB scale, top for the rig note, and enough
+            // underneath for the frequency ticks plus the named bands below them.
             Pos2::new(rect.left() + 64.0, rect.top() + 14.0),
-            Pos2::new(rect.right() - 18.0, rect.bottom() - 38.0),
+            Pos2::new(rect.right() - 18.0, rect.bottom() - 54.0),
         );
         let (y_min, y_max) = Self::scaled_y_range(y_range(curves), self.y_scale);
         let transform = Transform::new(plot_rect, self.zoom.x_range(), (y_min, y_max));
@@ -244,6 +258,17 @@ impl GraphCanvas<'_> {
         painter.rect_filled(rect, 0.0, background);
 
         let plot_painter = painter.with_clip_rect(plot_rect);
+        // Provenance caption, top-right, in the recessive type colour so it
+        // never competes with the curves.
+        if let Some(rig) = self.rig_description {
+            painter.text(
+                Pos2::new(plot_rect.right() - 4.0, rect.top() + 2.0),
+                Align2::RIGHT_TOP,
+                format!("Measured on: {rig}"),
+                theme::font_mono(TypeStep::Micro),
+                palette.text_tertiary,
+            );
+        }
         if let Some((label, (low_hz, high_hz))) = self.tutorial_band {
             let band_rect = Rect::from_min_max(
                 Pos2::new(
@@ -293,6 +318,39 @@ impl GraphCanvas<'_> {
                     axis_text,
                 );
             }
+        }
+
+        // Named frequency regions under the axis. These stay visible whether or
+        // not the tutorial is running, so the graph reads as a map of where each
+        // feature lives; the band the tutorial is currently on is picked out.
+        let band_y = plot_rect.bottom() + 26.0;
+        for band in self.bands {
+            let (low, high) = band.range_hz;
+            if high < transform.x_range.0 || low > transform.x_range.1 {
+                continue;
+            }
+            let start = transform.hz_to_x(low).max(plot_rect.left());
+            let end = transform.hz_to_x(high).min(plot_rect.right());
+            if end - start < 24.0 {
+                continue;
+            }
+            let active = self.tutorial_band.map(|(title, _)| title) == Some(band.title);
+            let color = if active {
+                palette.accent
+            } else {
+                palette.text_tertiary
+            };
+            painter.text(
+                Pos2::new((start + end) * 0.5, band_y),
+                Align2::CENTER_TOP,
+                band.title,
+                if active {
+                    theme::font_bold(TypeStep::Micro)
+                } else {
+                    theme::font(TypeStep::Micro)
+                },
+                color,
+            );
         }
 
         let db_step = if y_max - y_min > 70.0 { 10 } else { 5 };

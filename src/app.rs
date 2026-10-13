@@ -21,6 +21,11 @@ const MAX_SHARE_URI_LENGTH: usize = 65_536;
 struct AppConfig {
     measurements: MeasurementConfig,
     defaults: DefaultConfig,
+    /// Optional provenance line drawn in the corner of the graph, e.g. the
+    /// rig the measurements were taken on. The web tool labels every graph this
+    /// way; here it is opt-in because the native app has no rig metadata of its
+    /// own to fall back on.
+    rig_description: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Default, PartialEq, Eq, Serialize)]
@@ -87,6 +92,42 @@ const TUTORIAL_SEGMENTS: [TutorialSegment; 7] = [
         description: "The top octave contributes a sense of openness. High-frequency measurements are especially sensitive to fit.",
     },
 ];
+
+/// The frequency regions drawn beneath the axis, derived from the tutorial so
+/// the two can never disagree about where a band starts or ends.
+const FREQUENCY_BANDS: [squiglab::graph::FrequencyBand; 7] = {
+    use squiglab::graph::FrequencyBand;
+    [
+        FrequencyBand {
+            title: TUTORIAL_SEGMENTS[0].title,
+            range_hz: TUTORIAL_SEGMENTS[0].range_hz,
+        },
+        FrequencyBand {
+            title: TUTORIAL_SEGMENTS[1].title,
+            range_hz: TUTORIAL_SEGMENTS[1].range_hz,
+        },
+        FrequencyBand {
+            title: TUTORIAL_SEGMENTS[2].title,
+            range_hz: TUTORIAL_SEGMENTS[2].range_hz,
+        },
+        FrequencyBand {
+            title: TUTORIAL_SEGMENTS[3].title,
+            range_hz: TUTORIAL_SEGMENTS[3].range_hz,
+        },
+        FrequencyBand {
+            title: TUTORIAL_SEGMENTS[4].title,
+            range_hz: TUTORIAL_SEGMENTS[4].range_hz,
+        },
+        FrequencyBand {
+            title: TUTORIAL_SEGMENTS[5].title,
+            range_hz: TUTORIAL_SEGMENTS[5].range_hz,
+        },
+        FrequencyBand {
+            title: TUTORIAL_SEGMENTS[6].title,
+            range_hz: TUTORIAL_SEGMENTS[6].range_hz,
+        },
+    ]
+};
 
 struct DisplayCurve {
     group_index: usize,
@@ -219,6 +260,7 @@ pub struct CrinGraphApp {
     share_input: String,
     share_message: Option<String>,
     debug_hooks: bool,
+    rig_description: Option<String>,
 }
 
 impl Default for CrinGraphApp {
@@ -251,6 +293,7 @@ impl Default for CrinGraphApp {
             tutorial_segment: None,
             y_scale: 1.0,
             curve_color_offsets: BTreeMap::new(),
+            rig_description: None,
             dirty: true,
             loaded: false,
             load_error: None,
@@ -285,6 +328,7 @@ impl CrinGraphApp {
         let config = initialize_app_config_from(&config_path)?;
         validate_app_config(&config)?;
         self.smooth_level = config.defaults.smoothing_octaves;
+        self.rig_description = config.rig_description.clone();
 
         let database_dir = resolve_measurement_dir(
             config.measurements.database_dir.as_deref(),
@@ -1268,6 +1312,8 @@ impl CrinGraphApp {
                     let segment = &TUTORIAL_SEGMENTS[index];
                     (segment.title, segment.range_hz)
                 }),
+                bands: &FREQUENCY_BANDS,
+                rig_description: self.rig_description.as_deref(),
                 y_scale: self.y_scale,
             }
             .show(ui, &plot_curves);
@@ -1605,6 +1651,7 @@ fn default_app_config() -> anyhow::Result<AppConfig> {
                 .then_some(headphone_database_dir),
         },
         defaults: DefaultConfig::default(),
+        rig_description: None,
     })
 }
 
