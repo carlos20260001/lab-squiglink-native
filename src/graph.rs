@@ -613,6 +613,10 @@ impl GraphCanvas<'_> {
     }
 
     fn place_labels(mut labels: Vec<(String, f32, f32)>, plot_rect: Rect) -> BTreeMap<String, f32> {
+        // Keyed by the caller-supplied label key rather than the drawn text: two
+        // curves can legitimately carry the same text (the left and right channel
+        // of one measurement, for instance), and keying by text would collapse
+        // them onto a single slot and let them overlap.
         labels.sort_by(|left, right| left.1.total_cmp(&right.1));
         let mut positioned: Vec<(String, f32, f32)> = Vec::with_capacity(labels.len());
         let mut next_top = plot_rect.top();
@@ -1015,6 +1019,29 @@ mod tests {
         assert!(tops[0] >= plot.top());
         assert!(tops[2] + 12.0 <= plot.bottom());
         assert!(tops.windows(2).all(|pair| pair[1] - pair[0] >= 14.0));
+    }
+
+    #[test]
+    fn labels_desiring_nearby_positions_still_do_not_overlap() {
+        // Two curves ending near each other request almost the same y. The
+        // second must be pushed down rather than drawn on top of the first.
+        let plot = Rect::from_min_max(pos2(0.0, 0.0), pos2(400.0, 600.0));
+        let positions = GraphCanvas::place_labels(
+            vec![
+                ("first".to_owned(), 300.0, 18.0),
+                ("second".to_owned(), 305.4, 18.0),
+                ("third".to_owned(), 310.8, 18.0),
+            ],
+            plot,
+        );
+        let tops: Vec<f32> = ["first", "second", "third"]
+            .iter()
+            .map(|key| positions[*key])
+            .collect();
+        assert!(
+            tops.windows(2).all(|pair| pair[1] - pair[0] >= 18.0),
+            "labels overlapped: {tops:?}"
+        );
     }
 
     #[test]
