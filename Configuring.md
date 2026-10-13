@@ -30,7 +30,7 @@ able to help with:
 These are the things you definitely need to change to make sure your
 page works and isn't claiming it's crinacle.com.
 
-* Set `DIR` in `old/config.js` and place your graphs and `phone_book.json`
+* Set `DIR` in `web/config.js` and place your graphs and `phone_book.json`
   there.
 * Remove or change the watermark.
 * Remove the `targets`, replace them with your own, or get permission
@@ -98,7 +98,7 @@ be unrestricted.
 
 The following parameters are used to allow multiple samples per channel
 and different channel configurations than L/R. For example,
-`old/config_hp.js` is intended for headphones and shows only the right
+`web/config_hp.js` is intended for headphones and shows only the right
 channel with five samples per channel.
 
 * `default_channels` is a list of channels in each measurement: it
