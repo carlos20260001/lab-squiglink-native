@@ -29,12 +29,16 @@ impl ZoomRegion {
     }
 }
 
+#[derive(Clone, Copy)]
 pub struct PlotCurve<'a> {
     pub label: &'a str,
     pub label_key: &'a str,
     pub points: &'a [FRPoint],
     pub color: Color32,
     pub dashed: bool,
+    /// Whether this curve is a reference target rather than a measurement.
+    /// Targets are excluded from the plotted dB range.
+    pub target: bool,
 }
 
 #[derive(Default)]
@@ -294,11 +298,26 @@ impl GraphCanvas<'_> {
         let accent = palette.accent;
         let axis_font = || theme::font(TypeStep::Caption);
         let label_font = || theme::font_bold(TypeStep::Body);
+        // The reference tool holds a wide, short graph: roughly 3.4 units across
+        // for every one down. Filling the whole window height instead draws the
+        // same dB range over two and a half times the space, so every slope
+        // reads as far more dramatic than it does in the reference. Cap the
+        // height to that ratio and centre the plot in the space left over.
+        let inset_left = 64.0;
+        let inset_top = 14.0;
+        let inset_right = 18.0;
+        let inset_bottom = 54.0;
+        let available_width = (rect.width() - inset_left - inset_right).max(120.0);
+        let available_height = (rect.height() - inset_top - inset_bottom).max(80.0);
+        let plot_height = (available_width / Self::PLOT_ASPECT_RATIO)
+            .min(available_height)
+            .max(120.0);
+        let plot_top = rect.top() + inset_top + (available_height - plot_height) * 0.5;
         let plot_rect = Rect::from_min_max(
             // Left room for the dB scale, top for the rig note, and enough
             // underneath for the frequency ticks plus the named bands below them.
-            Pos2::new(rect.left() + 64.0, rect.top() + 14.0),
-            Pos2::new(rect.right() - 18.0, rect.bottom() - 54.0),
+            Pos2::new(rect.left() + inset_left, plot_top),
+            Pos2::new(rect.right() - inset_right, plot_top + plot_height),
         );
         let (y_min, y_max) = Self::scaled_y_range(y_range(curves), self.y_scale);
         let transform = Transform::new(plot_rect, self.zoom.x_range(), (y_min, y_max));
@@ -669,6 +688,11 @@ impl GraphCanvas<'_> {
         }
     }
 
+    /// How many units wide the plot is for every unit of height. The reference
+    /// tool draws a wide, short graph; matching the ratio matches its apparent
+    /// slope, which a taller plot exaggerates.
+    const PLOT_ASPECT_RATIO: f32 = 3.4;
+
     /// How many labels to group in the corner before letting the rest follow
     /// their curves. The reference tool groups about five.
     const MAX_GROUPED_LABELS: usize = 6;
@@ -1003,6 +1027,20 @@ impl Transform {
 }
 
 fn y_range(curves: &[PlotCurve<'_>]) -> (f32, f32) {
+    // Targets are excluded from the plotted dB range. A target with a steep
+    // high-frequency rolloff — the Harman target reaches 14.7 dB at 20 kHz —
+    // would otherwise drag the axis down to 10 dB and compress the measurements
+    // being compared into the top of the graph, which is the opposite of the
+    // comparison this tool exists for. Targets are still drawn; they simply clip
+    // at the bottom of the plot, as they do in the reference tool.
+    //
+    // If only targets are active, fall back to them so the plot is never empty.
+    let measuring: Vec<&PlotCurve<'_>> = curves.iter().filter(|curve| !curve.target).collect();
+    let curves: &[&PlotCurve<'_>] = if measuring.is_empty() {
+        &curves.iter().collect::<Vec<_>>()
+    } else {
+        &measuring
+    };
     let bounds = curves
         .iter()
         .flat_map(|curve| curve.points.iter().map(|point| point.db))
@@ -1114,6 +1152,91 @@ mod tests {
     }
 
     #[test]
+    fn target_curves_do_not_stretch_the_plotted_db_range() {
+        // A target reaching 14.7 dB at 20 kHz must not drag the domain down to
+        // 10 dB and compress the measurements it is being compared against.
+        let measurement = PlotCurve {
+            label: "M",
+            label_key: "m",
+            points: &[
+                FRPoint { hz: 20.0, db: 42.0 },
+                FRPoint {
+                    hz: 20000.0,
+                    db: 72.0,
+                },
+            ],
+            color: egui::Color32::WHITE,
+            dashed: false,
+            target: false,
+        };
+        let target = PlotCurve {
+            label: "T",
+            label_key: "t",
+            points: &[
+                FRPoint { hz: 20.0, db: 40.0 },
+                FRPoint {
+                    hz: 20000.0,
+                    db: 14.7,
+                },
+            ],
+            color: egui::Color32::GRAY,
+            dashed: true,
+            target: true,
+        };
+        let measurement_points: [FRPoint; 2] = [
+            FRPoint { hz: 20.0, db: 42.0 },
+            FRPoint {
+                hz: 20000.0,
+                db: 72.0,
+            },
+        ];
+        let measurement = PlotCurve {
+            label: "M",
+            label_key: "m",
+            points: &measurement_points,
+            color: egui::Color32::WHITE,
+            dashed: false,
+            target: false,
+        };
+        let without_target = super::y_range(&[measurement.clone()]);
+        let with_target = super::y_range(&[measurement, target]);
+        assert_eq!(with_target, without_target);
+        assert!(
+            with_target.0 > 30.0,
+            "target stretched the domain: {with_target:?}"
+        );
+    }
+
+    #[test]
+    fn only_targets_still_produces_a_usable_range() {
+        let target = PlotCurve {
+            label: "T",
+            label_key: "t",
+            points: &[
+                FRPoint { hz: 20.0, db: 40.0 },
+                FRPoint {
+                    hz: 20000.0,
+                    db: 14.7,
+                },
+            ],
+            color: egui::Color32::GRAY,
+            dashed: true,
+            target: true,
+        };
+        let range = super::y_range(&[target]);
+        assert!(range.0 <= 14.7 && range.1 >= 40.0);
+    }
+
+    #[test]
+    fn the_plot_is_wider_than_it_is_tall_like_the_reference_tool() {
+        let aspect = crate::graph::GraphCanvas::PLOT_ASPECT_RATIO;
+        assert!(
+            (3.0..=3.8).contains(&aspect),
+            "aspect ratio {aspect} does not match the reference tool's framing"
+        );
+    }
+
+    #[test]
     fn grouped_labels_stack_in_the_corner_without_overlapping() {
         let plot = Rect::from_min_max(pos2(0.0, 0.0), pos2(400.0, 600.0));
         let corner = crate::graph::LabelLayout::CornerBottomLeft;
@@ -1220,6 +1343,7 @@ mod tests {
                 points: &points,
                 color: Color32::from_rgb(12, 34, 56),
                 dashed: false,
+                target: false,
             },
             PlotCurve {
                 label: "Target",
@@ -1227,6 +1351,7 @@ mod tests {
                 points: &points,
                 color: Color32::from_rgb(90, 100, 110),
                 dashed: true,
+                target: true,
             },
         ];
         let svg = export_svg(&curves, ZoomRegion::Full, 5, &BTreeMap::new(), true, 1.0);
@@ -1259,6 +1384,7 @@ mod tests {
             points: &points,
             color: Color32::WHITE,
             dashed: false,
+            target: false,
         }];
         let full = export_svg(&curves, ZoomRegion::Full, 5, &BTreeMap::new(), false, 1.0);
         let zoomed = export_svg(&curves, ZoomRegion::Bass, 5, &BTreeMap::new(), false, 2.0);
@@ -1310,6 +1436,7 @@ mod tests {
             points: &points,
             color: Color32::WHITE,
             dashed: false,
+            target: false,
         }];
 
         let svg = export_svg(&curves, ZoomRegion::Full, 1, &BTreeMap::new(), false, 1.0);
