@@ -126,9 +126,20 @@ pub fn export_svg(
     dark_mode: bool,
     y_scale: f32,
 ) -> String {
+    // Wide and short, matching the on-screen plot, so an exported graph has the
+    // same apparent slopes as the one it was exported from.
     const WIDTH: f32 = 1200.0;
-    const HEIGHT: f32 = 650.0;
-    let plot_rect = Rect::from_min_max(Pos2::new(72.0, 24.0), Pos2::new(1182.0, 610.0));
+    const DOMAIN_MARGIN: f32 = 72.0;
+    const TOP_MARGIN: f32 = 24.0;
+    let plot_rect = Rect::from_min_max(
+        Pos2::new(DOMAIN_MARGIN, TOP_MARGIN),
+        Pos2::new(
+            WIDTH - DOMAIN_MARGIN,
+            TOP_MARGIN + (WIDTH - 2.0 * DOMAIN_MARGIN) / GraphCanvas::PLOT_ASPECT_RATIO,
+        ),
+    );
+    const HEIGHT: f32 =
+        TOP_MARGIN + (WIDTH - 2.0 * DOMAIN_MARGIN) / GraphCanvas::PLOT_ASPECT_RATIO + 60.0;
     let transform = Transform::new(
         plot_rect,
         zoom.x_range(),
@@ -285,8 +296,26 @@ fn escape_xml(value: &str) -> String {
 
 impl GraphCanvas<'_> {
     pub fn show(&self, ui: &mut Ui, curves: &[PlotCurve<'_>]) -> GraphInteraction {
-        let available = ui.available_size().max(Vec2::new(320.0, 240.0));
-        let (rect, response) = ui.allocate_exact_size(available, Sense::hover());
+        // The graph sizes itself to the plot instead of claiming the whole
+        // panel. Taking all available height left a large empty band between the
+        // graph and the manager below it, while the plot inside was capped to the
+        // reference tool's proportions anyway.
+        let inset_left = 64.0;
+        let inset_top = 14.0;
+        let inset_right = 18.0;
+        let inset_bottom = 54.0;
+        let panel = ui.available_size();
+        let plot_width = (panel.x - inset_left - inset_right).max(120.0);
+        // Prefer the reference proportion, but never grow past the panel, and
+        // never shrink below a height the axis and band labels still fit in.
+        let plot_height = (plot_width / Self::PLOT_ASPECT_RATIO)
+            .min((panel.y - inset_top - inset_bottom).max(0.0))
+            .max(120.0);
+        let size = egui::vec2(
+            plot_width + inset_left + inset_right,
+            plot_height + inset_top + inset_bottom,
+        );
+        let (rect, response) = ui.allocate_exact_size(size, Sense::hover());
         let visuals = ui.visuals();
         let palette = Palette::resolve(visuals.dark_mode);
         // The graph is the darkest surface in the application so saturated
@@ -298,26 +327,14 @@ impl GraphCanvas<'_> {
         let accent = palette.accent;
         let axis_font = || theme::font(TypeStep::Caption);
         let label_font = || theme::font_bold(TypeStep::Body);
-        // The reference tool holds a wide, short graph: roughly 3.4 units across
-        // for every one down. Filling the whole window height instead draws the
-        // same dB range over two and a half times the space, so every slope
-        // reads as far more dramatic than it does in the reference. Cap the
-        // height to that ratio and centre the plot in the space left over.
-        let inset_left = 64.0;
-        let inset_top = 14.0;
-        let inset_right = 18.0;
-        let inset_bottom = 54.0;
-        let available_width = (rect.width() - inset_left - inset_right).max(120.0);
-        let available_height = (rect.height() - inset_top - inset_bottom).max(80.0);
-        let plot_height = (available_width / Self::PLOT_ASPECT_RATIO)
-            .min(available_height)
-            .max(120.0);
-        let plot_top = rect.top() + inset_top + (available_height - plot_height) * 0.5;
         let plot_rect = Rect::from_min_max(
             // Left room for the dB scale, top for the rig note, and enough
             // underneath for the frequency ticks plus the named bands below them.
-            Pos2::new(rect.left() + inset_left, plot_top),
-            Pos2::new(rect.right() - inset_right, plot_top + plot_height),
+            Pos2::new(rect.left() + inset_left, rect.top() + inset_top),
+            Pos2::new(
+                rect.right() - inset_right,
+                rect.top() + inset_top + plot_height,
+            ),
         );
         let (y_min, y_max) = Self::scaled_y_range(y_range(curves), self.y_scale);
         let transform = Transform::new(plot_rect, self.zoom.x_range(), (y_min, y_max));
