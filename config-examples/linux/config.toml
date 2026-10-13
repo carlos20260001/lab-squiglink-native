@@ -1,6 +1,11 @@
 # Example for GNU/Linux:
 # Copy to ${XDG_CONFIG_HOME:-$HOME/.config}/squiglab/config.toml and
 # replace the example home directory with your checkout location.
+# Optional: label the rig these measurements were taken on. Drawn in the
+# top-right corner of the graph. Must be a top-level key, above any
+# [section] header.
+# rig_description = "clone IEC 711"
+
 [measurements]
 database_dir = "/home/yourname/src/squiglab/data"
 headphone_database_dir = "/home/yourname/src/squiglab/data_hp"
