@@ -41,14 +41,22 @@ before they're adopted on Crin's site.
 
 [View some sample graphs.](https://mlochbaum.github.io/CrinGraph/old/graph.html)
 
-This repository contains two applications:
+This repository contains two applications. The **native Rust/egui app is the
+default** — it is what `cargo run`, `build.sh`, `build.cmd` and the release
+workflow build:
 
-- The **native Rust/egui app**, built from `Cargo.toml` and `src/`. This is
-  the actively maintained application.
-- The original **JavaScript/HTML web app** (`index.html`, `graphtool.js`,
-  `config.js`, `style.css`, and friends), retained as-is from upstream so it
-  stays byte-identical to `squiglink/lab-squiglink-native` and keeps merging
-  cleanly. Serve the repository root over HTTP to run it.
+- **Native (default).** Built from `Cargo.toml` and `src/`. Actively maintained.
+- **Legacy web app.** The original JavaScript/HTML implementation, kept in
+  [`old/`](old/) and retained for reference and for deployments that still
+  serve the web version. Serve the repository root over HTTP and open
+  [`old/index.html`](old/index.html); it reads measurement data from the shared
+  `data/` directory at the repository root.
+
+The legacy web app is kept as close to upstream as possible so it keeps merging
+cleanly. The only intentional edits are the `DIR` values in `old/config.js` and
+`old/config_hp.js` (pointing at `../data/` and `../data_hp/` now that the app
+lives one directory down), the matching path in `old/favicon.ijs`, and two stale
+`graph.html` references in `old/iframe.html` corrected to `index.html`.
 
 The native interface uses [egui](https://github.com/emilk/egui), an immediate-mode
 GUI library for Rust, with [eframe](https://github.com/emilk/egui/tree/master/crates/eframe)
