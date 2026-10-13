@@ -77,7 +77,7 @@ pub fn cluster_label(ui: &mut Ui, text: &str) {
 pub fn wordmark(ui: &mut Ui) {
     let palette = Palette::resolve(ui.visuals().dark_mode);
     ui.label(
-        RichText::new("CrinGraph")
+        RichText::new("SquigLab")
             .font(theme::font_bold(TypeStep::Subtitle))
             .color(palette.text_primary),
     );

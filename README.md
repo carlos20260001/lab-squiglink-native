@@ -2,6 +2,12 @@
 
 If you're not weirdly obsessed with headphones you can leave at any time.
 
+> **SquigLab** is the native desktop build in this repository. It began as the
+> [CrinGraph](https://github.com/mlochbaum/CrinGraph) open-source web tool,
+> which remains the reference implementation and the origin of the measurement
+> processing and graph code below. "CrinGraph" in the rest of this document
+> refers to that upstream project.
+
 Crinacle is a reviewer famous around the world (at least, I'm on the
 opposite side of it as he is) for his extensive reviews and measurements
 of in-ear monitors (IEMs). CrinGraph is the tool which allows readers to
@@ -101,10 +107,10 @@ with the **Desktop development with C++** workload. From PowerShell, run:
 
 ```powershell
 cargo build --release
-.\target\release\crigraph-native.exe
+.\target\release\squiglab.exe
 ```
 
-The Windows executable is created at `target\release\crigraph-native.exe`.
+The Windows executable is created at `target\release\squiglab.exe`.
 Build on Windows to produce a Windows executable; binaries are platform-specific.
 You can run `build.cmd` from Command Prompt or PowerShell as a build-script
 alternative. The workflow publishes Windows x86 (32-bit), x86_64, and ARM64
@@ -113,7 +119,7 @@ Windows 10 32-bit; ARM64 builds run on GitHub's public ARM64 Windows runner.
 To choose a target explicitly, pass `i686-pc-windows-msvc`,
 `x86_64-pc-windows-msvc`, or `aarch64-pc-windows-msvc` to `build.cmd`.
 The 32-bit executable is written to
-`target\i686-pc-windows-msvc\release\crigraph-native.exe`.
+`target\i686-pc-windows-msvc\release\squiglab.exe`.
 
 #### macOS
 
@@ -136,7 +142,7 @@ To build an optimized macOS executable:
 cargo build --release
 ```
 
-The executable is created at `target/release/crigraph-native`. Build on macOS
+The executable is created at `target/release/squiglab`. Build on macOS
 to produce a native macOS binary; binaries are platform-specific.
 You can also build with `./build.sh`.
 
@@ -154,10 +160,10 @@ Use the platform build scripts to create distributable app folders in `dist/`:
 ./build.sh
 ```
 
-On Windows, run `build.cmd`; it also creates a relocatable `CrinGraph.lnk`
+On Windows, run `build.cmd`; it also creates a relocatable `SquigLab.lnk`
 shortcut beside the executable. The Linux bundle includes a desktop entry with
 its startup WM class and hicolor icons. A macOS build creates
-`dist/macos/CrinGraph-native.app`, including its `Info.plist`, `.icns` icon,
+`dist/macos/SquigLab.app`, including its `Info.plist`, `.icns` icon,
 and bundled measurement data. Build bundles on their respective operating
 systems.
 
@@ -178,7 +184,7 @@ It attaches the Linux `.tar.gz`, Windows `.zip`, and macOS `.zip` bundles
 directly to a GitHub Release. These are the
 release downloads; they are not nested inside GitHub Actions artifact archives.
 Each bundle contains the app identity assets and sample measurement databases.
-Run the executable from its extracted `CrinGraph` folder so the bundled `data/`
+Run the executable from its extracted `SquigLab` folder so the bundled `data/`
 and `data_hp/` directories are available. The workflow creates a draft release
 before building and publishes it only after all architecture builds and
 uploads succeed; failed builds leave the release as a draft for inspection or
@@ -191,9 +197,9 @@ application configuration directory:
 
 | Platform | Configuration file |
 | --- | --- |
-| Windows | `%APPDATA%\cringraph\config.toml` |
-| GNU/Linux | `$XDG_CONFIG_HOME/cringraph/config.toml`, normally `~/.config/cringraph/config.toml` |
-| macOS | `~/Library/Application Support/cringraph/config.toml` |
+| Windows | `%APPDATA%\squiglab\config.toml` |
+| GNU/Linux | `$XDG_CONFIG_HOME/squiglab/config.toml`, normally `~/.config/squiglab/config.toml` |
+| macOS | `~/Library/Application Support/squiglab/config.toml` |
 
 On first launch, the app creates `config.toml` if it is missing; it does not
 replace an existing config. The generated `database_dir` points to the `data/`
@@ -231,12 +237,14 @@ If either path is omitted, the app keeps its development defaults of `data/`
 and `data_hp/` relative to the working directory; the additional database is
 skipped if `data_hp/` is absent. With no config file, the default smoothing is
 5. Saved UI preferences in the same app configuration directory take precedence
-over `smoothing_octaves`; preferences from the previous `CrinGraph-native`
-configuration folder are also read for migration.
+over `smoothing_octaves`; preferences from earlier `cringraph` and `CrinGraph-native`
+configuration folders are also read for migration, so existing
+settings carry over and share links using the older `cringraph://`
+scheme still open.
 
 ### Native app screenshot
 
-![CrinGraph native app showing a frequency response graph](assets/Screenshots/Cringraph-native-screenshot-1.png)
+![SquigLab showing a frequency response graph](assets/Screenshots/Cringraph-native-screenshot-1.png)
 
 *Screenshot captured on GNU/Linux.*
 

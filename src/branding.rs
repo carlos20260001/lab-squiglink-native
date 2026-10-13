@@ -69,9 +69,9 @@ pub fn render_icons(svg_path: &Path, output_dir: &Path) -> Result<IconSet> {
         pngs.push((size, path));
     }
 
-    let ico = output_dir.join("cringraph.ico");
+    let ico = output_dir.join("app.ico");
     write_ico(&ico, &pngs)?;
-    let icns = output_dir.join("cringraph.icns");
+    let icns = output_dir.join("app.icns");
     write_icns(&icns, &pngs)?;
 
     Ok(IconSet {
@@ -162,14 +162,15 @@ mod tests {
         let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         let manifest_path = root.join("packaging/app.toml");
         let manifest = load_manifest(&manifest_path).unwrap();
-        assert_eq!(manifest.application.identifier, "io.cringraph.native");
+        assert_eq!(manifest.application.identifier, "io.squiglab.native");
+        assert_eq!(manifest.application.name, "SquigLab");
         assert!(resolve_icon_path(&manifest_path, &manifest).is_file());
 
         let nonce = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_nanos();
-        let output = env::temp_dir().join(format!("cringraph-icons-{nonce}"));
+        let output = env::temp_dir().join(format!("squiglab-icons-{nonce}"));
         let icons = render_icons(&resolve_icon_path(&manifest_path, &manifest), &output).unwrap();
 
         assert_eq!(icons.pngs.len(), 9);

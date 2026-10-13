@@ -712,27 +712,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "crigraph-native"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "dirs",
- "eframe",
- "egui",
- "egui_extras",
- "image",
- "once_cell",
- "png",
- "resvg",
- "rgb",
- "serde",
- "serde_json",
- "toml 0.8.23",
- "walkdir",
- "winresource",
-]
-
-[[package]]
 name = "crossbeam-utils"
 version = "0.8.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3202,6 +3181,27 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d9571ea910ebd84c86af4b3ed27f9dbdc6ad06f17c5f96146b2b671e2976744f"
 dependencies = [
  "bitflags 2.13.2",
+]
+
+[[package]]
+name = "squiglab"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "dirs",
+ "eframe",
+ "egui",
+ "egui_extras",
+ "image",
+ "once_cell",
+ "png",
+ "resvg",
+ "rgb",
+ "serde",
+ "serde_json",
+ "toml 0.8.23",
+ "walkdir",
+ "winresource",
 ]
 
 [[package]]

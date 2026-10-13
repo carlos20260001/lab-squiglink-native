@@ -35,7 +35,7 @@ fn prepare_package(icon_path: &Path, output: &Path) -> Result<IconSet> {
     fs::create_dir_all(output)?;
     let assets = output.join("icons");
     let icons = branding::render_icons(icon_path, &assets)?;
-    fs::copy(icon_path, assets.join("cringraph-app-icon.svg"))?;
+    fs::copy(icon_path, assets.join("app-icon.svg"))?;
     Ok(icons)
 }
 
@@ -99,7 +99,7 @@ fn package_linux(
     binary: &Path,
     output: &Path,
 ) -> Result<()> {
-    let app_dir = output.join("CrinGraph");
+    let app_dir = output.join(&manifest.application.name);
     reset_package_directory(&app_dir)?;
     copy_app_files(root, binary, &app_dir, &manifest.application.binary_name)?;
     let icons = prepare_package(icon_path, &app_dir)?;
@@ -138,7 +138,7 @@ fn package_windows(
     binary: &Path,
     output: &Path,
 ) -> Result<()> {
-    let app_dir = output.join("CrinGraph");
+    let app_dir = output.join(&manifest.application.name);
     reset_package_directory(&app_dir)?;
     copy_app_files(
         root,
@@ -147,7 +147,10 @@ fn package_windows(
         &format!("{}.exe", manifest.application.binary_name),
     )?;
     let icons = prepare_package(icon_path, &app_dir)?;
-    fs::copy(&icons.ico, app_dir.join("cringraph.ico"))?;
+    fs::copy(
+        &icons.ico,
+        app_dir.join(format!("{}.ico", manifest.application.binary_name)),
+    )?;
     remove_icon_containers(&icons)?;
     let script = root.join("scripts/create_shortcut.ps1");
     let status = Command::new("powershell.exe")
@@ -192,7 +195,8 @@ fn package_macos(
     fs::copy(root.join("README.md"), resources.join("README.md"))?;
     fs::copy(root.join("LICENSE"), resources.join("LICENSE"))?;
     let icons = prepare_package(icon_path, &resources)?;
-    fs::copy(&icons.icns, resources.join("CrinGraph.icns"))?;
+    let icns_name = format!("{}.icns", manifest.application.name);
+    fs::copy(&icons.icns, resources.join(&icns_name))?;
     remove_icon_containers(&icons)?;
     fs::write(contents.join("PkgInfo"), b"APPL????")?;
     fs::write(
@@ -203,7 +207,7 @@ fn package_macos(
             xml_escape(&manifest.application.name),
             xml_escape(&manifest.application.identifier),
             xml_escape(&manifest.application.binary_name),
-            "CrinGraph.icns",
+            icns_name,
             env!("CARGO_PKG_VERSION"),
             env!("CARGO_PKG_VERSION"),
         ),

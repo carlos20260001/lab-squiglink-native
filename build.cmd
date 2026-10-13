@@ -24,10 +24,10 @@ if "%~2" NEQ "" (
 
 if "%~1"=="" (
     cargo build --release
-    set "BINARY=target\release\crigraph-native.exe"
+    set "BINARY=target\release\squiglab.exe"
 ) else (
     cargo build --release --target "%~1"
-    set "BINARY=target\%~1\release\crigraph-native.exe"
+    set "BINARY=target\%~1\release\squiglab.exe"
 )
 if errorlevel 1 goto build_failed
 

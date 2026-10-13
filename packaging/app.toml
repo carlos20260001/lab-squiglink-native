@@ -1,11 +1,11 @@
 [application]
-name = "CrinGraph"
-binary_name = "crigraph-native"
-identifier = "io.cringraph.native"
+name = "SquigLab"
+binary_name = "squiglab"
+identifier = "io.squiglab.native"
 description = "Compare headphone frequency response measurements."
 category = "AudioVideo;Audio;"
-startup_wm_class = "crigraph-native"
-macos_bundle_name = "CrinGraph-native.app"
+startup_wm_class = "squiglab"
+macos_bundle_name = "SquigLab.app"
 
 [assets]
 icon_svg = "../assets/cringraph-app-icon.svg"

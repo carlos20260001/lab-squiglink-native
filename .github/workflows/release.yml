@@ -84,14 +84,14 @@ jobs:
         run: |
           set -eu
           mkdir -p dist
-          tar -czf "dist/cringraph-linux-${{ matrix.arch }}.tar.gz" -C dist/linux CrinGraph
+          tar -czf "dist/squiglab-linux-${{ matrix.arch }}.tar.gz" -C dist/linux SquigLab
         shell: bash
 
       - name: Upload release bundle
         uses: actions/upload-artifact@v4
         with:
-          name: cringraph-linux-${{ matrix.arch }}
-          path: dist/cringraph-linux-${{ matrix.arch }}.tar.gz
+          name: squiglab-linux-${{ matrix.arch }}
+          path: dist/squiglab-linux-${{ matrix.arch }}.tar.gz
           if-no-files-found: error
           retention-days: 1
 
@@ -130,14 +130,14 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           New-Item -ItemType Directory -Force dist | Out-Null
-          Compress-Archive -Path dist/windows/CrinGraph -DestinationPath "dist/cringraph-windows-${{ matrix.arch }}.zip" -Force
+          Compress-Archive -Path dist/windows/SquigLab -DestinationPath "dist/squiglab-windows-${{ matrix.arch }}.zip" -Force
         shell: pwsh
 
       - name: Upload release bundle
         uses: actions/upload-artifact@v4
         with:
-          name: cringraph-windows-${{ matrix.arch }}
-          path: dist/cringraph-windows-${{ matrix.arch }}.zip
+          name: squiglab-windows-${{ matrix.arch }}
+          path: dist/squiglab-windows-${{ matrix.arch }}.zip
           if-no-files-found: error
           retention-days: 1
 
@@ -167,13 +167,13 @@ jobs:
         run: ./build.sh "${{ matrix.target }}"
 
       - name: Archive macOS app
-        run: ditto -c -k --sequesterRsrc --keepParent dist/macos/CrinGraph-native.app "dist/cringraph-macos-${{ matrix.arch }}.zip"
+        run: ditto -c -k --sequesterRsrc --keepParent dist/macos/SquigLab.app "dist/squiglab-macos-${{ matrix.arch }}.zip"
 
       - name: Upload release bundle
         uses: actions/upload-artifact@v4
         with:
-          name: cringraph-macos-${{ matrix.arch }}
-          path: dist/cringraph-macos-${{ matrix.arch }}.zip
+          name: squiglab-macos-${{ matrix.arch }}
+          path: dist/squiglab-macos-${{ matrix.arch }}.zip
           if-no-files-found: error
           retention-days: 1
 
@@ -203,6 +203,6 @@ jobs:
           overwrite_files: true
           fail_on_unmatched_files: true
           files: |
-            release-assets/cringraph-linux-*.tar.gz
-            release-assets/cringraph-windows-*.zip
-            release-assets/cringraph-macos-*.zip
+            release-assets/squiglab-linux-*.tar.gz
+            release-assets/squiglab-windows-*.zip
+            release-assets/squiglab-macos-*.zip

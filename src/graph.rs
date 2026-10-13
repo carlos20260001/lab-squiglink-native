@@ -81,18 +81,28 @@ pub fn export_svg(
     let mut svg = format!(
         r#"<svg xmlns="http://www.w3.org/2000/svg" width="{WIDTH:.0}" height="{HEIGHT:.0}" viewBox="0 0 {WIDTH:.0} {HEIGHT:.0}"><rect width="100%" height="100%" fill="{background}"/>"#
     );
+    // Match the canvas: grid lines stay dense, labels thin out when they would
+    // collide, so a narrow export is not a wall of overlapping tick text.
+    const MIN_TICK_LABEL_GAP: f32 = 26.0;
+    let mut last_label_x = f32::NEG_INFINITY;
     for &frequency in X_TICKS.iter().filter(|frequency| {
         **frequency >= transform.x_range.0 && **frequency <= transform.x_range.1
     }) {
         let x = transform.hz_to_x(frequency);
         let label = format_axis_frequency(frequency);
         svg.push_str(&format!(
-            r#"<path d="M{x:.2} {y1:.2}V{y2:.2}" stroke="{grid_color}" stroke-width="{grid_width}"/><text x="{x:.2}" y="{label_y:.2}" fill="{text_color}" font-family="Open Sans, sans-serif" font-size="{axis_size}" text-anchor="middle">{label}</text>"#,
+            r#"<path d="M{x:.2} {y1:.2}V{y2:.2}" stroke="{grid_color}" stroke-width="{grid_width}"/>"#,
             y1 = plot_rect.top(),
             y2 = plot_rect.bottom(),
-            label_y = plot_rect.bottom() + 24.0,
             grid_width = theme::graph::GRID_WIDTH,
         ));
+        if x - last_label_x >= MIN_TICK_LABEL_GAP {
+            last_label_x = x;
+            svg.push_str(&format!(
+                r#"<text x="{x:.2}" y="{label_y:.2}" fill="{text_color}" font-family="Open Sans, sans-serif" font-size="{axis_size}" text-anchor="middle">{label}</text>"#,
+                label_y = plot_rect.bottom() + 24.0,
+            ));
+        }
     }
     let db_step = if transform.y_range.1 - transform.y_range.0 > 70.0 {
         10
@@ -256,6 +266,11 @@ impl GraphCanvas<'_> {
                 );
             }
         }
+        // Labels are density-aware: keep every grid line, but drop a label when it
+        // would sit closer than MIN_TICK_LABEL_GAP to the previous one. Without
+        // this, a narrow window overlaps the tick text into an unreadable band.
+        const MIN_TICK_LABEL_GAP: f32 = 26.0;
+        let mut last_label_x = f32::NEG_INFINITY;
         for &frequency in X_TICKS.iter().filter(|frequency| {
             **frequency >= transform.x_range.0 && **frequency <= transform.x_range.1
         }) {
@@ -268,13 +283,16 @@ impl GraphCanvas<'_> {
                 Stroke::new(theme::graph::GRID_WIDTH, grid_color),
             );
             let label = format_axis_frequency(frequency);
-            painter.text(
-                Pos2::new(x, plot_rect.bottom() + 8.0),
-                Align2::CENTER_TOP,
-                label,
-                axis_font(),
-                axis_text,
-            );
+            if x - last_label_x >= MIN_TICK_LABEL_GAP {
+                last_label_x = x;
+                painter.text(
+                    Pos2::new(x, plot_rect.bottom() + 8.0),
+                    Align2::CENTER_TOP,
+                    label,
+                    axis_font(),
+                    axis_text,
+                );
+            }
         }
 
         let db_step = if y_max - y_min > 70.0 { 10 } else { 5 };
