@@ -26,10 +26,10 @@ OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
 PERFORMANCE OF THIS SOFTWARE.
 Third-party library notices for the archived web application
 
-The original web pages in old/ load the following JavaScript libraries from
+The original web pages in web/ load the following JavaScript libraries from
 their respective CDNs at runtime. Their minified distributions are not included
 in this repository. The native Rust/egui application does not link or bundle
-D3.js; it implements its graph rendering in Rust. `old/graphtool.js` is the
+D3.js; it implements its graph rendering in Rust. `web/graphtool.js` is the
 CrinGraph application code that calls the D3 APIs, not a copy of D3 itself.
 
 D3.js
