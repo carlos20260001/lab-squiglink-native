@@ -170,6 +170,26 @@ impl Palette {
 }
 
 // ---------------------------------------------------------------------------
+// Graph
+// ---------------------------------------------------------------------------
+
+/// Stroke weights and label sizes for the graph canvas.
+///
+/// The graph carries more saturated color than any other surface, so its own
+/// chrome is the quietest thing in the application: a hairline grid, recessive
+/// axis type, and bold curve labels that match the measurement colors.
+pub mod graph {
+    /// Width of the measurement and target curves.
+    pub const CURVE_WIDTH: f32 = 2.0;
+    /// Width of the hovered curve's emphasis stroke.
+    pub const CURVE_WIDTH_HOVER: f32 = 4.0;
+    /// Width of a grid line.
+    pub const GRID_WIDTH: f32 = 0.7;
+    /// Width of the inspector's vertical frequency line.
+    pub const INSPECTOR_WIDTH: f32 = 1.5;
+}
+
+// ---------------------------------------------------------------------------
 // Spacing
 // ---------------------------------------------------------------------------
 

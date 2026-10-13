@@ -1,5 +1,6 @@
 use crate::data::FRPoint;
-use egui::{Align2, Color32, FontId, Id, Pos2, Rect, Sense, Stroke, Ui, Vec2};
+use crate::theme::{self, Palette, TypeStep};
+use egui::{Align2, Color32, Id, Pos2, Rect, Sense, Stroke, Ui, Vec2};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
@@ -69,11 +70,14 @@ pub fn export_svg(
         zoom.x_range(),
         GraphCanvas::scaled_y_range(y_range(curves), y_scale),
     );
-    let (background, text_color, grid_color) = if dark_mode {
-        ("#1b1b1b", "#e5e5e5", "#4a4a4a")
-    } else {
-        ("#ffffff", "#202020", "#c8c8c8")
-    };
+    let palette = Palette::resolve(dark_mode);
+    let (background, text_color, grid_color) = (
+        svg_color(palette.surface_base),
+        svg_color(palette.text_tertiary),
+        svg_color(palette.border),
+    );
+    let axis_size = TypeStep::Caption.size();
+    let label_size = TypeStep::Body.size();
     let mut svg = format!(
         r#"<svg xmlns="http://www.w3.org/2000/svg" width="{WIDTH:.0}" height="{HEIGHT:.0}" viewBox="0 0 {WIDTH:.0} {HEIGHT:.0}"><rect width="100%" height="100%" fill="{background}"/>"#
     );
@@ -83,10 +87,11 @@ pub fn export_svg(
         let x = transform.hz_to_x(frequency);
         let label = format_axis_frequency(frequency);
         svg.push_str(&format!(
-            r#"<path d="M{x:.2} {y1:.2}V{y2:.2}" stroke="{grid_color}" stroke-width="1"/><text x="{x:.2}" y="{label_y:.2}" fill="{text_color}" font-family="sans-serif" font-size="12" text-anchor="middle">{label}</text>"#,
+            r#"<path d="M{x:.2} {y1:.2}V{y2:.2}" stroke="{grid_color}" stroke-width="{grid_width}"/><text x="{x:.2}" y="{label_y:.2}" fill="{text_color}" font-family="Open Sans, sans-serif" font-size="{axis_size}" text-anchor="middle">{label}</text>"#,
             y1 = plot_rect.top(),
             y2 = plot_rect.bottom(),
             label_y = plot_rect.bottom() + 24.0,
+            grid_width = theme::graph::GRID_WIDTH,
         ));
     }
     let db_step = if transform.y_range.1 - transform.y_range.0 > 70.0 {
@@ -99,10 +104,11 @@ pub fn export_svg(
     for db in (first_db..=last_db).step_by(db_step as usize) {
         let y = transform.db_to_y(db as f32);
         svg.push_str(&format!(
-            r#"<path d="M{x1:.2} {y:.2}H{x2:.2}" stroke="{grid_color}" stroke-width="1"/><text x="{label_x:.2}" y="{y:.2}" fill="{text_color}" font-family="sans-serif" font-size="12" text-anchor="end" dominant-baseline="middle">{db}</text>"#,
+            r#"<path d="M{x1:.2} {y:.2}H{x2:.2}" stroke="{grid_color}" stroke-width="{grid_width}"/><text x="{label_x:.2}" y="{y:.2}" fill="{text_color}" font-family="Hack, monospace" font-size="{axis_size}" text-anchor="end" dominant-baseline="middle">{db}</text>"#,
             x1 = plot_rect.left(),
             x2 = plot_rect.right(),
             label_x = plot_rect.left() - 10.0,
+            grid_width = theme::graph::GRID_WIDTH,
         ));
     }
 
@@ -129,7 +135,10 @@ pub fn export_svg(
             label_candidates.push((
                 curve.label_key,
                 Pos2::new(transform.hz_to_x(last.hz), transform.db_to_y(last.db)),
-                Vec2::new(curve.label.chars().count() as f32 * 7.0, 14.0),
+                Vec2::new(
+                    curve.label.chars().count() as f32 * label_size * 0.56,
+                    label_size * 1.3,
+                ),
             ));
         }
         if points.len() < 2 {
@@ -142,8 +151,9 @@ pub fn export_svg(
             ""
         };
         svg.push_str(&format!(
-            r#"<path d="{path}" fill="none" stroke="{}" stroke-width="2"{dash}/>"#,
-            svg_color(curve.color)
+            r#"<path d="{path}" fill="none" stroke="{}" stroke-width="{}"{dash}/>"#,
+            svg_color(curve.color),
+            theme::graph::CURVE_WIDTH,
         ));
     }
     svg.push_str("</g>");
@@ -174,9 +184,9 @@ pub fn export_svg(
             let position = GraphCanvas::clamp_label_position(position, size, plot_rect);
             let curve = curves.iter().find(|curve| curve.label_key == key).unwrap();
             svg.push_str(&format!(
-                r#"<text x="{:.2}" y="{:.2}" fill="{}" font-family="sans-serif" font-size="12">{}</text>"#,
+                r#"<text x="{:.2}" y="{:.2}" fill="{}" font-family="Open Sans, sans-serif" font-size="{label_size}" font-weight="700">{}</text>"#,
                 position.x,
-                position.y + 11.0,
+                position.y + label_size,
                 svg_color(curve.color),
                 escape_xml(curve.label),
             ));
@@ -204,9 +214,16 @@ impl GraphCanvas<'_> {
         let available = ui.available_size().max(Vec2::new(320.0, 240.0));
         let (rect, response) = ui.allocate_exact_size(available, Sense::hover());
         let visuals = ui.visuals();
-        let background = visuals.panel_fill;
-        let text_color = visuals.text_color();
-        let grid_color = visuals.widgets.noninteractive.bg_stroke.color;
+        let palette = Palette::resolve(visuals.dark_mode);
+        // The graph is the darkest surface in the application so saturated
+        // measurement colors sit on the quietest ground available.
+        let background = palette.surface_base;
+        let text_color = palette.text_primary;
+        let axis_text = palette.text_tertiary;
+        let grid_color = palette.border;
+        let accent = palette.accent;
+        let axis_font = || theme::font(TypeStep::Caption);
+        let label_font = || theme::font_bold(TypeStep::Body);
         let plot_rect = Rect::from_min_max(
             Pos2::new(rect.left() + 64.0, rect.top() + 14.0),
             Pos2::new(rect.right() - 18.0, rect.bottom() - 38.0),
@@ -229,17 +246,13 @@ impl GraphCanvas<'_> {
                 ),
             );
             if band_rect.is_positive() {
-                plot_painter.rect_filled(
-                    band_rect,
-                    0.0,
-                    Color32::from_rgba_unmultiplied(250, 190, 80, 35),
-                );
+                plot_painter.rect_filled(band_rect, 0.0, palette.warning.gamma_multiply(0.18));
                 painter.text(
                     band_rect.center_top() + Vec2::new(0.0, 5.0),
                     Align2::CENTER_TOP,
                     label,
-                    FontId::proportional(12.0),
-                    Color32::from_rgb(250, 190, 80),
+                    theme::font(TypeStep::Caption),
+                    palette.warning,
                 );
             }
         }
@@ -252,15 +265,15 @@ impl GraphCanvas<'_> {
                     Pos2::new(x, plot_rect.top()),
                     Pos2::new(x, plot_rect.bottom()),
                 ],
-                Stroke::new(0.7_f32, grid_color),
+                Stroke::new(theme::graph::GRID_WIDTH, grid_color),
             );
             let label = format_axis_frequency(frequency);
             painter.text(
                 Pos2::new(x, plot_rect.bottom() + 8.0),
                 Align2::CENTER_TOP,
                 label,
-                FontId::proportional(11.0),
-                text_color,
+                axis_font(),
+                axis_text,
             );
         }
 
@@ -274,14 +287,14 @@ impl GraphCanvas<'_> {
                     Pos2::new(plot_rect.left(), y),
                     Pos2::new(plot_rect.right(), y),
                 ],
-                Stroke::new(0.7_f32, grid_color),
+                Stroke::new(theme::graph::GRID_WIDTH, grid_color),
             );
             painter.text(
                 Pos2::new(plot_rect.left() - 10.0, y),
                 Align2::RIGHT_CENTER,
                 format!("{db}"),
-                FontId::proportional(11.0),
-                text_color,
+                theme::font_mono(TypeStep::Caption),
+                axis_text,
             );
         }
 
@@ -300,7 +313,7 @@ impl GraphCanvas<'_> {
                 curve.color,
                 curve.dashed,
                 smooth,
-                2.0,
+                theme::graph::CURVE_WIDTH,
             );
             screen_curves.push(Self::sample_curve_path(&points, smooth));
             if self.show_labels {
@@ -315,11 +328,8 @@ impl GraphCanvas<'_> {
                         Pos2::new(transform.hz_to_x(point.hz), transform.db_to_y(point.db))
                     })
                 {
-                    let galley = painter.layout_no_wrap(
-                        curve.label.to_owned(),
-                        FontId::proportional(11.0),
-                        curve.color,
-                    );
+                    let galley =
+                        painter.layout_no_wrap(curve.label.to_owned(), label_font(), curve.color);
                     label_candidates.push((
                         curve.label_key,
                         point,
@@ -406,15 +416,15 @@ impl GraphCanvas<'_> {
                 Pos2::new(handle_rect.center().x, handle_rect.top() + 5.0),
                 Pos2::new(handle_rect.center().x, handle_rect.bottom() - 5.0),
             ],
-            Stroke::new(1.5_f32, text_color),
+            Stroke::new(theme::graph::INSPECTOR_WIDTH, palette.border_strong),
         );
         painter.circle_filled(
             handle_rect.center(),
             7.0,
             if handle_response.hovered() || handle_response.dragged() {
-                visuals.selection.bg_fill
+                accent
             } else {
-                visuals.widgets.noninteractive.bg_fill
+                palette.border_strong
             },
         );
         if handle_response.drag_started() {
@@ -457,7 +467,7 @@ impl GraphCanvas<'_> {
                     &screen_curves[index],
                     curves[index].color,
                     curves[index].dashed,
-                    4.0,
+                    theme::graph::CURVE_WIDTH_HOVER,
                 );
             }
         }
@@ -469,28 +479,51 @@ impl GraphCanvas<'_> {
                         Pos2::new(x, plot_rect.top()),
                         Pos2::new(x, plot_rect.bottom()),
                     ],
-                    Stroke::new(1.0_f32, text_color),
+                    Stroke::new(theme::graph::INSPECTOR_WIDTH, accent),
                 );
                 painter.text(
                     Pos2::new(x, plot_rect.top() + 5.0),
                     Align2::CENTER_TOP,
                     format_frequency(frequency),
-                    FontId::proportional(11.0),
-                    text_color,
+                    theme::font_bold(TypeStep::Caption),
+                    accent,
                 );
+                // Readouts are measurements: monospace keeps the dB values in
+                // column so curves can be compared digit by digit.
                 let readout = curves
                     .iter()
                     .filter_map(|curve| {
                         nearest_point(curve.points, frequency).map(|point| (curve, point))
                     })
-                    .map(|(curve, point)| format!("{}  {:.1} dB", curve.label, point.db))
+                    .map(|(curve, point)| format!("{}  {:>6.1} dB", curve.label, point.db))
                     .collect::<Vec<_>>()
                     .join("\n");
-                painter.text(
+                let readout_rect = Rect::from_min_size(
                     plot_rect.left_top() + Vec2::new(8.0, 8.0),
+                    painter
+                        .layout_no_wrap(
+                            readout.clone(),
+                            theme::font_mono(TypeStep::Caption),
+                            text_color,
+                        )
+                        .size(),
+                );
+                painter.rect_filled(
+                    readout_rect.expand(6.0),
+                    theme::RADIUS_CONTROL,
+                    palette.surface_raised,
+                );
+                painter.rect_stroke(
+                    readout_rect.expand(6.0),
+                    theme::RADIUS_CONTROL,
+                    Stroke::new(1.0, palette.border),
+                    egui::StrokeKind::Inside,
+                );
+                painter.text(
+                    readout_rect.min,
                     Align2::LEFT_TOP,
                     readout,
-                    FontId::proportional(11.0),
+                    theme::font_mono(TypeStep::Caption),
                     text_color,
                 );
             }
