@@ -41,7 +41,7 @@ else
     cargo build --release --target "$TARGET"
 fi
 
-BINARY="$SCRIPT_DIR/target/$TARGET/release/crigraph-native"
+BINARY="$SCRIPT_DIR/target/$TARGET/release/squiglab"
 if [ "$PLATFORM" = windows ]; then
     BINARY="$BINARY.exe"
 fi

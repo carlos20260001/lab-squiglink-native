@@ -1,8 +1,8 @@
 [package]
-name = "crigraph-native"
+name = "squiglab"
 version = "0.1.0"
 edition = "2021"
-default-run = "crigraph-native"
+default-run = "squiglab"
 
 [dependencies]
 eframe = "0.36"

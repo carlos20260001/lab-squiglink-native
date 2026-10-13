@@ -1,16 +1,19 @@
-use crigraph_native::color::target_color;
-use crigraph_native::data::{self, CurveInfo, FRPoint, PhoneBook};
-use crigraph_native::graph::{export_svg as render_svg, GraphCanvas, PlotCurve, ZoomRegion};
-use crigraph_native::processing::{self, NormParams, SmoothingParams};
 use egui::{Color32, Context, RichText, Ui};
 use serde::{Deserialize, Serialize};
+use squiglab::color::target_color;
+use squiglab::data::{self, CurveInfo, FRPoint, PhoneBook};
+use squiglab::graph::{export_svg as render_svg, GraphCanvas, PlotCurve, ZoomRegion};
+use squiglab::processing::{self, NormParams, SmoothingParams};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 const MAX_ACTIVE_CURVES: usize = 8;
 const MAX_SMOOTH_LEVEL: usize = 12;
-const CONFIG_DIRECTORY_NAME: &str = "cringraph";
-const SHARE_URI_PREFIX: &str = "cringraph://state/v1/";
+const CONFIG_DIRECTORY_NAME: &str = "squiglab";
+const SHARE_URI_PREFIX: &str = "squiglab://state/v1/";
+/// Share links issued before the rename. Still decoded so links people already
+/// shared keep working.
+const LEGACY_SHARE_URI_PREFIX: &str = "cringraph://state/v1/";
 const MAX_SHARE_URI_LENGTH: usize = 65_536;
 
 #[derive(Clone, Debug, Deserialize, Default, PartialEq, Eq, Serialize)]
@@ -314,7 +317,7 @@ impl CrinGraphApp {
         self.groups = build_groups(&phone_books, &curves);
         if self.debug_hooks {
             eprintln!(
-                "CrinGraph loaded {} curves across {} measurement groups.",
+                "SquigLab loaded {} curves across {} measurement groups.",
                 curves.len(),
                 self.groups.len()
             );
@@ -653,7 +656,7 @@ impl CrinGraphApp {
                 .get(&group_key(group))
                 .copied()
                 .unwrap_or_default();
-            crigraph_native::color::get_curve_color_with_offset(
+            squiglab::color::get_curve_color_with_offset(
                 index,
                 self.color_offset.wrapping_add(personal_offset),
             )
@@ -661,7 +664,7 @@ impl CrinGraphApp {
     }
 
     fn toolbar(&mut self, ui: &mut Ui) {
-        use crigraph_native::ui as cgui;
+        use squiglab::ui as cgui;
         let previous_processing_settings = (
             self.phon_normalization,
             self.target_phon,
@@ -824,7 +827,7 @@ impl CrinGraphApp {
                 ui.add(
                     egui::TextEdit::multiline(&mut self.share_input)
                         .desired_rows(4)
-                        .hint_text("cringraph://state/v1/..."),
+                        .hint_text("squiglab://state/v1/..."),
                 );
                 if ui.button("Restore pasted state").clicked() {
                     match self.restore_shared_state(&self.share_input.clone()) {
@@ -899,7 +902,7 @@ impl CrinGraphApp {
     }
 
     fn selector_panel(&mut self, ui: &mut Ui) {
-        use crigraph_native::ui as cgui;
+        use squiglab::ui as cgui;
         if !self.show_measurements {
             return;
         }
@@ -908,8 +911,8 @@ impl CrinGraphApp {
             .default_size(250.0)
             .size_range(190.0..=420.0)
             .show(ui, |ui| {
-                let palette = crigraph_native::theme::Palette::resolve(ui.visuals().dark_mode);
-                crigraph_native::ui::section_header(
+                let palette = squiglab::theme::Palette::resolve(ui.visuals().dark_mode);
+                squiglab::ui::section_header(
                     ui,
                     "Library",
                     Some(&format!("{}/{}", self.active.len(), MAX_ACTIVE_CURVES)),
@@ -918,9 +921,7 @@ impl CrinGraphApp {
                 ui.add(
                     egui::TextEdit::singleline(&mut self.search)
                         .hint_text("Search measurements and targets")
-                        .font(crigraph_native::theme::font(
-                            crigraph_native::theme::TypeStep::Body,
-                        ))
+                        .font(squiglab::theme::font(squiglab::theme::TypeStep::Body))
                         .text_color(palette.text_primary),
                 );
                 ui.add_space(cgui::Spacing::TIGHT);
@@ -970,9 +971,8 @@ impl CrinGraphApp {
                                             && (selected || self.active.len() < MAX_ACTIVE_CURVES),
                                         egui::Checkbox::new(
                                             &mut selected,
-                                            RichText::new(model_name).size(
-                                                crigraph_native::theme::TypeStep::Body.size(),
-                                            ),
+                                            RichText::new(model_name)
+                                                .size(squiglab::theme::TypeStep::Body.size()),
                                         ),
                                     );
                                     if response.changed() {
@@ -1002,9 +1002,8 @@ impl CrinGraphApp {
                                             !self.pinned.contains(&index) || !selected,
                                             egui::Checkbox::new(
                                                 &mut selected,
-                                                RichText::new(target_name).size(
-                                                    crigraph_native::theme::TypeStep::Body.size(),
-                                                ),
+                                                RichText::new(target_name)
+                                                    .size(squiglab::theme::TypeStep::Body.size()),
                                             ),
                                         )
                                         .on_hover_text(
@@ -1026,18 +1025,18 @@ impl CrinGraphApp {
     }
 
     fn manager_panel(&mut self, ui: &mut Ui) {
-        use crigraph_native::ui as cgui;
+        use squiglab::ui as cgui;
         if !self.show_manager {
             return;
         }
-        let palette = crigraph_native::theme::Palette::resolve(ui.visuals().dark_mode);
+        let palette = squiglab::theme::Palette::resolve(ui.visuals().dark_mode);
         egui::Panel::right("curve_manager")
             .resizable(true)
             .default_size(245.0)
             .size_range(190.0..=360.0)
             .show(ui, |ui| {
                 let count = self.active.len() + self.active_targets.len();
-                crigraph_native::ui::section_header(
+                squiglab::ui::section_header(
                     ui,
                     "Active curves",
                     (count > 0).then_some(&count.to_string()),
@@ -1065,7 +1064,7 @@ impl CrinGraphApp {
                         egui::Frame::group(ui.style())
                             .fill(palette.surface_raised)
                             .corner_radius(egui::CornerRadius::same(
-                                crigraph_native::theme::RADIUS_CONTROL as u8,
+                                squiglab::theme::RADIUS_CONTROL as u8,
                             ))
                             .inner_margin(egui::Margin::same(6))
                             .show(ui, |ui| {
@@ -1082,7 +1081,7 @@ impl CrinGraphApp {
                                         RichText::new(&group.name)
                                             .strong()
                                             .size(
-                                                crigraph_native::theme::TypeStep::Body.size(),
+                                                squiglab::theme::TypeStep::Body.size(),
                                             )
                                             .color(color),
                                     );
@@ -1105,7 +1104,7 @@ impl CrinGraphApp {
                                 if !group.brand.is_empty() {
                                     ui.label(
                                         RichText::new(&group.brand)
-                                            .size(crigraph_native::theme::TypeStep::Micro.size())
+                                            .size(squiglab::theme::TypeStep::Micro.size())
                                             .color(palette.text_tertiary),
                                     );
                                 }
@@ -1319,7 +1318,7 @@ impl eframe::App for CrinGraphApp {
         let ctx = ui.ctx().clone();
         #[cfg(debug_assertions)]
         ctx.set_debug_on_hover(self.debug_hooks);
-        crigraph_native::theme::apply(&ctx, self.dark_mode);
+        squiglab::theme::apply(&ctx, self.dark_mode);
         if self.screenshot_pending {
             ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(egui::UserData::default()));
             self.screenshot_pending = false;
@@ -1544,11 +1543,19 @@ fn app_config_path() -> anyhow::Result<PathBuf> {
     Ok(config_dir.join(CONFIG_DIRECTORY_NAME).join("config.toml"))
 }
 
-fn legacy_preferences_path() -> anyhow::Result<PathBuf> {
+/// Config directories used before the rename, newest first. Preferences are
+/// only read from these; writes always go to the current location, so the first
+/// successful launch migrates a returning user's settings forward.
+const LEGACY_CONFIG_DIRECTORIES: [&str; 2] = ["cringraph", "CrinGraph-native"];
+
+fn legacy_preferences_paths() -> anyhow::Result<Vec<PathBuf>> {
     let config_dir = dirs::config_dir().ok_or_else(|| {
         anyhow::anyhow!("the operating system did not provide a config directory")
     })?;
-    Ok(config_dir.join("CrinGraph-native").join("preferences.json"))
+    Ok(LEGACY_CONFIG_DIRECTORIES
+        .iter()
+        .map(|directory| config_dir.join(directory).join("preferences.json"))
+        .collect())
 }
 
 fn read_app_config_from(path: &Path) -> anyhow::Result<AppConfig> {
@@ -1632,7 +1639,12 @@ fn read_preferences() -> anyhow::Result<Option<Preferences>> {
     if let Some(preferences) = read_preferences_from(&preferences_path()?)? {
         return Ok(Some(preferences));
     }
-    read_preferences_from(&legacy_preferences_path()?)
+    for path in legacy_preferences_paths()? {
+        if let Some(preferences) = read_preferences_from(&path)? {
+            return Ok(Some(preferences));
+        }
+    }
+    Ok(None)
 }
 
 fn read_preferences_from(path: &Path) -> anyhow::Result<Option<Preferences>> {
@@ -1679,6 +1691,7 @@ fn encode_share_uri(preferences: &Preferences) -> anyhow::Result<String> {
 fn decode_share_uri(uri: &str) -> anyhow::Result<Preferences> {
     let payload = uri
         .strip_prefix(SHARE_URI_PREFIX)
+        .or_else(|| uri.strip_prefix(LEGACY_SHARE_URI_PREFIX))
         .ok_or_else(|| anyhow::anyhow!("unsupported share URI"))?;
     if payload.is_empty() || payload.len() % 2 != 0 || uri.len() > MAX_SHARE_URI_LENGTH {
         anyhow::bail!("share URI payload has an invalid length");
@@ -1707,7 +1720,7 @@ fn save_screenshot(image: &egui::ColorImage) -> anyhow::Result<PathBuf> {
     let timestamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)?
         .as_nanos();
-    let path = directory.join(format!("cringraph-{timestamp}.png"));
+    let path = directory.join(format!("squiglab-{timestamp}.png"));
     save_screenshot_to(image, &path)?;
     Ok(path)
 }
@@ -1720,7 +1733,7 @@ fn save_svg(svg: &str) -> anyhow::Result<PathBuf> {
     let timestamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)?
         .as_nanos();
-    let path = directory.join(format!("cringraph-{timestamp}.svg"));
+    let path = directory.join(format!("squiglab-{timestamp}.svg"));
     std::fs::write(&path, svg)?;
     Ok(path)
 }
@@ -1932,8 +1945,8 @@ mod tests {
         DisplayCurve, Preferences, SavedGroup, MAX_SHARE_URI_LENGTH, MAX_SMOOTH_LEVEL,
         TUTORIAL_SEGMENTS,
     };
-    use crigraph_native::data::{CurveInfo, FRPoint};
-    use crigraph_native::graph::ZoomRegion;
+    use squiglab::data::{CurveInfo, FRPoint};
+    use squiglab::graph::ZoomRegion;
     use std::path::Path;
 
     #[test]
@@ -1950,7 +1963,7 @@ mod tests {
     #[test]
     fn app_config_sets_measurement_directories_and_default_smoothing() {
         let directory = std::env::temp_dir().join(format!(
-            "cringraph-config-test-{}-{}",
+            "squiglab-config-test-{}-{}",
             std::process::id(),
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
@@ -2018,7 +2031,7 @@ smoothing_octaves = 3
     #[test]
     fn missing_app_config_uses_defaults_and_out_of_range_smoothing_is_rejected() {
         let directory = std::env::temp_dir().join(format!(
-            "cringraph-config-default-test-{}-{}",
+            "squiglab-config-default-test-{}-{}",
             std::process::id(),
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
@@ -2045,7 +2058,7 @@ smoothing_octaves = 3
     #[test]
     fn first_run_creates_config_with_sample_paths_and_preserves_existing_config() {
         let directory = std::env::temp_dir().join(format!(
-            "cringraph-config-create-test-{}-{}",
+            "squiglab-config-create-test-{}-{}",
             std::process::id(),
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
@@ -2158,8 +2171,7 @@ smoothing_octaves = 3
 
     #[test]
     fn target_groups_and_model_variants_follow_the_phone_book() {
-        let book =
-            crigraph_native::data::load_phone_book(Path::new("data/phone_book.json")).unwrap();
+        let book = squiglab::data::load_phone_book(Path::new("data/phone_book.json")).unwrap();
         let curves = vec![
             test_curve("HTH67", "L", 50.0),
             test_curve("HTH67", "R", 51.0),
@@ -2291,7 +2303,7 @@ smoothing_octaves = 3
         };
         assert_eq!(
             app.curve_color(0),
-            crigraph_native::color::get_curve_color_with_offset(0, 5)
+            squiglab::color::get_curve_color_with_offset(0, 5)
         );
     }
 
@@ -2403,10 +2415,8 @@ smoothing_octaves = 3
 
     #[test]
     fn preferences_round_trip_and_missing_or_malformed_files_are_handled() {
-        let directory = std::env::temp_dir().join(format!(
-            "crigraph-native-preferences-{}",
-            std::process::id()
-        ));
+        let directory =
+            std::env::temp_dir().join(format!("squiglab-preferences-{}", std::process::id()));
         let path = directory.join("preferences.json");
         let _ = std::fs::remove_dir_all(&directory);
         assert_eq!(read_preferences_from(&path).unwrap(), None);
@@ -2450,7 +2460,7 @@ smoothing_octaves = 3
     #[test]
     fn png_export_writes_the_captured_rgba_image() {
         let directory =
-            std::env::temp_dir().join(format!("crigraph-native-export-{}", std::process::id()));
+            std::env::temp_dir().join(format!("squiglab-export-{}", std::process::id()));
         let path = directory.join("capture.png");
         let _ = std::fs::remove_dir_all(&directory);
         let image = egui::ColorImage {
@@ -2495,8 +2505,16 @@ smoothing_octaves = 3
         assert!(uri.starts_with(super::SHARE_URI_PREFIX));
         assert_eq!(decode_share_uri(&uri).unwrap(), preferences);
         assert!(decode_share_uri("https://example.com/").is_err());
-        assert!(decode_share_uri("cringraph://state/v1/0").is_err());
+        // Links issued under the previous name still decode, and re-encode to
+        // the current scheme.
+        let legacy = uri.replacen(super::SHARE_URI_PREFIX, super::LEGACY_SHARE_URI_PREFIX, 1);
+        assert!(legacy.starts_with(super::LEGACY_SHARE_URI_PREFIX));
+        assert_eq!(decode_share_uri(&legacy).unwrap(), preferences);
+        assert!(decode_share_uri("squiglab://state/v1/0").is_err());
+        assert!(decode_share_uri("squiglab://state/v1/zz").is_err());
         assert!(decode_share_uri("cringraph://state/v1/zz").is_err());
+        // An unrelated scheme that merely looks similar is still rejected.
+        assert!(decode_share_uri("squiglabx://state/v1/").is_err());
         assert!(encode_share_uri(&Preferences {
             active: vec![SavedGroup {
                 key: "x".repeat(MAX_SHARE_URI_LENGTH),

@@ -9,7 +9,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let arguments: Vec<String> = std::env::args().skip(1).collect();
     let shared_state = arguments
         .iter()
-        .find(|argument| argument.starts_with("cringraph://state/"))
+        .find(|argument| argument.starts_with("squiglab://state/"))
+        .or_else(|| {
+            arguments
+                .iter()
+                .find(|argument| argument.starts_with("cringraph://state/"))
+        })
         .cloned();
     let debug_hooks = arguments.iter().any(|argument| argument == "--debug")
         || std::env::var_os("CRINGRAPH_DEBUG").is_some();
@@ -33,7 +38,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             // deferred until the next frame, so registering later would let the
             // first frame lay out text against egui's default font set and panic
             // on any family the application names itself.
-            crigraph_native::theme::register_fonts(&creation_context.egui_ctx);
+            squiglab::theme::register_fonts(&creation_context.egui_ctx);
             Ok(Box::new(CrinGraphApp::with_debug_hooks(
                 shared_state,
                 debug_hooks,
