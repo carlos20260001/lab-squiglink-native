@@ -1,0 +1,2 @@
+Preamp: 0.0002 dB
+Filter 1: ON PK Fc 500 Hz Gain -3.5 dB Q 1.2

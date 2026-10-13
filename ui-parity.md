@@ -1,206 +1,278 @@
-# UI Parity: SquigLab ↔ squig.link
+# UI Parity: SquigLab → squig.link, Full Replica
 
-A task list for closing the visual and layout gap between the native app and the
-reference web tool it was ported from.
+A roadmap for making SquigLab's interface a faithful replica of the squig.link
+web interface. This supersedes the earlier `ui-parity.md` task list, which
+covered only visual polish; its remaining visual items are folded in below.
 
-**Sources of truth**
+**Reference captures** (regenerate before acting — the site changes):
+`docs/design-reference/squig-desktop.png`, `squig-dark.png`, `squig-mobile.png`,
+`squig-equalizer.png`, `squig-onboarding-modal.png`, `export-apo-sample.txt`.
 
-- `docs/design-reference/native-current.png` — SquigLab at 1600x1100, three
-  measurements and one target selected.
-- `docs/design-reference/squig-desktop.png` / `squig-dark.png` — squig.link at
-  1600x1100, same selection shape.
-
-Regenerate the native capture before acting on this list, so it describes the
-current build and not an old one:
-
-```bash
-Xvfb :99 -screen 0 1600x1100x24 &
-DISPLAY=:99 env -u WAYLAND_DISPLAY LIBGL_ALWAYS_SOFTWARE=1 WGPU_BACKEND=gl \
-  cargo run &
-sleep 15
-DISPLAY=:99 xdotool search --name SquigLab | head -1 | \
-  xargs -I{} env DISPLAY=:99 xdotool windowsize {} 1600 1100
-sleep 3
-DISPLAY=:99 ffmpeg -f x11grab -video_size 1600x1100 -i :99+0,0 -frames:v 1 -y \
-  docs/design-reference/native-current.png
-```
-
-## Rules for this work
-
-1. **Parity is about layout and affordance, not copying website chrome.** The site
-   nav bar, sponsor slots, `DELTA`, footer database links, and `+Create Squiglink`
-   are site features. See "Out of scope" at the bottom — do not implement them.
-2. **Behaviour before pixel-nudging.** A missing control the reference has is a
-   bigger parity gap than a 2px offset. Fix the items in order.
-3. **One concern per commit**, in this file's granularity. The repository's
-   convention is atomic commits with a terse imperative summary and a prose body
-   wrapped near 78 columns.
-4. **Every UI change resolves to a token** in `src/theme.rs`. Do not introduce raw
-   hex values or ad-hoc font sizes outside that module.
-5. **Verify visually before committing.** Capture both themes, and check at
-   880px wide (the window's minimum) where layout regressions show up first.
+Everything marked **verified** below was measured against the live site with
+Playwright during the writing of this document, not inferred from the archived
+`web/` copy — the two have drifted, and the live site is the target.
 
 ---
 
-## P0 — Broken in the current build
+## Verified state of the live site
 
-These are defects visible in `native-current.png`, not preferences.
+Recorded so these are not re-measured. These are the facts the rest of the
+document rests on.
 
-- [ ] **Curve labels clip off the right edge of the plot.**
-      With three curves selected, `GAR5 · GarG5 · R` and `AA01 · AA01 · R` are
-      cut off mid-word at the right margin. squig.link keeps every label fully
-      inside the plot by nudging it left when the curve ends near the edge.
-      *Fix:* in `graph.rs`, the label placement already clamps x to
-      `plot_rect.right() - size.x`; it is not accounting for labels wider than
-      the plot or for the label anchor. Verify with long names such as
-      "Softears Karma (L)".
+**Layout breakpoint (verified).** At 900px and below the page is a single
+column: graph full width first (274px tall at 430 wide), then the
+Brands/Models/Equalizer tabs, then the manager. At 1100px and above it is two
+columns: a 349px tab column on the left and the graph beside it. The transition
+sits between 900 and 1100.
 
-- [ ] **Curve labels duplicate the brand and model.**
-      Labels read `GAR5 · GarG5 · R` and `AA01 · AA01 · R` — the model name is
-      repeated. squig.link shows `Softears Karma (L)` / `Softears Karma (R)`.
-      *Fix:* in `app.rs`, the label is composed as
-      `format!("{} · {} · {}", group.name, variant.name, channel_name)`. Emit
-      `"{variant or model} ({channel})"` and only include the brand when the
-      variant name does not already contain it.
+**Scrolling (verified).** The graph is `position: sticky` at every width tested.
+On desktop the scroll container is `div.parts-primary` with `overflow-y: auto`,
+and it genuinely overflows (scrollHeight 1068 vs 852 visible) — so the **whole
+left column and the graph scroll as one**, with the graph pinned. On mobile the
+page body scrolls instead and there is no column scroller.
 
-- [ ] **Target labels sit far from the curve and collide with the bottom.**
-      `Harman · Target` is drawn at the bottom-right corner, detached from the
-      dashed target curve, and below the last curve label. squig.link keeps
-      target labels stacked with the other labels in the same corner block.
-      *Fix:* route targets through the same label placement as measurements;
-      they already go through `label_candidates`.
+**Equalizer panel (verified, see `squig-equalizer.png`).** Title
+"Parametric Equalizer?" with `?`, `Reset`, and a settings gear. A phone
+dropdown and a target dropdown, then `Auto EQ`. A five-row filter table headed
+Type / Frequency / Gain / Q, each row an enable checkbox, a type selector, and
+three number inputs. Row controls `+`, `－`, `Sort`. Then `Import`, `Export`,
+and a full-width `Export Graphic EQ (Wavelet)`. Below that, a Sound Tools
+section with a `Compare A | B` toggle, Music, Pink Noise, a Tone Generator, and
+`+ Add Filter`. Then `Range ↺ 20 Hz 20000 Hz`, then an Upload Data warning.
 
-- [ ] **A dashed target curve is drawn far outside the visible dB range.**
-      In the capture the Harman target runs from ~70 dB down off the bottom of
-      the plot, forcing the y-axis to stretch to 10 dB and squashing every
-      measurement curve into the top fifth of the graph. squig.link clips target
-      curves to the plotted range.
-      *Fix:* this is a normalisation bug, not a styling one. Check how target
-      curves are normalized in `app.rs` when a target is selected — the target is
-      being offset rather than normalized to the reference, dragging the y-range.
-      This one change will make the graph look dramatically closer to the
-      reference.
+**Export formats (verified, captured directly):**
+- Parametric — `docs/design-reference/export-apo-sample.txt`:
+  `Preamp: 0.0002 dB` then `Filter 1: ON PK Fc 500 Hz Gain -3.5 dB Q 1.2`,
+  CRLF separated.
+- Wavelet — `GraphicEQ: 20 -2.7; 21 -2.6; 22 -2.6; …` semicolon-separated
+  frequency/gain pairs, gains to one decimal, precompensation already folded in.
 
----
-
-## P1 — Present on squig.link, missing in SquigLab
-
-Ordered by how much they change the impression of the app.
-
-- [ ] **Normalize shows both values at once.** squig.link shows
-      `NORMALIZE: [dB][60] [Hz][500]` — both the phon and Hz fields side by side.
-      SquigLab shows only the active mode's field, having made them mutually
-      exclusive at some earlier point.
-      *Fix:* render both fields and highlight the active mode. Reverts a prior
-      judgement call, so confirm with the maintainer first.
-
-- [ ] **Zoom has no explicit "Full".** squig.link offers only
-      `[Bass][Mids][Treble]`; the full range is the implicit default and is
-      reached by not zooming. SquigLab has a fourth `Full` button.
-      *Fix:* drop `Full` from the segmented control; treat "no band selected" as
-      full range. Needs a state change, since `ZoomRegion::Full` is currently a
-      variant.
-
-- [ ] **Cluster labels are missing from the toolbar.** squig.link prefixes each
-      group with a small uppercase label: `NORMALIZE:`, `SMOOTH:`, `ZOOM:`.
-      SquigLab dropped these when compacting the toolbar to fit one row.
-      *Fix:* restore them via the existing `cgui::cluster_label`, and reclaim the
-      width by shortening the action labels (`Recolor` → `Colour`, `Share` →
-      `Link`) if the row overflows at 1440px.
-
-- [ ] **The frequency guide is a modal window, not a toggle.**
-      squig.link puts the frequency tutorial permanently under the graph as
-      labelled bands (already ported) and opens the guide in place. SquigLab
-      opens a separate floating window from the `Guide` button.
-      *Fix:* render the guide in the central panel rather than a popup window.
-
-- [ ] **Copy is named "Copy URL", not "Share".** SquigLab's button opens a window
-      with a multiline text box and a "Restore pasted state" field.
-      *Fix:* make `Share` copy the URI to the clipboard directly, and move
-      paste-to-restore behind a small secondary control.
+**The archived `web/` copy has drifted from the live site.** Its Equalizer has
+AutoEQ range inputs the live site does not, a plugin system the live site does
+not expose, and ten default bands where the live site shows five. Port the live
+site's behaviour, using `web/equalizer.js` only for the DSP, which is still the
+authoritative source for the filter maths.
 
 ---
 
-## P2 — Presentational differences
+## Ground rules
 
-Lower impact, but they are what makes the two screens look like one product.
-
-- [ ] **No watermark in the plot.** squig.link draws a large, very faint logo
-      behind the curves plus a `squig.link/` wordmark at the lower right.
-      *Fix:* draw the logo from `assets/` at roughly 6% opacity, centred in the
-      plot rect. Do not replicate the web logo specifically — use SquigLab's.
-
-- [ ] **Labels are not grouped in a corner.** squig.link stacks up to five
-      labels together in one corner (bottom-left by default) so they read as a
-      legend. SquigLab places each label at the end of its own curve, which
-      scatters them and causes the clipping in P0.
-      *Fix:* this also solves the clipping problem. Port the `labelsPosition`
-      corner-grouping behaviour (`top-left`, `bottom-left`, `bottom-right`) with
-      collision avoidance, keeping free placement when the user drags a label.
-
-- [ ] **Targets are grey; measurements take the curve colour.** squig.link
-      renders target labels in muted grey so they visually recede from the
-      measurements. SquigLab gives every curve a saturated palette colour.
-      *Fix:* target curves already use `color::target_color()`; use the same
-      muted tone for their labels.
-
-- [ ] **No channel thumbnail in the manager row.** squig.link shows a small
-      waveform swatch per row that doubles as the channel key, plus
-      `L ONLY` / `R ONLY` text for multichannel curves.
-      *Fix:* draw a miniature curve thumbnail from the already-loaded points in
-      the manager row. This is the single most "native-feeling vs web-feeling"
-      difference left in the manager.
-
-- [ ] **Manager icons instead of checkboxes.** squig.link uses a row of compact
-      icon buttons: channel key, hide (eye), pin, download, remove (×).
-      SquigLab uses text checkboxes for Baseline/Pin/Hide.
-      *Fix:* keep the labels — the web's icons are less legible and `egui` has no
-      icon font — but present them as a tighter, aligned cluster so the row reads
-      as a set of toggles rather than a sentence.
-
-- [ ] **No brand colour strip in the library.** squig.link draws a thin coloured
-      rule down the left edge of each brand row.
-      *Fix:* assign each brand a stable colour from the existing palette
-      (`color::get_curve_color_with_offset`) keyed by name, so the same brand is
-      always the same colour across sessions.
+1. **Behaviour over pixels.** A missing control the reference has matters more
+   than a 2px offset.
+2. **One concern per commit**, in this file's granularity. Repository convention
+   is an atomic commit with a terse imperative summary and a prose body wrapped
+   near 78 columns.
+3. **All UI resolves to `src/theme.rs`.** No raw hex or ad-hoc sizes outside it.
+4. **The DSP is ported, not reimplemented.** `web/equalizer.js` is the source of
+   truth; port it numerically and test against the JS output, not by feel.
+5. **The graph palette wins.** EQ curve colours must come from the existing
+   palette, not new hues.
+6. **Verify in both themes**, and at 430px, 900px, 1100px, and 1600px wide.
 
 ---
 
-## P3 — Density and fit
+## P1 — Dynamic viewport and responsive layout
 
-- [ ] **The graph gives up 54px at the bottom** for the band row even when band
-      labels are not shown. Reserve the space only when bands are visible.
-- [ ] **The toolbar wraps at 1440px** once the P1 cluster labels come back.
-      Confirm at the 880px minimum and 1600px that it stays one row, and accept
-      two rows below 1280px if necessary.
-- [ ] **The inspector readout card can overlap the curve labels** at the top
-      left of the plot. Give it a fixed corner and let labels avoid it.
+The native app is a fixed-width desktop window. The reference has two distinct
+viewports and fluid width behaviour.
+
+- [ ] **Introduce a desktop/compact layout mode.** Below a ~1024px content width,
+      stack graph → tabs → manager. Above it, tabs left and graph right.
+      *egui approach:* branch in `app.rs::ui()` on `ui.available_width()`;
+      `Panel::top` on `Panel::left` becomes conditional.
+- [ ] **The library becomes a tab column, not a permanent sidebar.**
+      squig.link's left column is `Brands | Models | Equalizer`. Matching this
+      means the library sidebar and the Equalizer both live in that tab set, so
+      the Equalizer can reuse the same panel slot rather than needing a new
+      window. Depends on P3.
+- [ ] **Graph width tracks the viewport.** The graph should take all remaining
+      width and no more, at every window size — verified at 430/700/900/1100/1600.
+      The plot aspect must stay capped (see the existing `PLOT_ASPECT_RATIO`),
+      but the *container* width must be fluid.
+- [ ] **Minimum window width drops to ~430px** so a compact layout is actually
+      reachable. Currently `with_min_inner_size([860.0, 560.0])` — this forbids
+      the mobile layout entirely. Confirms as a blocker before other work.
+- [ ] **Toolbar collapses gracefully.** squig.link's toolbar stays one row but
+      drops controls as width falls. Decide which of SquigLab's controls are
+      dropped first, and hide the rest behind an overflow control rather than
+      wrapping.
+- [ ] **Manager rows reflow.** On a compact viewport the row should stack
+      identity and controls vertically instead of pressing them into one line.
+
+## P2 — Dynamic scrolling and sticky regions
+
+- [ ] **Sticky graph.** squig.link pins the graph with `position: sticky` while
+      the column scrolls past it. In egui this means the graph holds a fixed
+      region while the library and manager scroll independently — the inverse of
+      putting all three in one scrolling panel.
+- [ ] **Keep the graph visible while the library scrolls.** Currently the library
+      owns its own `ScrollArea`, so scroll positions are independent; verify the
+      graph does not move.
+- [ ] **Independent scroll areas for library and manager.** Both need their own,
+      each with its own position preserved.
+- [ ] **Themed scrollbars.** squig.link styles its scrollbars from the theme
+      (custom `::-webkit-scrollbar` with `--scrollbar-color` /
+      `--scrollbar-accent`). Stock egui scrollbars are a visible tell. Port
+      equivalent styling through `egui::style::Spacing::scroll_*` if available,
+      or accept stock ones and note it.
+- [ ] **Scroll position persistence** for the library list, so a selection made
+      at the bottom of a long list stays visible after reload.
+
+## P3 — Equalizer and AutoEQ
+
+The largest single feature. Port `web/equalizer.js` numerically.
+
+- [ ] **DSP core** — `web/equalizer.js`:
+      - `lowshelf`, `highshelf`, `peaking` RBJ biquad coefficient functions,
+        with the source's clamp ranges (freq 1e‑6..1, q 1e‑4..1000, gain ±40 dB).
+      - `calc_gains` — magnitude in dB summed over biquads.
+      - `apply` — add EQ gain onto a `[hz, db]` curve.
+      - `interp` — piecewise-linear resampler. **Shared with the measurement
+        loader**, not EQ-specific.
+      - Only `PK`, `LSQ`, `HSQ` exist. Do not invent LP/HP filters.
+- [ ] **The EQ curve is a first-class curve.** In the reference the result is a
+      synthetic curve named `"<phone> EQ"` added through the same path as a
+      measurement, back-linked to its parent so normalization propagates both
+      ways (`p.eq` / `p.eqParent`). In Rust this means extending
+      `DisplayCurve` with a source enum rather than special-casing the renderer.
+      This is the key architectural decision — get it right before any UI.
+- [ ] **AutoEQ** — `autoeq()` in `web/equalizer.js`:
+      - Two batches: `floor(maxFilters/2) - 1` candidates at a 1 dB threshold
+        with treble excluded (filters ≤ 7000 Hz), widest Q first; then the
+        remaining budget from re-searching the corrected curve at 0.5 dB.
+      - `optimize()` per-band coordinate descent, three coarse-to-fine passes,
+        early-exit on a worsening gain, then adjacent-filter merging (same
+        frequency unit, ΔQ ≤ 0.1 → summed gain) and pruning.
+      - Target selection: the first active target curve, else the second active
+        measurement.
+      - **The riskiest part of the port.** Port it first and diff filter
+        magnitudes against the JS output in tests, before building any UI.
+- [ ] **Tools the reference has**: `Reset`, `Sort`, `Import`, band add/remove,
+      per-band enable checkboxes, a tone generator (see below).
+- [ ] **Onboarding.** squig.link opens a "How to use EQ on Squiglink" modal with
+      Beginner / Intermediate / Advanced / Export options. Decide whether to
+      port it verbatim or replace it with native in-app guidance.
+
+## P4 — Export formats
+
+Both formats are specified from live captures; implement against these exactly.
+
+- [ ] **Parametric (Equalizer APO).**
+      ```
+      Preamp: 0.0002 dB
+      Filter 1: ON PK Fc 500 Hz Gain -3.5 dB Q 1.2
+      ```
+      - CRLF line endings.
+      - `Preamp` is a full-precision float. `calc_preamp(fr1, fr2)` is
+        `-max(fr2 - fr1)`, computed between the base phone's channel 0 and the
+        EQ child's channel 0.
+      - `LSQ` → `LSC` and `HSQ` → `HSC` on export; Equalizer APO uses the
+        shorter names.
+      - Bands whose freq, q, and gain are all zero are omitted.
+      - Filename: `"{phone name} Filters.txt"`.
+- [ ] **Wavelet (GraphicEQ).**
+      ```
+      GraphicEQ: 20 -2.7; 21 -2.6; 22 -2.6; …
+      ```
+      - Semicolon-separated `freq gain` pairs over the 127-band graphic grid.
+      - Gains to one decimal.
+      - Precompensation folded in — the whole curve is shifted by the preamp so
+        the EQ never boosts.
+      - Derived from the same filter set as the parametric export; the two must
+        never disagree.
+- [ ] **Round-trip tests.** Import an APO file exported from squig.link and
+      assert the resulting filter set is identical, and vice versa. This is the
+      only way to be sure a ported profile loads in a user's real DSP software.
+
+## P5 — Sound Tools
+
+- [ ] **Tone generator.** Web Audio `OscillatorNode`, sine, log-mapped frequency
+      slider, smooth glide on drag. **Not** an automated sweep — the reference
+      plays one continuous oscillator whose pitch is dragged. Needs a native
+      audio dependency (`cpal` or `rodio`); this is the only new dependency the
+      whole roadmap requires, so decide it explicitly rather than by drift.
+- [ ] **Pink noise.** A pink-noise generator behind a play button.
+- [ ] **Music playback** with a `Compare A | B` toggle, `+ Add Music`, and a
+      platform search shortcut. Depends on an audio dependency.
+- [ ] **Compare A/B** applies to the whole sound-tools section, not one source.
+
+## P6 — Upload and provenance
+
+- [ ] **Measurement upload.** `FileReader` → REW/AudioTool TSV parse, filename
+      becomes the model name, **fewer than 128 points is rejected**, then
+      resampled onto the shared `f_values` grid. A file ending `" R"` gets a
+      null left channel spliced in front so channels align.
+- [ ] **"Uploaded" brand.** Uploaded measurements land in a synthetic brand and
+      are flagged so they are excluded from share URIs.
+- [ ] **Target upload** appends `" Target"`, is deduplicated against configured
+      targets, and is given a negative id so it colours as a target.
+- [ ] **Provenance warning.** The reference states measurements from another rig
+      are not comparable with its database. Carry the equivalent warning directly
+      in the upload UI rather than as a dismissible banner.
 
 ---
 
-## Out of scope — do not implement
+## Explicitly out of scope
 
-These appear in the reference screenshot but are website features, not app
-layout. Porting them would make the desktop app worse.
+Do not implement. These are site features, not interface layout, and porting them
+would make the desktop app worse.
 
-| Reference feature | Why it is out of scope |
+| Reference feature | Why excluded |
 |---|---|
-| Site nav bar (`Headphones`, `Earbuds`, `Insights`, `Merch`, `Discord`) | Website navigation; no desktop equivalent |
-| Sponsor creative and the welcome modal | Monetization; already excluded by the maintainer |
-| `DELTA` bar with reference-target chips | A measurement feature (averaged delta curves), not layout |
-| Footer database link pills | Website chrome |
-| `+Create Squiglink` | Website upload flow |
-| Database dropdown (`Super* Review`) | Multi-database switching; needs a data-model change |
-| `Brands` / `Models` / `Equalizer` tabs | The library sidebar and the EQ feature; the EQ is not ported yet |
+| Site nav (`Headphones`, `Insights`, `Merch`, `Discord`, `HiFiGo`) | Website navigation; no desktop equivalent |
+| Sponsorship slots, welcome and onboarding *ads* | Monetization. The EQ onboarding modal is in scope; ad slots are not |
+| `DELTA` bar and reference-target chips | A measurement feature (delta curves), not layout |
+| Footer database-link pills | Website chrome |
+| `+Create Squiglink`, database dropdown | Website account and multi-database features |
+| Embed mode, `expandableOnly`, `headerHeight` | iframe embedding for third-party sites |
+| Analytics | `web/graphAnalytics.js` is an empty stub with no GA4 ID — nothing to port |
+| EQ plugin system (`extraEQplugins`, `devicePEQ`) | Not exposed on the live site; was archived-only |
+| Three-state contrast theme | A theming feature, not layout. SquigLab has light/dark and that suffices |
+
+---
+
+## Carried over from the previous list
+
+Still open, unchanged:
+
+- [ ] Labels follow curve ends rather than grouping in a corner — now a design
+      choice, not a defect. SquigLab groups by default and can switch to
+      curve-end, so this is resolved unless you decide otherwise.
+- [ ] `assets/cringraph-app-icon.svg` is still the only `cringraph`-named asset.
+- [ ] The two normalization values are shown one at a time; squig.link shows
+      both. A maintainer decision.
 
 ---
 
 ## Definition of done
 
-- [ ] Every P0 and P1 item is either implemented or explicitly declined in a
-      commit message.
-- [ ] `cargo test` passes and no test was weakened to accommodate a change.
-- [ ] Native capture regenerated in both themes at 1600px and at the 880px
-      minimum; no clipping, overlap, or toolbar wrapping at the default size.
-- [ ] `DESIGN.md` updated if any token was added or changed.
-- [ ] This file's checkboxes are updated as work lands.
+- [ ] Every P1–P6 item is implemented, or explicitly declined in a commit.
+- [ ] `cargo test` passes, including new DSP round-trip tests against
+      `web/equalizer.js`, and the existing 59 tests still pass.
+- [ ] AutoEQ output diffed against the JavaScript implementation for a sample
+      curve, not merely eyeballed.
+- [ ] Both export formats round-trip against a file the live site produced.
+- [ ] Captured at 430px, 900px, 1100px, and 1600px, in both themes, with no
+      clipping, overlap, or toolbar wrap at the default size.
+- [ ] `DESIGN.md` updated for any token added.
+- [ ] Minimum window width reduced and the compact layout confirmed usable.
+- [ ] This file's checkboxes updated as work lands.
+
+## Suggested order
+
+The ordering is chosen to derisk the expensive parts first.
+
+1. **P1 viewport** — the compact layout is a prerequisite for the tab column, and
+   the minimum window width is a blocker hiding everything else.
+2. **P3 DSP core** — port and test the biquad maths with no UI. Small, pure, and
+   the only part where numerical fidelity matters.
+3. **P4 parametric export** — smallest end-to-end win once the DSP exists, and it
+   proves the DSP is right.
+4. **P3 AutoEQ** — the highest-risk algorithm; needs its own tests and review.
+5. **P4 Wavelet export** — shares the aggregate calculator with step 3.
+6. **P2 scrolling** — mechanical, and better done before the tab column makes the
+   layout more complex.
+7. **P3 Equalizer UI** — after the DSP, export, and AutoEQ all work.
+8. **P5 sound tools** — last, because it introduces the only new dependency and
+   is worthless without the EQ working.
+9. **P6 upload** — independent; can slot in anywhere after the tab column exists.
