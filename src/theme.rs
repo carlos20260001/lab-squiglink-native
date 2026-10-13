@@ -235,20 +235,15 @@ pub fn register_fonts(ctx: &Context) {
     ctx.set_fonts(fonts);
 }
 
-/// Ensure fonts are registered exactly once, then apply the token set.
+/// Apply the token set to the context for the active theme.
 ///
 /// `Context::set_style_of` takes a whole [`Style`] per theme, so both themes are
-/// installed once and egui switches between them as the theme preference changes.
-/// This must be the single place the application configures appearance: calling
-/// `Context::set_visuals` anywhere else silently overrides these tokens for the
-/// active theme.
-pub fn ensure_ready(ctx: &Context, dark: bool) {
-    static FONTS: std::sync::Once = std::sync::Once::new();
-    FONTS.call_once(|| register_fonts(ctx));
-    apply(ctx, dark);
-}
-
-/// Apply the token set for a given theme.
+/// installed and egui switches between them as the theme preference changes. This
+/// must be the single place the application configures appearance: calling
+/// `Context::set_visuals` anywhere else silently overrides the active theme.
+///
+/// Fonts are registered separately by [`register_fonts`] from the eframe
+/// creation hook, because `set_fonts` is deferred to the next frame.
 pub fn apply(ctx: &Context, dark: bool) {
     if dark {
         ctx.set_theme(egui::ThemePreference::Dark);
@@ -261,17 +256,21 @@ pub fn apply(ctx: &Context, dark: bool) {
 
 fn style_for(dark: bool) -> Style {
     let palette = Palette::resolve(dark);
-    let mut style = Style::default();
-    style.text_styles = text_styles();
-    style.spacing.item_spacing = egui::vec2(Spacing::COMPACT, Spacing::COMPACT * 0.5);
-    style.spacing.button_padding = egui::vec2(Spacing::COMPACT, Spacing::TIGHT);
-    style.spacing.menu_margin = margin(Spacing::NORMAL, Spacing::COMPACT);
-    style.spacing.window_margin = margin(Spacing::NORMAL, Spacing::NORMAL);
-    style.spacing.indent = Spacing::COMPACT + Spacing::TIGHT;
-    style.spacing.interact_size.y = 22.0;
-    style.spacing.combo_height = Spacing::COMPACT * 3.0;
-    style.visuals = visuals(&palette);
-    style
+    Style {
+        text_styles: text_styles(),
+        spacing: egui::Spacing {
+            item_spacing: egui::vec2(Spacing::COMPACT, Spacing::COMPACT * 0.5),
+            button_padding: egui::vec2(Spacing::COMPACT, Spacing::TIGHT),
+            menu_margin: margin(Spacing::NORMAL, Spacing::COMPACT),
+            window_margin: margin(Spacing::NORMAL, Spacing::NORMAL),
+            indent: Spacing::COMPACT + Spacing::TIGHT,
+            interact_size: egui::vec2(80.0, 22.0),
+            combo_height: Spacing::COMPACT * 3.0,
+            ..Default::default()
+        },
+        visuals: visuals(&palette),
+        ..Default::default()
+    }
 }
 
 /// egui's [`egui::Margin`] stores whole points, so spacing steps round to it.
@@ -300,11 +299,11 @@ fn text_styles() -> std::collections::BTreeMap<TextStyle, FontId> {
             TextStyle::Name("display".into()),
             font_bold(TypeStep::Heading),
         ),
-        (TextStyle::Name("title".into()), font_bold(TypeStep::Subtitle)),
         (
-            TextStyle::Name("label".into()),
-            font(TypeStep::Caption),
+            TextStyle::Name("title".into()),
+            font_bold(TypeStep::Subtitle),
         ),
+        (TextStyle::Name("label".into()), font(TypeStep::Caption)),
         (TextStyle::Name("value".into()), font_mono(TypeStep::Body)),
         (TextStyle::Name("meta".into()), font(TypeStep::Micro)),
     ]
