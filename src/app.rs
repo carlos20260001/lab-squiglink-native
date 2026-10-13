@@ -661,6 +661,7 @@ impl CrinGraphApp {
     }
 
     fn toolbar(&mut self, ui: &mut Ui) {
+        use crigraph_native::ui as cgui;
         let previous_processing_settings = (
             self.phon_normalization,
             self.target_phon,
@@ -668,99 +669,116 @@ impl CrinGraphApp {
             self.smooth_level,
         );
         egui::Panel::top("toolbar").show(ui, |ui| {
+            // The toolbar is a single row of clearly separated clusters: the
+            // wordmark, then view range, then the two processing controls that
+            // change what is measured (normalize, smooth), then view toggles,
+            // then actions, then panel visibility. Rules between clusters carry
+            // the grouping so no control needs a box around it.
             ui.horizontal_wrapped(|ui| {
-                ui.heading("CrinGraph");
-                ui.separator();
-                ui.add_enabled_ui(self.tutorial_segment.is_none(), |ui| {
-                    for (region, label) in [
-                        (ZoomRegion::Full, "Full"),
-                        (ZoomRegion::Bass, "Bass"),
-                        (ZoomRegion::Mids, "Mids"),
-                        (ZoomRegion::Treble, "Treble"),
-                    ] {
-                        ui.selectable_value(&mut self.zoom, region, label);
-                    }
-                });
-                ui.separator();
-                ui.selectable_value(&mut self.phon_normalization, true, "Normalize: phon");
-                ui.add(
-                    egui::DragValue::new(&mut self.target_phon)
-                        .range(0.0..=100.0)
-                        .speed(1.0)
-                        .suffix(" phon"),
+                ui.spacing_mut().item_spacing.x = cgui::Spacing::COMPACT;
+                cgui::wordmark(ui);
+                cgui::cluster_rule(ui);
+
+                // ---- View range ----
+                cgui::zoom_segmented(ui, &mut self.zoom);
+                cgui::cluster_rule(ui);
+
+                // ---- Normalize (phon / Hz) ----
+                cgui::cluster_label(ui, "Normalize");
+                cgui::segmented(
+                    ui,
+                    &[(true, "phon"), (false, "Hz")],
+                    &mut self.phon_normalization,
+                    Some("Normalize against a loudness reference (phon) or a reference frequency (Hz)"),
                 );
-                ui.selectable_value(&mut self.phon_normalization, false, "Hz");
+                if self.phon_normalization {
+                    ui.add(
+                        egui::DragValue::new(&mut self.target_phon)
+                            .range(0.0..=100.0)
+                            .speed(1.0)
+                            .suffix(" phon")
+                    )
+                    .on_hover_text("Loudness level the curve is normalized to");
+                } else {
+                    ui.add(
+                        egui::DragValue::new(&mut self.target_hz)
+                            .range(20.0..=20000.0)
+                            .speed(5.0)
+                            .suffix(" Hz")
+                    )
+                    .on_hover_text("Frequency the curve is normalized to");
+                }
+                cgui::cluster_rule(ui);
+
+                // ---- Smooth ----
+                cgui::cluster_label(ui, "Smooth");
                 ui.add(
-                    egui::DragValue::new(&mut self.target_hz)
-                        .range(20.0..=20000.0)
-                        .speed(5.0)
-                        .suffix(" Hz"),
+                    egui::Slider::new(&mut self.smooth_level, 0..=12)
+                        .suffix(" /oct")
+                        .text(""),
                 );
-                ui.separator();
-                ui.label("Smooth");
-                ui.add(egui::Slider::new(&mut self.smooth_level, 0..=12).suffix(" /oct"));
+                cgui::cluster_rule(ui);
+
+                // ---- View toggles ----
                 ui.checkbox(&mut self.show_labels, "Labels")
                     .on_hover_text("Curve labels are auto-spaced; drag a label to position it.");
-                ui.checkbox(&mut self.inspect_mode, "Inspect");
+                ui.checkbox(&mut self.inspect_mode, "Inspect")
+                    .on_hover_text("Read the exact dB value under the cursor at a frequency.");
                 #[cfg(debug_assertions)]
-                ui.checkbox(&mut self.debug_hooks, "Debug hooks")
-                    .on_hover_text("Show egui widget diagnostics when hovering controls.");
-                if ui
-                    .button(if self.dark_mode {
-                        "Light theme"
-                    } else {
-                        "Dark theme"
-                    })
-                    .clicked()
-                {
-                    self.dark_mode = !self.dark_mode;
+                if self.debug_hooks {
+                    ui.checkbox(&mut self.debug_hooks, "Debug")
+                        .on_hover_text("Show egui widget diagnostics when hovering controls.");
                 }
-                if ui
-                    .button("Recolor")
-                    .on_hover_text("Cycle the measurement curve colors.")
-                    .clicked()
-                {
+                cgui::cluster_rule(ui);
+
+                // ---- Actions (secondary: quiet text buttons) ----
+                if cgui::action_button(ui, "Recolor", "Cycle the measurement curve colors.") {
                     self.color_offset = self.color_offset.wrapping_add(1);
                 }
-                if ui
-                    .button("Export PNG")
-                    .on_hover_text("Save a PNG of the current application window.")
-                    .clicked()
-                {
+                if cgui::action_button(ui, "PNG", "Save a PNG of the current application window.") {
                     self.screenshot_pending = true;
                     self.screenshot_error = None;
                 }
-                if ui
-                    .button("Export SVG")
-                    .on_hover_text("Save the current graph as a scalable vector image.")
-                    .clicked()
-                {
+                if cgui::action_button(ui, "SVG", "Save the current graph as a scalable vector image.") {
                     self.export_svg();
                 }
-                if ui.button("Share state").clicked() {
+                if cgui::action_button(ui, "Share", "Copy a shareable link to this view.") {
                     self.share_window_open = true;
                     self.share_message = None;
                 }
-                if ui
-                    .button(if self.tutorial_segment.is_some() {
+                if cgui::action_button(
+                    ui,
+                    if self.tutorial_segment.is_some() {
                         "Close guide"
                     } else {
-                        "Frequency guide"
-                    })
-                    .clicked()
-                {
+                        "Guide"
+                    },
+                    "Learn how to read a frequency response curve.",
+                ) {
                     self.tutorial_segment = self.tutorial_segment.map_or(Some(0), |_| None);
                 }
-                ui.separator();
+                cgui::cluster_rule(ui);
+
+                // ---- Appearance ----
+                if cgui::action_button(
+                    ui,
+                    if self.dark_mode { "Light" } else { "Dark" },
+                    "Switch between the dark and light themes",
+                ) {
+                    self.dark_mode = !self.dark_mode;
+                }
+                cgui::cluster_rule(ui);
+
+                // ---- Panel visibility (primary toggles, at the end) ----
                 if ui
-                    .selectable_label(self.show_measurements, "Measurements")
-                    .on_hover_text("Show or hide the measurement and target selector.")
+                    .selectable_label(self.show_measurements, "Library")
+                    .on_hover_text("Show or hide the measurement and target library.")
                     .clicked()
                 {
                     self.show_measurements = !self.show_measurements;
                 }
                 if ui
-                    .selectable_label(self.show_manager, "Curve manager")
+                    .selectable_label(self.show_manager, "Curves")
                     .on_hover_text("Show or hide the active curve controls.")
                     .clicked()
                 {
@@ -1212,7 +1230,7 @@ impl eframe::App for CrinGraphApp {
         let ctx = ui.ctx().clone();
         #[cfg(debug_assertions)]
         ctx.set_debug_on_hover(self.debug_hooks);
-        crigraph_native::theme::ensure_ready(&ctx, self.dark_mode);
+        crigraph_native::theme::apply(&ctx, self.dark_mode);
         if self.screenshot_pending {
             ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(egui::UserData::default()));
             self.screenshot_pending = false;

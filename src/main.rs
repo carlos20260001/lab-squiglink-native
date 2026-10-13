@@ -28,7 +28,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     eframe::run_native(
         env!("CRINGRAPH_APP_NAME"),
         options,
-        Box::new(move |_creation_context| {
+        Box::new(move |creation_context| {
+            // Fonts must be registered before the first frame: `set_fonts` is
+            // deferred until the next frame, so registering later would let the
+            // first frame lay out text against egui's default font set and panic
+            // on any family the application names itself.
+            crigraph_native::theme::register_fonts(&creation_context.egui_ctx);
             Ok(Box::new(CrinGraphApp::with_debug_hooks(
                 shared_state,
                 debug_hooks,
