@@ -5,3 +5,4 @@ ARCHITECTURE.md
 /dist/
 /.venv/
 .impeccable/*
+/devicePEQ/

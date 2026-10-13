@@ -11,7 +11,8 @@ to share around the internet. Although it was designed for
 the code here can be used freely by anyone, with no restrictions.
 There are now many instances, including
 [Banbeucmas](https://banbeu.com/graph/tool/),
-[HypetheSonics](https://www.hypethesonics.com/iemdbc/), and
+[HypetheSonics](https://www.hypethesonics.com/iemdbc/),
+[Rohsa](https://rohsa.gitlab.io/graphtool/), and
 [Super\* Review](https://squig.link/), which has links to even more of
 them. If you're interested in using it for your own graphs, see
 [Configuring.md](Configuring.md) and ask me about any questions that
@@ -40,8 +41,14 @@ before they're adopted on Crin's site.
 
 [View some sample graphs.](https://mlochbaum.github.io/CrinGraph/old/graph.html)
 
-The original JavaScript/HTML web app is archived in [`old/`](old/). The
-actively maintained application is the native Rust/egui app.
+This repository contains two applications:
+
+- The **native Rust/egui app**, built from `Cargo.toml` and `src/`. This is
+  the actively maintained application.
+- The original **JavaScript/HTML web app** (`index.html`, `graphtool.js`,
+  `config.js`, `style.css`, and friends), retained as-is from upstream so it
+  stays byte-identical to `squiglink/lab-squiglink-native` and keeps merging
+  cleanly. Serve the repository root over HTTP to run it.
 
 The native interface uses [egui](https://github.com/emilk/egui), an immediate-mode
 GUI library for Rust, with [eframe](https://github.com/emilk/egui/tree/master/crates/eframe)
