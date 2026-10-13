@@ -9,6 +9,10 @@ use std::path::{Path, PathBuf};
 
 const MAX_ACTIVE_CURVES: usize = 8;
 const MAX_SMOOTH_LEVEL: usize = 12;
+/// Height of the manager panel's header and padding before any curve rows.
+const MANAGER_HEIGHT_BASE: f32 = 46.0;
+/// Vertical room one curve row occupies in the manager.
+const MANAGER_ROW_HEIGHT: f32 = 32.0;
 const CONFIG_DIRECTORY_NAME: &str = "squiglab";
 const SHARE_URI_PREFIX: &str = "squiglab://state/v1/";
 /// Share links issued before the rename. Still decoded so links people already
@@ -1085,13 +1089,20 @@ impl CrinGraphApp {
             return;
         }
         let palette = squiglab::theme::Palette::resolve(ui.visuals().dark_mode);
+        // The graph no longer fills the window, so the manager can reclaim the
+        // space it freed: one row per active curve, no scrolling, and stop
+        // growing once every curve is visible. The panel stays resizable, and a
+        // hand-resized height is remembered over this default.
+        let curve_count = self.active.len() + self.active_targets.len();
+        let default_height =
+            (MANAGER_HEIGHT_BASE + curve_count as f32 * MANAGER_ROW_HEIGHT).clamp(76.0, 340.0);
         // The manager sits under the graph and spans the full width, matching
         // the reference tool. A row has the whole width to work with, so curve
         // identity sits on the left and every control for that curve lines up on
         // the right without the row ever needing to wrap.
         egui::Panel::bottom("curve_manager")
             .resizable(true)
-            .default_size(132.0)
+            .default_size(default_height)
             .size_range(76.0..=340.0)
             .show(ui, |ui| {
                 let count = self.active.len() + self.active_targets.len();
