@@ -6,3 +6,5 @@ ARCHITECTURE.md
 /.venv/
 .impeccable/*
 /devicePEQ/
+/.playwright-cli/
+/docs/design-reference/
