@@ -684,7 +684,9 @@ impl CrinGraphApp {
                 cgui::cluster_rule(ui);
 
                 // ---- Normalize (phon / Hz) ----
-                cgui::cluster_label(ui, "Normalize");
+                // The segmented control and its unit suffix already name what
+                // this is, so no cluster label is needed here; the space buys
+                // room for the toolbar to stay on one row.
                 cgui::segmented(
                     ui,
                     &[(true, "phon"), (false, "Hz")],
@@ -711,12 +713,12 @@ impl CrinGraphApp {
                 cgui::cluster_rule(ui);
 
                 // ---- Smooth ----
-                cgui::cluster_label(ui, "Smooth");
                 ui.add(
                     egui::Slider::new(&mut self.smooth_level, 0..=12)
                         .suffix(" /oct")
-                        .text(""),
-                );
+                        .text("")
+                )
+                .on_hover_text("Fractional-octave smoothing applied to every curve");
                 cgui::cluster_rule(ui);
 
                 // ---- View toggles ----
@@ -998,7 +1000,13 @@ impl CrinGraphApp {
             .default_size(245.0)
             .size_range(190.0..=360.0)
             .show(ui, |ui| {
-                ui.heading("Active curves");
+                let count = self.active.len() + self.active_targets.len();
+                crigraph_native::ui::section_header(
+                    ui,
+                    "Active curves",
+                    (count > 0).then_some(&count.to_string()),
+                );
+                ui.add_space(crigraph_native::ui::Spacing::TIGHT);
                 if self.active.is_empty() && self.active_targets.is_empty() {
                     ui.label("Select up to eight measurements.");
                     return;
@@ -1072,7 +1080,7 @@ impl CrinGraphApp {
                                 }
                             }
                         });
-                        ui.horizontal(|ui| {
+                        ui.horizontal_wrapped(|ui| {
                             if !group.target {
                                 for (mode, label) in [
                                     (ChannelMode::Left, "L"),
