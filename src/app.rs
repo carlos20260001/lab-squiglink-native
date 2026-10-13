@@ -1311,6 +1311,7 @@ impl CrinGraphApp {
                     points: &curve.points,
                     color: self.curve_color(curve.group_index),
                     dashed: curve.target,
+                    target: curve.target,
                 })
                 .collect();
             let interaction = GraphCanvas {
@@ -1346,6 +1347,7 @@ impl CrinGraphApp {
                 points: &curve.points,
                 color: self.curve_color(curve.group_index),
                 dashed: curve.target,
+                target: curve.target,
             })
             .collect();
         let svg = render_svg(
@@ -2035,14 +2037,20 @@ mod tests {
 
     #[test]
     fn curve_labels_do_not_repeat_the_model_name() {
-        assert_eq!(curve_label("GAR5", "GarG5", String::new()), "GarG5");
-        assert_eq!(curve_label("GAR5", "GarG5", "R".to_owned()), "GarG5 (R)");
+        assert_eq!(super::curve_label("GAR5", "GarG5", String::new()), "GarG5");
+        assert_eq!(
+            super::curve_label("GAR5", "GarG5", "R".to_owned()),
+            "GarG5 (R)"
+        );
         // A model whose single variant carries its own name is not echoed twice.
-        assert_eq!(curve_label("GAR5", "GAR5", String::new()), "GAR5");
-        assert_eq!(curve_label("HTH67", "HTH67", "R".to_owned()), "HTH67 (R)");
+        assert_eq!(super::curve_label("GAR5", "GAR5", String::new()), "GAR5");
+        assert_eq!(
+            super::curve_label("HTH67", "HTH67", "R".to_owned()),
+            "HTH67 (R)"
+        );
         // With no variant named, the model name stands on its own.
         assert_eq!(
-            curve_label("SoftCheeks", "", "Avg".to_owned()),
+            super::curve_label("SoftCheeks", "", "Avg".to_owned()),
             "SoftCheeks (Avg)"
         );
     }
@@ -2537,6 +2545,7 @@ smoothing_octaves = 3
             label_positions: [("Brand · Model".to_owned(), [0.4, 0.6])]
                 .into_iter()
                 .collect(),
+            label_layout: squiglab::graph::LabelLayout::CornerTopLeft,
             tutorial_segment: Some(3),
             y_scale: 1.75,
             curve_color_offsets: [("Brand\u{1f}Model".into(), 2)].into_iter().collect(),
