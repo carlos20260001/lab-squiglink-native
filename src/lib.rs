@@ -3,3 +3,4 @@ pub mod data;
 pub mod graph;
 pub mod processing;
 pub mod state;
+pub mod theme;
