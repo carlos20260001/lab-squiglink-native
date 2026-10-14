@@ -1,5 +1,6 @@
 pub mod color;
 pub mod data;
+pub mod equalizer;
 pub mod graph;
 pub mod processing;
 pub mod state;
