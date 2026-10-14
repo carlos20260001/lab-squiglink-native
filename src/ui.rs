@@ -4,7 +4,7 @@
 //! hard-coding them, so the two themes and any future theme change apply here
 //! automatically.
 
-use egui::{Align, FontId, RichText, Stroke, Ui};
+use egui::{Align, Color32, FontId, RichText, Stroke, Ui};
 
 use crate::graph::ZoomRegion;
 use crate::theme::{self, Palette, TypeStep};
@@ -135,4 +135,57 @@ pub fn zoom_segmented(ui: &mut Ui, zoom: &mut ZoomRegion) -> bool {
         zoom,
         Some("Limit the frequency range shown in the graph"),
     )
+}
+
+/// Height of a tab's label, including the rule that marks the active one.
+const TAB_HEIGHT: f32 = 26.0;
+/// Thickness of the rule under a tab.
+const TAB_RULE_HEIGHT: f32 = 2.0;
+
+/// A row of tab buttons, as the reference tool's left column has, with the
+/// active tab's contents rendered by the caller below it.
+///
+/// The active tab is marked with an accent rule rather than a filled
+/// background: a fill would compete with the accent-filled controls inside
+/// the panel the tab opens.
+pub fn tab_strip<T: Copy + PartialEq>(ui: &mut Ui, selected: &mut T, options: &[(&str, T)]) {
+    let palette = Palette::resolve(ui.visuals().dark_mode);
+    ui.horizontal_wrapped(|ui| {
+        ui.spacing_mut().item_spacing.x = Spacing::COMPACT;
+        for (label, value) in options {
+            let is_selected = *selected == *value;
+            let color = if is_selected {
+                palette.text_primary
+            } else {
+                palette.text_secondary
+            };
+            let response = ui.add(
+                egui::Button::new(
+                    RichText::new(*label)
+                        .font(theme::font_bold(TypeStep::Subtitle))
+                        .color(color),
+                )
+                .fill(Color32::TRANSPARENT)
+                .stroke(Stroke::NONE)
+                .min_size(egui::vec2(0.0, TAB_HEIGHT)),
+            );
+            if response.clicked() {
+                *selected = *value;
+            }
+            let rule = egui::Rect::from_min_size(
+                egui::pos2(response.rect.left(), response.rect.max.y),
+                egui::vec2(response.rect.width(), TAB_RULE_HEIGHT),
+            );
+            ui.painter().rect_filled(
+                rule,
+                0.0,
+                if is_selected {
+                    palette.accent
+                } else {
+                    Color32::TRANSPARENT
+                },
+            );
+        }
+    });
+    ui.add_space(Spacing::MICRO);
 }

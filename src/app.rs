@@ -17,6 +17,27 @@ const MAX_EQ_ROWS: usize = 20;
 /// Palette slots between a curve and its EQ curve, so the two lines stay
 /// distinguishable without introducing a hue the graph palette does not have.
 const EQ_CURVE_COLOR_SPREAD: usize = 4;
+/// How many filters Auto EQ fits unless the panel's settings say otherwise.
+/// The reference tool's panel shows five bands; the budget is ours, since the
+/// live page does not expose one.
+const DEFAULT_EQ_MAX_FILTERS: usize = 10;
+/// The five bands a curve starts with, a Harman-shaped starting point. The
+/// reference shows five default bands; the values on the live page could not
+/// be read, so these are this tool's own defaults rather than a port.
+fn default_eq_filters() -> Vec<EqRow> {
+    [
+        (equalizer::FilterType::LowShelf, 105.0, 0.7, 6.0),
+        (equalizer::FilterType::Peaking, 280.0, 1.0, -4.0),
+        (equalizer::FilterType::Peaking, 1000.0, 1.0, -3.0),
+        (equalizer::FilterType::Peaking, 3500.0, 1.0, 3.0),
+        (equalizer::FilterType::HighShelf, 9000.0, 0.7, -4.0),
+    ]
+    .map(|(filter_type, freq, q, gain)| EqRow {
+        filter: equalizer::Filter::new(filter_type, freq, q, gain),
+        enabled: true,
+    })
+    .into()
+}
 /// Height of the manager panel's header and padding before any curve rows.
 const MANAGER_HEIGHT_BASE: f32 = 46.0;
 /// Vertical room one curve row occupies in the manager.
@@ -171,6 +192,21 @@ struct DisplayCurve {
     label: String,
     points: Vec<FRPoint>,
     target: bool,
+}
+
+/// The panels sharing the library column. The reference tool's left column is
+/// a tab column rather than a permanent sidebar, so the measurement list and
+/// the equalizer take one slot between them instead of the equalizer needing
+/// a window of its own.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+enum LibraryTab {
+    /// The brand list, which narrows the model list to one brand.
+    Brands,
+    /// The measurement and target checkboxes.
+    #[default]
+    Models,
+    /// The parametric equalizer for the selected curve.
+    Equalizer,
 }
 
 /// One row of a curve's equalizer: a filter and whether the row is switched
@@ -373,6 +409,22 @@ pub struct CrinGraphApp {
     share_message: Option<String>,
     debug_hooks: bool,
     rig_description: Option<String>,
+    /// Which panel the library column is showing.
+    library_tab: LibraryTab,
+    /// The brand the model list is narrowed to, chosen in the brands tab.
+    brand_filter: Option<String>,
+    /// The measurement whose equalizer the panel is editing. Session state:
+    /// the panel re-derives a sensible curve rather than restoring a choice.
+    eq_phone: Option<usize>,
+    /// The target AutoEQ fits against.
+    eq_target: Option<usize>,
+    /// How many filters Auto EQ may produce.
+    eq_max_filters: usize,
+    eq_import_open: bool,
+    eq_import_path: String,
+    eq_import_error: Option<String>,
+    eq_export_message: Option<String>,
+    eq_export_error: Option<String>,
     /// Set while the selected curve still needs scrolling into view in the
     /// library. Session-only: it is an action to take once, not a preference.
     library_reveal_pending: bool,
@@ -427,6 +479,16 @@ impl Default for CrinGraphApp {
             share_input: String::new(),
             share_message: None,
             debug_hooks: false,
+            library_tab: LibraryTab::Models,
+            brand_filter: None,
+            eq_phone: None,
+            eq_target: None,
+            eq_max_filters: DEFAULT_EQ_MAX_FILTERS,
+            eq_import_open: false,
+            eq_import_path: String::new(),
+            eq_import_error: None,
+            eq_export_message: None,
+            eq_export_error: None,
             library_reveal_pending: false,
         }
     }
@@ -1203,14 +1265,614 @@ impl CrinGraphApp {
                 .resizable(true)
                 .default_size(280.0)
                 .size_range(120.0..=620.0)
-                .show(ui, |ui| self.library_contents(ui));
+                .show(ui, |ui| self.library_column(ui));
         } else {
             egui::Panel::left("selector")
                 .resizable(true)
                 .default_size(250.0)
                 .size_range(190.0..=420.0)
-                .show(ui, |ui| self.library_contents(ui));
+                .show(ui, |ui| self.library_column(ui));
         }
+    }
+
+    /// The tab column beside the graph: brands, the model list, and the
+    /// equalizer share one slot, matching the reference tool's column.
+    fn library_column(&mut self, ui: &mut Ui) {
+        let mut tab = self.library_tab;
+        squiglab::ui::tab_strip(
+            ui,
+            &mut tab,
+            &[
+                ("Brands", LibraryTab::Brands),
+                ("Models", LibraryTab::Models),
+                ("Equalizer", LibraryTab::Equalizer),
+            ],
+        );
+        self.library_tab = tab;
+        match tab {
+            LibraryTab::Brands => self.brand_list(ui),
+            LibraryTab::Models => self.library_contents(ui),
+            LibraryTab::Equalizer => self.equalizer_panel(ui),
+        }
+    }
+
+    /// Every brand in the database, each showing how many models it has, with
+    /// the chosen one narrowing the model list.
+    fn brand_list(&mut self, ui: &mut Ui) {
+        use squiglab::ui as cgui;
+        squiglab::ui::section_header(ui, "Brands", None);
+        ui.add_space(cgui::Spacing::TIGHT);
+        let counts = self.brand_model_counts();
+        egui::ScrollArea::vertical()
+            .id_salt("brands")
+            .show(ui, |ui| {
+                ui.spacing_mut().item_spacing.y = cgui::Spacing::TIGHT;
+                if self.brand_filter.is_some() && ui.selectable_label(false, "All brands").clicked()
+                {
+                    self.brand_filter = None;
+                }
+                for (brand, count) in counts {
+                    let selected = self.brand_filter.as_deref() == Some(brand.as_str());
+                    let label = RichText::new(format!("{brand} ({count})"))
+                        .strong()
+                        .size(squiglab::theme::TypeStep::Body.size());
+                    if ui.selectable_label(selected, label).clicked() {
+                        // Choosing the brand already showing clears the filter.
+                        self.brand_filter = (!selected).then(|| brand.clone());
+                        self.library_tab = LibraryTab::Models;
+                    }
+                }
+            });
+    }
+
+    /// How many models each brand has, unfiltered by the search box so the
+    /// counts do not change while typing.
+    fn brand_model_counts(&self) -> Vec<(String, usize)> {
+        let mut counts = BTreeMap::<String, usize>::new();
+        for group in &self.groups {
+            if group.target {
+                continue;
+            }
+            counts.entry(brand_name(group)).or_default();
+            *counts.get_mut(&brand_name(group)).expect("just inserted") += 1;
+        }
+        counts.into_iter().collect()
+    }
+
+    /// The measurement whose equalizer the panel is editing: the one chosen in
+    /// its dropdown, or the first active measurement when nothing is chosen.
+    fn eq_phone(&self) -> Option<usize> {
+        self.eq_phone
+            .filter(|&index| self.active.contains(&index) && !self.groups[index].target)
+            .or_else(|| {
+                self.active
+                    .iter()
+                    .copied()
+                    .find(|&index| !self.groups[index].target)
+            })
+    }
+
+    /// The curve Auto EQ fits against: the chosen target, else the first
+    /// active target, else the second active measurement, which is the
+    /// reference tool's fallback.
+    fn eq_target(&self) -> Option<usize> {
+        self.eq_target
+            .filter(|&index| self.active_targets.contains(&index))
+            .or_else(|| self.active_targets.iter().copied().next())
+            .or_else(|| self.active.iter().copied().nth(1))
+    }
+
+    /// The measurements the panel offers in its dropdown.
+    fn active_measurements(&self) -> Vec<usize> {
+        self.active
+            .iter()
+            .copied()
+            .filter(|&index| !self.groups[index].target)
+            .collect()
+    }
+
+    /// The enabled filters of a curve, which is what the exports and the
+    /// response calculation take.
+    fn enabled_filters(&self, index: usize) -> Vec<equalizer::Filter> {
+        self.eq_filters
+            .get(&index)
+            .map(|rows| {
+                rows.iter()
+                    .filter(|row| row.enabled)
+                    .map(|row| row.filter)
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    /// A measurement's normalized both-channel average: the curve Auto EQ fits
+    /// filters to, on the same basis the normalization uses, so the filters fit
+    /// the curve as it is drawn.
+    fn normalized_average_points(
+        &self,
+        group_index: usize,
+    ) -> Result<Vec<FRPoint>, processing::ProcessingError> {
+        let group = &self.groups[group_index];
+        let variant_index = self
+            .variant_choices
+            .get(&group_index)
+            .copied()
+            .unwrap_or(0)
+            .min(group.variants.len().saturating_sub(1));
+        let variant = &group.variants[variant_index];
+        let channels = prepare_channels(
+            &self.curves,
+            &variant.curve_indices,
+            ChannelMode::Both,
+            self.smooth_level,
+        )?;
+        let channel_points: Vec<&[FRPoint]> = channels
+            .iter()
+            .map(|(_, points)| points.as_slice())
+            .collect();
+        let mut average = processing::average_curves(&channel_points)?;
+        let offset = if self.phon_normalization {
+            let params = processing::NormParams::for_curve(&average)?;
+            processing::normalize(&average, self.target_phon, &params)?
+        } else {
+            processing::normalize_by_hz(&channel_points, self.target_hz)?
+        };
+        for point in &mut average {
+            point.db += offset;
+        }
+        Ok(average)
+    }
+
+    /// A curve on the f64 grid the DSP works in.
+    fn response_points(points: &[FRPoint]) -> Vec<equalizer::ResponsePoint> {
+        points
+            .iter()
+            .map(|point| equalizer::ResponsePoint::new(point.hz as f64, point.db as f64))
+            .collect()
+    }
+
+    /// Fit filters to the edited measurement against the chosen target.
+    fn run_auto_eq(&mut self) {
+        let (Some(phone), Some(target)) = (self.eq_phone(), self.eq_target()) else {
+            self.eq_export_error =
+                Some("Auto EQ needs a measurement to fit and a target to fit against".to_owned());
+            return;
+        };
+        let source = match self.normalized_average_points(phone) {
+            Ok(points) => Self::response_points(&points),
+            Err(error) => {
+                self.eq_export_error = Some(format!("Auto EQ: {error}"));
+                return;
+            }
+        };
+        let target_curve = match self.normalized_average_points(target) {
+            Ok(points) => Self::response_points(&points),
+            Err(error) => {
+                self.eq_export_error = Some(format!("Auto EQ target: {error}"));
+                return;
+            }
+        };
+        let fitted = equalizer::autoeq(&source, &target_curve, self.eq_max_filters);
+        self.eq_export_error = None;
+        self.eq_export_message = Some(format!(
+            "Auto EQ fitted {} filters against {}.",
+            fitted.len(),
+            self.groups[target].name
+        ));
+        self.eq_filters.insert(
+            phone,
+            fitted
+                .into_iter()
+                .map(|filter| EqRow {
+                    filter,
+                    enabled: true,
+                })
+                .collect(),
+        );
+        self.dirty = true;
+    }
+
+    /// The edited curve as an Equalizer APO configuration, named after the
+    /// curve as the reference names it. None when no curve is being edited.
+    ///
+    /// The preamp is the peak boost the filters ask for, computed between the
+    /// curve and its equalized response, so the exported curve never boosts.
+    fn parametric_export(&self) -> Option<(String, String)> {
+        let phone = self.eq_phone()?;
+        let source = self
+            .normalized_average_points(phone)
+            .ok()
+            .map(|points| Self::response_points(&points))?;
+        let filters = self.enabled_filters(phone);
+        let equalized = equalizer::apply(&source, &filters, equalizer::DEFAULT_SAMPLE_RATE);
+        let preamp = equalizer::calc_preamp(&source, &equalized);
+        Some((
+            format!("{} Filters.txt", self.groups[phone].name),
+            equalizer::export_parametric(&filters, preamp),
+        ))
+    }
+
+    /// The edited curve as a Wavelet GraphicEQ configuration, on the same
+    /// filter set the parametric export writes.
+    fn graphic_eq_export(&self) -> Option<(String, String)> {
+        let phone = self.eq_phone()?;
+        Some((
+            format!("{} Wavelet.txt", self.groups[phone].name),
+            equalizer::export_graphic_eq(
+                &self.enabled_filters(phone),
+                equalizer::DEFAULT_SAMPLE_RATE,
+            ),
+        ))
+    }
+
+    /// Report an export in the panel, or the error that stopped it.
+    fn report_export(&mut self, exported: Option<(String, String)>, what: &str) {
+        let Some((name, contents)) = exported else {
+            self.eq_export_error = Some(format!("{what} export needs a measurement first."));
+            return;
+        };
+        match save_export(&name, &contents) {
+            Ok(path) => {
+                self.eq_export_error = None;
+                self.eq_export_message = Some(format!("{what} exported to {}", path.display()));
+            }
+            Err(error) => {
+                self.eq_export_message = None;
+                self.eq_export_error = Some(format!("{what} export failed: {error:#}"));
+            }
+        }
+    }
+
+    /// Read an Equalizer APO configuration from disk into the edited curve.
+    fn import_parametric(&mut self) {
+        let Some(phone) = self.eq_phone() else {
+            self.eq_import_error = Some("Select a measurement to import into first.".to_owned());
+            return;
+        };
+        let text = match std::fs::read_to_string(&self.eq_import_path) {
+            Ok(text) => text,
+            Err(error) => {
+                self.eq_import_error = Some(format!("Unable to read the file: {error:#}"));
+                return;
+            }
+        };
+        match equalizer::import_parametric(&text) {
+            Ok(imported) => {
+                let count = imported.filters.len();
+                self.eq_filters.insert(
+                    phone,
+                    imported
+                        .filters
+                        .iter()
+                        .zip(&imported.enabled)
+                        .map(|(filter, &enabled)| EqRow {
+                            filter: *filter,
+                            enabled,
+                        })
+                        .collect(),
+                );
+                self.dirty = true;
+                self.eq_import_error = None;
+                self.eq_export_message = Some(format!("Imported {count} filters."));
+            }
+            Err(error) => {
+                self.eq_import_error = Some(format!("Unable to import the file: {error:#}"));
+            }
+        }
+    }
+
+    /// The parametric equalizer panel: the curve being edited, its filter
+    /// table, Auto EQ, and the two export formats, laid out as the reference
+    /// arranges them.
+    fn equalizer_panel(&mut self, ui: &mut Ui) {
+        use squiglab::ui as cgui;
+        let palette = squiglab::theme::Palette::resolve(ui.visuals().dark_mode);
+
+        // --- title, reset, and the Auto EQ budget ---
+        ui.horizontal(|ui| {
+            ui.label(
+                RichText::new("Parametric Equalizer")
+                    .font(squiglab::theme::font_bold(
+                        squiglab::theme::TypeStep::Subtitle,
+                    ))
+                    .color(palette.text_primary),
+            );
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                ui.menu_button("Settings", |ui| {
+                    ui.label(
+                        RichText::new("Auto EQ")
+                            .size(squiglab::theme::TypeStep::Caption.size())
+                            .color(palette.text_secondary),
+                    );
+                    let mut budget = self.eq_max_filters as f64;
+                    if ui
+                        .add(
+                            egui::Slider::new(&mut budget, 1.0..=MAX_EQ_ROWS as f64)
+                                .text("filters"),
+                        )
+                        .changed()
+                    {
+                        self.eq_max_filters = budget.clamp(1.0, MAX_EQ_ROWS as f64) as usize;
+                    }
+                });
+                if cgui::action_button(ui, "Reset", "Clear this curve's filters.") {
+                    if let Some(phone) = self.eq_phone() {
+                        self.eq_filters.insert(phone, Vec::new());
+                        self.dirty = true;
+                    }
+                }
+            });
+        });
+
+        let Some(phone) = self.eq_phone() else {
+            ui.add_space(cgui::Spacing::TIGHT);
+            ui.label("Select a measurement to give it an equalizer.");
+            return;
+        };
+        // A curve that has never been edited starts with the default bands. A
+        // curve whose rows were emptied keeps them empty: the empty list is the
+        // record that the user cleared it.
+        if let std::collections::btree_map::Entry::Vacant(slot) = self.eq_filters.entry(phone) {
+            slot.insert(default_eq_filters());
+            self.dirty = true;
+        }
+
+        // --- the curve being edited, the target, and Auto EQ ---
+        ui.add_space(cgui::Spacing::TIGHT);
+        let measurements = self.active_measurements();
+        let names: Vec<String> = measurements
+            .iter()
+            .map(|&index| self.groups[index].name.clone())
+            .collect();
+        let mut selected_phone = Some(phone);
+        egui::ComboBox::from_id_salt("eq_phone")
+            .selected_text(
+                measurements
+                    .iter()
+                    .position(|&index| Some(index) == selected_phone)
+                    .map(|position| names[position].as_str())
+                    .unwrap_or("Measurement"),
+            )
+            .show_ui(ui, |ui| {
+                for (index, name) in measurements.iter().zip(&names) {
+                    ui.selectable_value(&mut selected_phone, Some(*index), name);
+                }
+            });
+        if selected_phone != Some(phone) {
+            self.eq_phone = selected_phone;
+        }
+        let targets: Vec<usize> = self.active_targets.iter().copied().collect();
+        let mut selected_target = self.eq_target();
+        let target_label = selected_target
+            .map(|index| self.groups[index].name.clone())
+            .unwrap_or_else(|| "None".to_owned());
+        egui::ComboBox::from_id_salt("eq_target")
+            .selected_text(target_label.as_str())
+            .show_ui(ui, |ui| {
+                for index in &targets {
+                    ui.selectable_value(
+                        &mut selected_target,
+                        Some(*index),
+                        &self.groups[*index].name,
+                    );
+                }
+            });
+        if selected_target != self.eq_target() {
+            self.eq_target = selected_target;
+        }
+        if ui.button("Auto EQ").clicked() {
+            self.run_auto_eq();
+        }
+
+        // --- the filter table ---
+        ui.add_space(cgui::Spacing::COMPACT);
+        let header = |ui: &mut Ui, text: &str| {
+            ui.label(
+                RichText::new(text)
+                    .size(squiglab::theme::TypeStep::Micro.size())
+                    .color(palette.text_tertiary),
+            );
+        };
+        egui::Grid::new("eq_filters")
+            .num_columns(5)
+            .spacing([cgui::Spacing::TIGHT, cgui::Spacing::TIGHT])
+            .show(ui, |ui| {
+                header(ui, "Type");
+                header(ui, "Frequency");
+                header(ui, "Gain");
+                header(ui, "Q");
+                ui.allocate_space(egui::vec2(20.0, 0.0));
+                ui.end_row();
+            });
+
+        let mut rows = self.eq_filters.get(&phone).cloned().unwrap_or_default();
+        let mut removals = Vec::new();
+        let mut changed = false;
+        let mut sort_requested = false;
+        egui::Grid::new("eq_rows")
+            .num_columns(5)
+            .spacing([cgui::Spacing::TIGHT, cgui::Spacing::TIGHT])
+            .show(ui, |ui| {
+                for (row_index, row) in rows.iter_mut().enumerate() {
+                    let mut enabled = row.enabled;
+                    if ui
+                        .checkbox(&mut enabled, "")
+                        .on_hover_text("Include this band in the response and exports")
+                        .changed()
+                    {
+                        row.enabled = enabled;
+                        changed = true;
+                    }
+                    egui::ComboBox::from_id_salt(("eq_type", row_index))
+                        .selected_text(row.filter.filter_type.short_name())
+                        .show_ui(ui, |ui| {
+                            for filter_type in [
+                                equalizer::FilterType::Peaking,
+                                equalizer::FilterType::LowShelf,
+                                equalizer::FilterType::HighShelf,
+                            ] {
+                                ui.selectable_value(
+                                    &mut row.filter.filter_type,
+                                    filter_type,
+                                    filter_type.short_name(),
+                                );
+                            }
+                        });
+                    let mut frequency = row.filter.freq;
+                    let mut gain = row.filter.gain;
+                    let mut q = row.filter.q;
+                    if ui
+                        .add(
+                            egui::DragValue::new(&mut frequency)
+                                .range(20.0..=20_000.0)
+                                .speed(10.0)
+                                .suffix(" Hz"),
+                        )
+                        .changed()
+                    {
+                        row.filter.freq = frequency;
+                        changed = true;
+                    }
+                    if ui
+                        .add(
+                            egui::DragValue::new(&mut gain)
+                                .range(-40.0..=40.0)
+                                .speed(0.1)
+                                .suffix(" dB"),
+                        )
+                        .changed()
+                    {
+                        row.filter.gain = gain;
+                        changed = true;
+                    }
+                    if ui
+                        .add(egui::DragValue::new(&mut q).range(0.1..=20.0).speed(0.1))
+                        .changed()
+                    {
+                        row.filter.q = q;
+                        changed = true;
+                    }
+                    if ui
+                        .button("\u{2715}")
+                        .on_hover_text("Remove this band")
+                        .clicked()
+                    {
+                        removals.push(row_index);
+                    }
+                    ui.end_row();
+                }
+            });
+        for row_index in removals.into_iter().rev() {
+            rows.remove(row_index);
+            changed = true;
+        }
+        if changed {
+            self.eq_filters.insert(phone, rows);
+            self.dirty = true;
+        }
+
+        // --- row controls ---
+        ui.add_space(cgui::Spacing::TIGHT);
+        ui.horizontal(|ui| {
+            if ui
+                .button("+")
+                .on_hover_text("Add a band after the last one")
+                .clicked()
+            {
+                let mut rows = self.eq_filters.get(&phone).cloned().unwrap_or_default();
+                rows.push(EqRow {
+                    filter: equalizer::Filter::new(
+                        equalizer::FilterType::Peaking,
+                        1000.0,
+                        1.0,
+                        0.0,
+                    ),
+                    enabled: true,
+                });
+                self.eq_filters.insert(phone, rows);
+                self.dirty = true;
+            }
+            if ui
+                .button("Sort")
+                .on_hover_text("Order the bands by frequency")
+                .clicked()
+            {
+                sort_requested = true;
+            }
+        });
+        if sort_requested {
+            if let Some(mut rows) = self.eq_filters.get(&phone).cloned() {
+                rows.sort_by(|left, right| left.filter.freq.total_cmp(&right.filter.freq));
+                self.eq_filters.insert(phone, rows);
+                self.dirty = true;
+            }
+        }
+
+        // --- the two export formats ---
+        ui.add_space(cgui::Spacing::TIGHT);
+        ui.horizontal(|ui| {
+            if cgui::action_button(ui, "Import", "Load an Equalizer APO file.") {
+                self.eq_import_open = true;
+                self.eq_import_error = None;
+            }
+            if cgui::action_button(ui, "Export", "Save an Equalizer APO file.") {
+                let exported = self.parametric_export();
+                self.report_export(exported, "Parametric EQ");
+            }
+        });
+        if ui
+            .add_sized(
+                [ui.available_width(), 24.0],
+                egui::Button::new("Export Graphic EQ (Wavelet)"),
+            )
+            .clicked()
+        {
+            let exported = self.graphic_eq_export();
+            self.report_export(exported, "Graphic EQ");
+        }
+        if let Some(message) = &self.eq_export_message {
+            ui.label(message);
+        }
+        if let Some(error) = &self.eq_export_error {
+            ui.colored_label(palette.error, error);
+        }
+    }
+
+    /// The Equalizer APO import window. The reference opens a file picker;
+    /// egui has none without a new dependency, so the path is typed instead.
+    fn equalizer_import_window(&mut self, ctx: &Context) {
+        if !self.eq_import_open {
+            return;
+        }
+        let mut open = true;
+        let mut cancelled = false;
+        egui::Window::new("Import parametric EQ")
+            .open(&mut open)
+            .resizable(false)
+            .collapsible(false)
+            .default_width(420.0)
+            .show(ctx, |ui| {
+                ui.label("Path to an Equalizer APO configuration:");
+                ui.add(
+                    egui::TextEdit::singleline(&mut self.eq_import_path)
+                        .hint_text("/path/to/Model Filters.txt"),
+                );
+                ui.horizontal(|ui| {
+                    if ui.button("Import").clicked() {
+                        self.import_parametric();
+                    }
+                    if ui.button("Cancel").clicked() {
+                        cancelled = true;
+                    }
+                });
+                if let Some(error) = &self.eq_import_error {
+                    ui.colored_label(
+                        squiglab::theme::Palette::resolve(ui.visuals().dark_mode).error,
+                        error,
+                    );
+                }
+            });
+        self.eq_import_open = open && !cancelled;
     }
 
     /// The library body, shared by both viewports so the two layouts cannot
@@ -1244,12 +1906,12 @@ impl CrinGraphApp {
         let mut measurements = BTreeMap::<String, Vec<(usize, String)>>::new();
         let mut targets = BTreeMap::<String, Vec<(usize, String)>>::new();
         for (index, group) in self.groups.iter().enumerate() {
-            let brand = group
-                .brand_suffix
+            let brand = brand_name(group);
+            let narrowed = self
+                .brand_filter
                 .as_ref()
-                .map(|suffix| format!("{} {suffix}", group.brand))
-                .unwrap_or_else(|| group.brand.clone());
-            if matches_search(&format!("{brand} {}", group.name), &self.search) {
+                .is_none_or(|chosen| chosen == &brand);
+            if narrowed && matches_search(&format!("{brand} {}", group.name), &self.search) {
                 let groups = if group.target {
                     &mut targets
                 } else {
@@ -1700,6 +2362,7 @@ impl eframe::App for CrinGraphApp {
         }
         self.toolbar(ui);
         self.share_window(&ctx);
+        self.equalizer_import_window(&ctx);
         self.tutorial_window(&ctx);
         // The reference tool has two viewports: below ~1024px content width the
         // graph stacks above the tab column, and above it the tabs sit beside the
@@ -1949,6 +2612,28 @@ fn curve_label(model: &str, variant: &str, channel_name: String) -> String {
     } else {
         format!("{name} ({channel_name})")
     }
+}
+
+/// The brand a measurement is listed under, including the brand's suffix when
+/// it has one.
+fn brand_name(group: &MeasurementGroup) -> String {
+    group
+        .brand_suffix
+        .as_ref()
+        .map(|suffix| format!("{} {suffix}", group.brand))
+        .unwrap_or_else(|| group.brand.clone())
+}
+
+/// Write an export beside the user's pictures, where the PNG and SVG exports
+/// go, under the file name the reference format specifies.
+fn save_export(file_name: &str, contents: &str) -> anyhow::Result<PathBuf> {
+    let directory = dirs::picture_dir().ok_or_else(|| {
+        anyhow::anyhow!("the operating system did not provide a pictures directory")
+    })?;
+    std::fs::create_dir_all(&directory)?;
+    let path = directory.join(file_name);
+    std::fs::write(&path, contents)?;
+    Ok(path)
 }
 
 fn group_key(group: &MeasurementGroup) -> String {
@@ -2810,6 +3495,235 @@ smoothing_octaves = 3
         };
         assert!(app.apply_preferences(preferences));
         assert_eq!(app.eq_filters.get(&0).map(Vec::len), Some(1));
+    }
+
+    fn group_named(app: &CrinGraphApp, name: &str) -> usize {
+        app.groups
+            .iter()
+            .position(|group| group.name == name)
+            .unwrap_or_else(|| panic!("no group named {name}"))
+    }
+
+    #[test]
+    fn the_equalizer_panel_resolves_the_curve_and_target_it_edits() {
+        with_isolated_config(|| {
+            let mut app = CrinGraphApp::default();
+            app.load_measurements().unwrap();
+            // With one measurement active and no target, the panel edits it
+            // and falls back to the reference's second-measurement rule for
+            // the target, which does not exist yet.
+            let phone = group_named(&app, "HTH67");
+            app.active = [phone].into_iter().collect();
+            app.active_targets.clear();
+            assert_eq!(app.eq_phone(), Some(phone));
+            assert_eq!(app.eq_target(), None);
+
+            // A second active measurement becomes the fallback target, in the
+            // same display order the groups are listed in.
+            let other = app
+                .groups
+                .iter()
+                .enumerate()
+                .map(|(index, _)| index)
+                .filter(|&index| index != phone && !app.groups[index].target)
+                .nth(1)
+                .expect("more than one measurement to fall back to");
+            app.active.insert(other);
+            let mut active_in_order: Vec<_> = app.active.iter().copied().collect();
+            active_in_order.sort_unstable();
+            assert_eq!(app.eq_target(), active_in_order.get(1).copied());
+
+            // An active target wins over the measurement fallback, and the
+            // first active target wins over an unset choice.
+            let target = group_named(&app, "Harman");
+            app.active_targets = [target].into_iter().collect();
+            assert_eq!(app.eq_target(), Some(target));
+            app.eq_target = None;
+            assert_eq!(app.eq_target(), Some(target));
+
+            // An explicit choice is honoured while the curve stays active, and
+            // forgotten when the curve is switched off.
+            app.eq_phone = Some(other);
+            assert_eq!(app.eq_phone(), Some(other));
+            app.active = [phone].into_iter().collect();
+            assert_eq!(app.eq_phone(), Some(phone));
+        });
+    }
+
+    #[test]
+    fn auto_eq_moves_a_measurement_towards_its_target() {
+        with_isolated_config(|| {
+            let mut app = CrinGraphApp::default();
+            app.load_measurements().unwrap();
+            let phone = group_named(&app, "HTH67");
+            let target = group_named(&app, "Harman");
+            app.active = [phone].into_iter().collect();
+            app.active_targets = [target].into_iter().collect();
+            let before = app.normalized_average_points(phone).unwrap();
+            let target_points = app.normalized_average_points(target).unwrap();
+            let distance = |curve: &[FRPoint]| {
+                let mut total = 0.0;
+                for (point, goal) in curve.iter().zip(&target_points) {
+                    total += (point.db - goal.db).abs();
+                }
+                total / curve.len() as f32
+            };
+            let distance_before = distance(&before);
+
+            app.run_auto_eq();
+            assert!(app.eq_export_error.is_none(), "{:?}", app.eq_export_error);
+            let rows = app.eq_filters.get(&phone).expect("Auto EQ fitted filters");
+            assert!(!rows.is_empty());
+            assert!(rows.iter().all(|row| row.enabled));
+            assert!(rows.len() <= super::DEFAULT_EQ_MAX_FILTERS);
+
+            // The fitted filters are what the graph and the exports use.
+            app.rebuild_display_curves();
+            let equalized: Vec<FRPoint> = app
+                .display_curves
+                .iter()
+                .find(|curve| curve.source == CurveSource::Equalizer && curve.group_index == phone)
+                .expect("the equalizer drew a child curve")
+                .points
+                .clone();
+            assert!(
+                distance(&equalized) < distance_before,
+                "Auto EQ left the curve {} dB from the target, was {}",
+                distance(&equalized),
+                distance_before
+            );
+            // AutoEQ strips the ports to the optimizer's ranges, which the
+            // panel shows without further rounding.
+            let filters = app.enabled_filters(phone);
+            assert!(filters.iter().all(|filter| {
+                (20.0..=15_000.0).contains(&filter.freq)
+                    && (0.5..=2.0).contains(&filter.q)
+                    && (-12.0..=12.0).contains(&filter.gain)
+            }));
+        });
+    }
+
+    #[test]
+    fn the_equalizer_exports_name_the_curve_and_agree_on_its_filters() {
+        with_isolated_config(|| {
+            let mut app = CrinGraphApp::default();
+            app.load_measurements().unwrap();
+            let phone = group_named(&app, "HTH67");
+            app.active = [phone].into_iter().collect();
+            // Give the curve the default bands the panel would have installed.
+            app.eq_filters.insert(phone, super::default_eq_filters());
+
+            let (name, parametric) = app.parametric_export().expect("a curve is being edited");
+            assert_eq!(name, "HTH67 Filters.txt");
+            assert!(parametric.starts_with("Preamp: "));
+            assert!(parametric.contains("Filter 1: ON LSC "));
+            // The preamp keeps the exported curve from boosting.
+            let preamp: f64 = parametric
+                .strip_prefix("Preamp: ")
+                .and_then(|rest| rest.split(' ').next())
+                .and_then(|value| value.parse().ok())
+                .expect("the preamp is a number");
+            assert!(preamp <= 0.0, "a preamp above zero would boost");
+
+            let (name, graphic) = app.graphic_eq_export().expect("a curve is being edited");
+            assert_eq!(name, "HTH67 Wavelet.txt");
+            assert!(graphic.starts_with("GraphicEQ: 20 "));
+
+            // Both exports describe the same enabled filters: importing the
+            // parametric text back gives the same set the panel holds.
+            let imported = squiglab::equalizer::import_parametric(&parametric).unwrap();
+            let enabled: Vec<_> = imported
+                .filters
+                .iter()
+                .zip(&imported.enabled)
+                .filter(|(_, &enabled)| enabled)
+                .map(|(filter, _)| *filter)
+                .collect();
+            assert_eq!(enabled, app.enabled_filters(phone));
+        });
+    }
+
+    #[test]
+    fn importing_an_apo_file_replaces_the_curves_filters() {
+        with_isolated_config(|| {
+            let mut app = CrinGraphApp::default();
+            app.load_measurements().unwrap();
+            let phone = group_named(&app, "HTH67");
+            app.active = [phone].into_iter().collect();
+
+            let path =
+                std::env::temp_dir().join(format!("squiglab-eq-import-{}.txt", std::process::id()));
+            // The configuration captured from the live site, which is the
+            // authority on the format.
+            std::fs::write(
+                &path,
+                "Preamp: 0.0002 dB\r\nFilter 1: ON PK Fc 500 Hz Gain -3.5 dB Q 1.2\r\n",
+            )
+            .unwrap();
+            app.eq_import_path = path.to_string_lossy().into_owned();
+            app.import_parametric();
+            assert!(app.eq_import_error.is_none(), "{:?}", app.eq_import_error);
+
+            let rows = app.eq_filters.get(&phone).expect("the import landed");
+            assert_eq!(rows.len(), 1);
+            assert_eq!(
+                rows[0].filter,
+                squiglab::equalizer::Filter::new(
+                    squiglab::equalizer::FilterType::Peaking,
+                    500.0,
+                    1.2,
+                    -3.5
+                )
+            );
+            assert!(rows[0].enabled);
+
+            // A file that is not an Equalizer APO configuration is refused and
+            // the curve keeps what it had.
+            std::fs::write(&path, "Filter 1: ON LPQ Fc 500 Hz Gain -3 dB Q 1\r\n").unwrap();
+            app.import_parametric();
+            assert!(app.eq_import_error.is_some());
+            assert_eq!(app.eq_filters.get(&phone).map(Vec::len), Some(1));
+            std::fs::remove_file(path).unwrap();
+        });
+    }
+
+    #[test]
+    fn a_curve_keeps_its_cleared_filters_but_a_new_curve_gets_defaults() {
+        let curves = vec![test_curve("Model", "L", 50.0)];
+        let group = super::MeasurementGroup {
+            brand: "Brand".to_owned(),
+            brand_suffix: None,
+            name: "Model".to_owned(),
+            variants: vec![super::MeasurementVariant {
+                name: "Default".to_owned(),
+                curve_indices: vec![0],
+            }],
+            target: false,
+        };
+        let mut app = CrinGraphApp {
+            curves,
+            groups: vec![group],
+            active: [0].into_iter().collect(),
+            ..CrinGraphApp::default()
+        };
+        // Nothing installed yet: the panel's default bands are what a first
+        // visit would see.
+        assert!(app.eq_filters.is_empty());
+        let defaults = super::default_eq_filters();
+        assert_eq!(defaults.len(), 5, "the reference shows five default bands");
+        app.eq_filters.insert(0, defaults);
+        assert_eq!(app.enabled_filters(0).len(), 5);
+
+        // Clearing a curve is remembered: an empty list is not "never edited".
+        app.eq_filters.insert(0, Vec::new());
+        assert!(app.enabled_filters(0).is_empty());
+        assert!(app.eq_filters.contains_key(&0));
+        // And the curve still draws its normalized response with no EQ child.
+        app.rebuild_display_curves();
+        assert!(app
+            .display_curves
+            .iter()
+            .all(|curve| curve.source == CurveSource::Measurement));
     }
 
     #[test]

@@ -66,6 +66,17 @@ pub struct Filter {
     pub gain: f64,
 }
 
+impl FilterType {
+    /// The three-letter name the reference tool shows for each type.
+    pub fn short_name(self) -> &'static str {
+        match self {
+            Self::Peaking => "PK",
+            Self::LowShelf => "LSQ",
+            Self::HighShelf => "HSQ",
+        }
+    }
+}
+
 impl Filter {
     pub fn new(filter_type: FilterType, freq: f64, q: f64, gain: f64) -> Self {
         Self {
