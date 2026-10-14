@@ -13,6 +13,9 @@ const MAX_SMOOTH_LEVEL: usize = 12;
 const MANAGER_HEIGHT_BASE: f32 = 46.0;
 /// Vertical room one curve row occupies in the manager.
 const MANAGER_ROW_HEIGHT: f32 = 32.0;
+/// Content width below which the layout stacks instead of running the tab column
+/// beside the graph. Matches the reference tool's transition, which sits between
+/// 900 and 1100px.
 const CONFIG_DIRECTORY_NAME: &str = "squiglab";
 const SHARE_URI_PREFIX: &str = "squiglab://state/v1/";
 /// Share links issued before the rename. Still decoded so links people already
@@ -970,6 +973,7 @@ impl CrinGraphApp {
             .default_size(250.0)
             .size_range(190.0..=420.0)
             .show(ui, |ui| {
+                use squiglab::ui as cgui;
                 let palette = squiglab::theme::Palette::resolve(ui.visuals().dark_mode);
                 squiglab::ui::section_header(
                     ui,
@@ -1617,19 +1621,31 @@ fn group_key(group: &MeasurementGroup) -> String {
     format!("{}\u{1f}{}", group.brand, group.name)
 }
 
+/// Root of the application's configuration directory.
+///
+/// Honours `SQUIGLAB_CONFIG_DIR` when set so tests can point the application at a
+/// scratch directory. Without this, tests that load measurements read whichever
+/// preferences file happens to exist on the machine running them, so their
+/// result depends on the developer's own app state rather than the test.
+fn config_root() -> anyhow::Result<PathBuf> {
+    if let Some(override_directory) = std::env::var_os("SQUIGLAB_CONFIG_DIR") {
+        if !override_directory.is_empty() {
+            return Ok(PathBuf::from(override_directory));
+        }
+    }
+    dirs::config_dir()
+        .ok_or_else(|| anyhow::anyhow!("the operating system did not provide a config directory"))
+}
+
 fn preferences_path() -> anyhow::Result<PathBuf> {
-    let config_dir = dirs::config_dir().ok_or_else(|| {
-        anyhow::anyhow!("the operating system did not provide a config directory")
-    })?;
+    let config_dir = config_root()?;
     Ok(config_dir
         .join(CONFIG_DIRECTORY_NAME)
         .join("preferences.json"))
 }
 
 fn app_config_path() -> anyhow::Result<PathBuf> {
-    let config_dir = dirs::config_dir().ok_or_else(|| {
-        anyhow::anyhow!("the operating system did not provide a config directory")
-    })?;
+    let config_dir = config_root()?;
     Ok(config_dir.join(CONFIG_DIRECTORY_NAME).join("config.toml"))
 }
 
@@ -1639,9 +1655,7 @@ fn app_config_path() -> anyhow::Result<PathBuf> {
 const LEGACY_CONFIG_DIRECTORIES: [&str; 2] = ["cringraph", "CrinGraph-native"];
 
 fn legacy_preferences_paths() -> anyhow::Result<Vec<PathBuf>> {
-    let config_dir = dirs::config_dir().ok_or_else(|| {
-        anyhow::anyhow!("the operating system did not provide a config directory")
-    })?;
+    let config_dir = config_root()?;
     Ok(LEGACY_CONFIG_DIRECTORIES
         .iter()
         .map(|directory| config_dir.join(directory).join("preferences.json"))
@@ -2037,6 +2051,32 @@ mod tests {
         TUTORIAL_SEGMENTS,
     };
     use squiglab::data::{CurveInfo, FRPoint};
+
+    /// Serialises tests that redirect the config directory, since the override is
+    /// process-global and tests run on parallel threads.
+    static CONFIG_DIR_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    /// Run `body` with the application pointed at a scratch config directory, so
+    /// a test is not reading whichever preferences happen to exist on the machine
+    /// running it. Restores the previous setting afterwards.
+    fn with_isolated_config<T>(body: impl FnOnce() -> T) -> T {
+        let _guard = CONFIG_DIR_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let directory =
+            std::env::temp_dir().join(format!("squiglab-test-config-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&directory);
+        std::fs::create_dir_all(&directory).expect("create scratch config directory");
+        let previous = std::env::var_os("SQUIGLAB_CONFIG_DIR");
+        std::env::set_var("SQUIGLAB_CONFIG_DIR", &directory);
+        let result = body();
+        match previous {
+            Some(value) => std::env::set_var("SQUIGLAB_CONFIG_DIR", value),
+            None => std::env::remove_var("SQUIGLAB_CONFIG_DIR"),
+        }
+        let _ = std::fs::remove_dir_all(&directory);
+        result
+    }
     use squiglab::graph::ZoomRegion;
     use std::path::Path;
 
@@ -2210,20 +2250,22 @@ smoothing_octaves = 3
 
     #[test]
     fn startup_loads_the_configured_measurement_and_targets() {
-        let mut app = CrinGraphApp::default();
-        app.load_measurements().unwrap();
-        assert!(!app.curves.is_empty());
-        assert!(app
-            .active
-            .iter()
-            .any(|&index| app.groups[index].name == "HTH67"));
-        assert!(app
-            .groups
-            .iter()
-            .any(|group| group.name == "Harman" && group.target));
-        app.rebuild_display_curves();
-        assert!(app.display_curves.len() >= app.active.len());
-        assert!(app.processing_error.is_none());
+        with_isolated_config(|| {
+            let mut app = CrinGraphApp::default();
+            app.load_measurements().unwrap();
+            assert!(!app.curves.is_empty());
+            assert!(app
+                .active
+                .iter()
+                .any(|&index| app.groups[index].name == "HTH67"));
+            assert!(app
+                .groups
+                .iter()
+                .any(|group| group.name == "Harman" && group.target));
+            app.rebuild_display_curves();
+            assert!(app.display_curves.len() >= app.active.len());
+            assert!(app.processing_error.is_none());
+        });
     }
 
     #[test]
