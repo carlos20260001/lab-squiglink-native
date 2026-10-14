@@ -71,6 +71,18 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
+      - name: Install PipeWire headers and libclang
+        # The sound tools speak to PipeWire through libpipewire, and the Rust
+        # bindings are generated from PipeWire's headers at build time, so the
+        # development files and libclang are needed to compile. For the native
+        # target they come from the runner; for cross builds, cross reads them
+        # from the same host packages.
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y \
+            libpipewire-0.3-dev clang
+        shell: bash
+
       - name: Install cross-compilation tool
         if: matrix.target != 'x86_64-unknown-linux-gnu'
         run: cargo install cross --locked

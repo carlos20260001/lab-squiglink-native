@@ -74,6 +74,21 @@ separate project code.
 
 #### GNU/Linux
 
+Building on Linux needs the PipeWire development files and libclang, because
+the sound tools speak to the PipeWire daemon through `libpipewire` and the
+Rust bindings are generated from PipeWire's headers at build time:
+
+```bash
+# Debian, Ubuntu
+sudo apt install libpipewire-0.3-dev clang
+
+# Fedora
+sudo dnf install pipewire-devel clang
+
+# Arch
+sudo pacman -S pipewire clang
+```
+
 With Rust and Cargo installed, build and run the desktop application:
 
 ```bash
