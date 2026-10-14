@@ -226,6 +226,61 @@ struct MeasurementGroup {
     target: bool,
 }
 
+/// Progressive fallback for the toolbar as the viewport narrows.
+///
+/// The reference tool keeps its toolbar on one row and drops controls as width
+/// falls rather than wrapping them onto extra rows. These tiers do the same:
+/// each step moves the next cluster into the `⋯` overflow menu instead of
+/// hiding it, so every control stays reachable at every width.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum ToolbarDensity {
+    /// Every control sits inline in the row.
+    Full,
+    /// The wordmark drops and the action cluster becomes the overflow menu.
+    Compact,
+    /// Processing controls, view toggles, and the theme join the menu as well.
+    Narrow,
+}
+
+impl ToolbarDensity {
+    /// Width the full row needs, estimated from the inline width of every
+    /// cluster at the app's own type scale: the row measures ~1350px with the
+    /// wordmark and all five action buttons inline, which is why the default
+    /// 1440px window is the only width that shows them all.
+    const FULL_WIDTH: f32 = 1340.0;
+    /// Width that fits once the wordmark and the action cluster drop out: the
+    /// remaining processing controls, view toggles, theme, and panel toggles
+    /// measure ~1030px together.
+    const COMPACT_WIDTH: f32 = 1000.0;
+
+    fn for_width(width: f32) -> Self {
+        if width >= Self::FULL_WIDTH {
+            Self::Full
+        } else if width >= Self::COMPACT_WIDTH {
+            Self::Compact
+        } else {
+            Self::Narrow
+        }
+    }
+
+    /// Whether the wordmark is drawn beside the controls. The window title
+    /// already names the application, so it is the first thing to go.
+    fn shows_wordmark(self) -> bool {
+        matches!(self, Self::Full)
+    }
+
+    /// Whether the processing and view-toggle controls stay inline instead of
+    /// moving into the overflow menu.
+    fn shows_processing(self) -> bool {
+        !matches!(self, Self::Narrow)
+    }
+
+    /// Whether the theme toggle stays inline.
+    fn shows_theme(self) -> bool {
+        !matches!(self, Self::Narrow)
+    }
+}
+
 pub struct CrinGraphApp {
     curves: Vec<CurveInfo>,
     groups: Vec<MeasurementGroup>,
@@ -717,6 +772,95 @@ impl CrinGraphApp {
         }
     }
 
+    /// The processing and view-toggle cluster: normalization target, smoothing,
+    /// and the two view toggles. Drawn inline on wide viewports and inside the
+    /// overflow menu on narrow ones, so the two layouts cannot drift apart.
+    fn toolbar_processing(&mut self, ui: &mut Ui) {
+        use squiglab::ui as cgui;
+        // The segmented control and its unit suffix already name what this is,
+        // so no cluster label is needed here; the space buys room for the
+        // toolbar to stay on one row.
+        cgui::segmented(
+            ui,
+            &[(true, "phon"), (false, "Hz")],
+            &mut self.phon_normalization,
+            Some("Normalize against a loudness reference (phon) or a reference frequency (Hz)"),
+        );
+        if self.phon_normalization {
+            ui.add(
+                egui::DragValue::new(&mut self.target_phon)
+                    .range(0.0..=100.0)
+                    .speed(1.0)
+                    .suffix(" phon"),
+            )
+            .on_hover_text("Loudness level the curve is normalized to");
+        } else {
+            ui.add(
+                egui::DragValue::new(&mut self.target_hz)
+                    .range(20.0..=20000.0)
+                    .speed(5.0)
+                    .suffix(" Hz"),
+            )
+            .on_hover_text("Frequency the curve is normalized to");
+        }
+        ui.add(
+            egui::Slider::new(&mut self.smooth_level, 0..=12)
+                .suffix(" /oct")
+                .text(""),
+        )
+        .on_hover_text("Fractional-octave smoothing applied to every curve");
+        ui.checkbox(&mut self.show_labels, "Labels")
+            .on_hover_text("Curve labels are auto-spaced; drag a label to position it.");
+        if self.show_labels
+            && cgui::action_button(
+                ui,
+                self.label_layout.short_name(),
+                "Group labels in a corner like squig.link, or keep each beside its curve",
+            )
+        {
+            self.label_layout = self.label_layout.next();
+        }
+        ui.checkbox(&mut self.inspect_mode, "Inspect")
+            .on_hover_text("Read the exact dB value under the cursor at a frequency.");
+        #[cfg(debug_assertions)]
+        if self.debug_hooks {
+            ui.checkbox(&mut self.debug_hooks, "Debug")
+                .on_hover_text("Show egui widget diagnostics when hovering controls.");
+        }
+    }
+
+    /// The toolbar's secondary actions: recolouring, exporting, sharing, and the
+    /// frequency-guide toggle. Also shared between the inline row and the
+    /// overflow menu.
+    fn toolbar_actions(&mut self, ui: &mut Ui) {
+        use squiglab::ui as cgui;
+        if cgui::action_button(ui, "Recolor", "Cycle the measurement curve colors.") {
+            self.color_offset = self.color_offset.wrapping_add(1);
+        }
+        if cgui::action_button(ui, "PNG", "Save a PNG of the current application window.") {
+            self.screenshot_pending = true;
+            self.screenshot_error = None;
+        }
+        if cgui::action_button(ui, "SVG", "Save the current graph as a scalable vector image.") {
+            self.export_svg();
+        }
+        if cgui::action_button(ui, "Share", "Copy a shareable link to this view.") {
+            self.share_window_open = true;
+            self.share_message = None;
+        }
+        if cgui::action_button(
+            ui,
+            if self.tutorial_segment.is_some() {
+                "Close guide"
+            } else {
+                "Guide"
+            },
+            "Learn how to read a frequency response curve.",
+        ) {
+            self.tutorial_segment = self.tutorial_segment.map_or(Some(0), |_| None);
+        }
+    }
+
     fn toolbar(&mut self, ui: &mut Ui) {
         use squiglab::ui as cgui;
         let previous_processing_settings = (
@@ -726,116 +870,69 @@ impl CrinGraphApp {
             self.smooth_level,
         );
         egui::Panel::top("toolbar").show(ui, |ui| {
-            // The toolbar is a single row of clearly separated clusters: the
-            // wordmark, then view range, then the two processing controls that
-            // change what is measured (normalize, smooth), then view toggles,
-            // then actions, then panel visibility. Rules between clusters carry
-            // the grouping so no control needs a box around it.
-            ui.horizontal_wrapped(|ui| {
+            // One row of clearly separated clusters: view range, then the two
+            // processing controls that change what is measured (normalize,
+            // smooth), then view toggles, then actions, then panel visibility.
+            // Rules between clusters carry the grouping so no control needs a
+            // box around it. As the viewport narrows, whole clusters move into
+            // the overflow menu instead of wrapping onto extra rows.
+            let density = ToolbarDensity::for_width(ui.available_width());
+            ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing.x = cgui::Spacing::COMPACT;
-                cgui::wordmark(ui);
-                cgui::cluster_rule(ui);
+
+                if density.shows_wordmark() {
+                    cgui::wordmark(ui);
+                    cgui::cluster_rule(ui);
+                }
 
                 // ---- View range ----
                 cgui::zoom_segmented(ui, &mut self.zoom);
                 cgui::cluster_rule(ui);
 
-                // ---- Normalize (phon / Hz) ----
-                // The segmented control and its unit suffix already name what
-                // this is, so no cluster label is needed here; the space buys
-                // room for the toolbar to stay on one row.
-                cgui::segmented(
-                    ui,
-                    &[(true, "phon"), (false, "Hz")],
-                    &mut self.phon_normalization,
-                    Some("Normalize against a loudness reference (phon) or a reference frequency (Hz)"),
-                );
-                if self.phon_normalization {
-                    ui.add(
-                        egui::DragValue::new(&mut self.target_phon)
-                            .range(0.0..=100.0)
-                            .speed(1.0)
-                            .suffix(" phon")
-                    )
-                    .on_hover_text("Loudness level the curve is normalized to");
-                } else {
-                    ui.add(
-                        egui::DragValue::new(&mut self.target_hz)
-                            .range(20.0..=20000.0)
-                            .speed(5.0)
-                            .suffix(" Hz")
-                    )
-                    .on_hover_text("Frequency the curve is normalized to");
+                // ---- Normalize / smooth / view toggles ----
+                if density.shows_processing() {
+                    self.toolbar_processing(ui);
+                    cgui::cluster_rule(ui);
                 }
-                cgui::cluster_rule(ui);
-
-                // ---- Smooth ----
-                ui.add(
-                    egui::Slider::new(&mut self.smooth_level, 0..=12)
-                        .suffix(" /oct")
-                        .text("")
-                )
-                .on_hover_text("Fractional-octave smoothing applied to every curve");
-                cgui::cluster_rule(ui);
-
-                // ---- View toggles ----
-                ui.checkbox(&mut self.show_labels, "Labels")
-                    .on_hover_text("Curve labels are auto-spaced; drag a label to position it.");
-                if self.show_labels
-                    && cgui::action_button(
-                        ui,
-                        self.label_layout.short_name(),
-                        "Group labels in a corner like squig.link, or keep each beside its curve",
-                    )
-                {
-                    self.label_layout = self.label_layout.next();
-                }
-                ui.checkbox(&mut self.inspect_mode, "Inspect")
-                    .on_hover_text("Read the exact dB value under the cursor at a frequency.");
-                #[cfg(debug_assertions)]
-                if self.debug_hooks {
-                    ui.checkbox(&mut self.debug_hooks, "Debug")
-                        .on_hover_text("Show egui widget diagnostics when hovering controls.");
-                }
-                cgui::cluster_rule(ui);
 
                 // ---- Actions (secondary: quiet text buttons) ----
-                if cgui::action_button(ui, "Recolor", "Cycle the measurement curve colors.") {
-                    self.color_offset = self.color_offset.wrapping_add(1);
-                }
-                if cgui::action_button(ui, "PNG", "Save a PNG of the current application window.") {
-                    self.screenshot_pending = true;
-                    self.screenshot_error = None;
-                }
-                if cgui::action_button(ui, "SVG", "Save the current graph as a scalable vector image.") {
-                    self.export_svg();
-                }
-                if cgui::action_button(ui, "Share", "Copy a shareable link to this view.") {
-                    self.share_window_open = true;
-                    self.share_message = None;
-                }
-                if cgui::action_button(
-                    ui,
-                    if self.tutorial_segment.is_some() {
-                        "Close guide"
-                    } else {
-                        "Guide"
-                    },
-                    "Learn how to read a frequency response curve.",
-                ) {
-                    self.tutorial_segment = self.tutorial_segment.map_or(Some(0), |_| None);
+                if density == ToolbarDensity::Full {
+                    self.toolbar_actions(ui);
+                } else {
+                    // Whatever this density dropped out of the row lives here,
+                    // so a narrow viewport hides controls without losing them.
+                    ui.menu_button("⋯", |ui| {
+                        if !density.shows_processing() {
+                            self.toolbar_processing(ui);
+                            ui.separator();
+                        }
+                        self.toolbar_actions(ui);
+                        if !density.shows_theme() {
+                            if cgui::action_button(
+                                ui,
+                                if self.dark_mode { "Light" } else { "Dark" },
+                                "Switch between the dark and light themes",
+                            ) {
+                                self.dark_mode = !self.dark_mode;
+                            }
+                        }
+                    })
+                    .response
+                    .on_hover_text("Controls that do not fit the toolbar at this width.");
                 }
                 cgui::cluster_rule(ui);
 
                 // ---- Appearance ----
-                if cgui::action_button(
-                    ui,
-                    if self.dark_mode { "Light" } else { "Dark" },
-                    "Switch between the dark and light themes",
-                ) {
-                    self.dark_mode = !self.dark_mode;
+                if density.shows_theme() {
+                    if cgui::action_button(
+                        ui,
+                        if self.dark_mode { "Light" } else { "Dark" },
+                        "Switch between the dark and light themes",
+                    ) {
+                        self.dark_mode = !self.dark_mode;
+                    }
+                    cgui::cluster_rule(ui);
                 }
-                cgui::cluster_rule(ui);
 
                 // ---- Panel visibility (primary toggles, at the end) ----
                 if ui
@@ -965,7 +1062,6 @@ impl CrinGraphApp {
     }
 
     fn selector_panel(&mut self, ui: &mut Ui) {
-        use squiglab::ui as cgui;
         if !self.show_measurements {
             return;
         }
