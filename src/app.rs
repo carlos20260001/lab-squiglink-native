@@ -13,6 +13,11 @@ const MAX_SMOOTH_LEVEL: usize = 12;
 const MANAGER_HEIGHT_BASE: f32 = 46.0;
 /// Vertical room one curve row occupies in the manager.
 const MANAGER_ROW_HEIGHT: f32 = 32.0;
+/// Row width below which the manager stacks a curve's controls under its
+/// identity instead of pressing everything into one line. The identity and
+/// control clusters measure ~800px together at the app's type scale, and a
+/// single line narrower than that clips the right-hand controls off the edge.
+const MANAGER_ROW_STACK_WIDTH: f32 = 800.0;
 /// Content width below which the layout stacks instead of running the tab column
 /// beside the graph. Matches the reference tool's transition, which sits between
 /// 900 and 1100px.
@@ -1197,7 +1202,6 @@ impl CrinGraphApp {
         if !self.show_manager {
             return;
         }
-        let palette = squiglab::theme::Palette::resolve(ui.visuals().dark_mode);
         // The graph no longer fills the window, so the manager can reclaim the
         // space it freed: one row per active curve, no scrolling, and stop
         // growing once every curve is visible. The panel stays resizable, and a
@@ -1227,6 +1231,9 @@ impl CrinGraphApp {
                 }
                 egui::ScrollArea::vertical().show(ui, |ui| {
                     let mut removals = Vec::new();
+                    // A row too narrow for identity and controls side by side
+                    // stacks them instead of clipping the controls off the edge.
+                    let stack_rows = ui.available_width() < MANAGER_ROW_STACK_WIDTH;
                     for index in self
                         .active
                         .iter()
@@ -1235,169 +1242,19 @@ impl CrinGraphApp {
                         .collect::<Vec<_>>()
                     {
                         let group = self.groups[index].clone();
-                        let color = self.curve_color(index);
                         let pinned = self.pinned.contains(&index);
                         let hidden = self.hidden.contains(&index);
                         let baseline = self.baseline == Some(index);
-
-                        ui.horizontal(|ui| {
-                            ui.spacing_mut().item_spacing.x = cgui::Spacing::COMPACT;
-
-                            // --- identity, left ---
-                            let (swatch, _) = ui.allocate_exact_size(
-                                egui::vec2(10.0, 10.0),
-                                egui::Sense::hover(),
-                            );
-                            ui.painter().circle_filled(swatch.center(), 5.0, color);
-                            if group.target {
-                                ui.label(
-                                    egui::RichText::new(format!("Target: {}", group.name))
-                                        .strong()
-                                        .size(squiglab::theme::TypeStep::Body.size())
-                                        .color(palette.text_secondary),
-                                );
-                            } else {
-                                ui.label(
-                                    egui::RichText::new(&group.name)
-                                        .strong()
-                                        .size(squiglab::theme::TypeStep::Body.size())
-                                        .color(color),
-                                );
-                            }
-                            if !group.brand.is_empty() {
-                                ui.label(
-                                    egui::RichText::new(&group.brand)
-                                        .size(squiglab::theme::TypeStep::Micro.size())
-                                        .color(palette.text_tertiary),
-                                );
-                            }
-
-                            // Variant chooser, when the model has more than one.
-                            if group.variants.len() > 1 {
-                                let mut selected_variant = self
-                                    .variant_choices
-                                    .get(&index)
-                                    .copied()
-                                    .unwrap_or(0)
-                                    .min(group.variants.len() - 1);
-                                egui::ComboBox::from_id_salt(("variant", index))
-                                    .selected_text(&group.variants[selected_variant].name)
-                                    .show_ui(ui, |ui| {
-                                        for (variant_index, variant) in
-                                            group.variants.iter().enumerate()
-                                        {
-                                            ui.selectable_value(
-                                                &mut selected_variant,
-                                                variant_index,
-                                                &variant.name,
-                                            );
-                                        }
-                                    });
-                                if self.variant_choices.get(&index).copied().unwrap_or(0)
-                                    != selected_variant
-                                {
-                                    self.variant_choices.insert(index, selected_variant);
-                                    self.dirty = true;
-                                }
-                            }
-                            if !group.target {
-                                if cgui::action_button(
-                                    ui,
-                                    "Recolor",
-                                    "Cycle this curve's color",
-                                ) {
-                                    let offset =
-                                        self.curve_color_offsets.entry(group_key(&group)).or_default();
-                                    *offset = offset.wrapping_add(1);
-                                }
-                            }
-
-                            // --- controls, right-aligned as one cluster ---
-                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                let remove = ui.add_enabled(
-                                    !pinned,
-                                    egui::Button::new("Remove"),
-                                );
-                                let remove = if pinned {
-                                    remove.on_hover_text("Unpin this curve before removing it.")
-                                } else {
-                                    remove
-                                };
-                                if remove.clicked() {
-                                    removals.push(index);
-                                }
-                                let mut hidden = hidden;
-                                if ui.checkbox(&mut hidden, "Hide").changed() {
-                                    if hidden {
-                                        self.hidden.insert(index);
-                                    } else {
-                                        self.hidden.remove(&index);
-                                    }
-                                    self.dirty = true;
-                                }
-                                let mut pinned = pinned;
-                                if ui.checkbox(&mut pinned, "Pin").changed() {
-                                    if pinned {
-                                        self.pinned.insert(index);
-                                    } else {
-                                        self.pinned.remove(&index);
-                                    }
-                                }
-                                let mut baseline = baseline;
-                                if ui.checkbox(&mut baseline, "Baseline").changed() {
-                                    self.baseline = baseline.then_some(index);
-                                    self.dirty = true;
-                                }
-                                let offset = self.offsets.entry(index).or_default();
-                                if ui
-                                    .add(egui::DragValue::new(offset).speed(0.1).suffix(" dB"))
-                                    .changed()
-                                {
-                                    self.dirty = true;
-                                }
-                                if !group.target {
-                                    // Listed high-to-low because the cluster is laid out
-                                    // right-to-left: the first entry ends up
-                                    // leftmost, so this reads L, R, Both, Avg.
-                                    for (mode, label) in [
-                                        (ChannelMode::Average, "Avg"),
-                                        (ChannelMode::Both, "Both"),
-                                        (ChannelMode::Right, "R"),
-                                        (ChannelMode::Left, "L"),
-                                    ] {
-                                        if ui
-                                            .selectable_label(
-                                                self.channel_modes
-                                                    .get(&index)
-                                                    .copied()
-                                                    .unwrap_or_default()
-                                                    == mode,
-                                                label,
-                                            )
-                                            .clicked()
-                                        {
-                                            self.channel_modes.insert(index, mode);
-                                            self.dirty = true;
-                                        }
-                                    }
-                                    let variant_index = self
-                                        .variant_choices
-                                        .get(&index)
-                                        .copied()
-                                        .unwrap_or(0)
-                                        .min(group.variants.len() - 1);
-                                    if group_has_imbalance(
-                                        &self.curves,
-                                        &group.variants[variant_index].curve_indices,
-                                    ) {
-                                        ui.colored_label(palette.warning, "!")
-                                            .on_hover_text(
-                                                "Left and right channels differ beyond the imbalance threshold.",
-                                            );
-                                    }
-                                }
-                            });
-                        });
+                        self.manager_row(
+                            ui,
+                            index,
+                            &group,
+                            pinned,
+                            hidden,
+                            baseline,
+                            stack_rows,
+                            &mut removals,
+                        );
                         ui.separator();
                     }
                     for index in removals {
@@ -1405,6 +1262,187 @@ impl CrinGraphApp {
                     }
                 });
             });
+    }
+
+    /// One curve row in the manager: identity on the first line, and the curve's
+    /// controls either right-aligned beside it or stacked beneath it when the
+    /// panel is too narrow to hold both, which is what the reference tool does
+    /// on its compact viewport.
+    fn manager_row(
+        &mut self,
+        ui: &mut Ui,
+        index: usize,
+        group: &MeasurementGroup,
+        pinned: bool,
+        hidden: bool,
+        baseline: bool,
+        stack_controls: bool,
+        removals: &mut Vec<usize>,
+    ) {
+        use squiglab::ui as cgui;
+        let palette = squiglab::theme::Palette::resolve(ui.visuals().dark_mode);
+        let color = self.curve_color(index);
+        ui.vertical(|ui| {
+            // --- identity, left ---
+            ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = cgui::Spacing::COMPACT;
+                let (swatch, _) =
+                    ui.allocate_exact_size(egui::vec2(10.0, 10.0), egui::Sense::hover());
+                ui.painter().circle_filled(swatch.center(), 5.0, color);
+                if group.target {
+                    ui.label(
+                        egui::RichText::new(format!("Target: {}", group.name))
+                            .strong()
+                            .size(squiglab::theme::TypeStep::Body.size())
+                            .color(palette.text_secondary),
+                    );
+                } else {
+                    ui.label(
+                        egui::RichText::new(&group.name)
+                            .strong()
+                            .size(squiglab::theme::TypeStep::Body.size())
+                            .color(color),
+                    );
+                }
+                if !group.brand.is_empty() {
+                    ui.label(
+                        egui::RichText::new(&group.brand)
+                            .size(squiglab::theme::TypeStep::Micro.size())
+                            .color(palette.text_tertiary),
+                    );
+                }
+
+                // Variant chooser, when the model has more than one.
+                if group.variants.len() > 1 {
+                    let mut selected_variant = self
+                        .variant_choices
+                        .get(&index)
+                        .copied()
+                        .unwrap_or(0)
+                        .min(group.variants.len() - 1);
+                    egui::ComboBox::from_id_salt(("variant", index))
+                        .selected_text(&group.variants[selected_variant].name)
+                        .show_ui(ui, |ui| {
+                            for (variant_index, variant) in group.variants.iter().enumerate() {
+                                ui.selectable_value(
+                                    &mut selected_variant,
+                                    variant_index,
+                                    &variant.name,
+                                );
+                            }
+                        });
+                    if self.variant_choices.get(&index).copied().unwrap_or(0) != selected_variant {
+                        self.variant_choices.insert(index, selected_variant);
+                        self.dirty = true;
+                    }
+                }
+                if !group.target {
+                    if cgui::action_button(ui, "Recolor", "Cycle this curve's color") {
+                        let offset = self
+                            .curve_color_offsets
+                            .entry(group_key(group))
+                            .or_default();
+                        *offset = offset.wrapping_add(1);
+                    }
+                }
+            });
+
+            // --- controls, as one cluster ---
+            // A wide row right-aligns the cluster against the identity; a narrow
+            // row wraps it onto its own line below, so every control stays
+            // reachable without the row growing taller than the panel allows.
+            let layout = if stack_controls {
+                egui::Layout::left_to_right(egui::Align::Center).with_main_wrap(true)
+            } else {
+                egui::Layout::right_to_left(egui::Align::Center)
+            };
+            ui.with_layout(layout, |ui| {
+                ui.spacing_mut().item_spacing.x = cgui::Spacing::COMPACT;
+                let remove = ui.add_enabled(!pinned, egui::Button::new("Remove"));
+                let remove = if pinned {
+                    remove.on_hover_text("Unpin this curve before removing it.")
+                } else {
+                    remove
+                };
+                if remove.clicked() {
+                    removals.push(index);
+                }
+                let mut hidden = hidden;
+                if ui.checkbox(&mut hidden, "Hide").changed() {
+                    if hidden {
+                        self.hidden.insert(index);
+                    } else {
+                        self.hidden.remove(&index);
+                    }
+                    self.dirty = true;
+                }
+                let mut pinned = pinned;
+                if ui.checkbox(&mut pinned, "Pin").changed() {
+                    if pinned {
+                        self.pinned.insert(index);
+                    } else {
+                        self.pinned.remove(&index);
+                    }
+                }
+                let mut baseline = baseline;
+                if ui.checkbox(&mut baseline, "Baseline").changed() {
+                    self.baseline = baseline.then_some(index);
+                    self.dirty = true;
+                }
+                let offset = self.offsets.entry(index).or_default();
+                if ui
+                    .add(egui::DragValue::new(offset).speed(0.1).suffix(" dB"))
+                    .changed()
+                {
+                    self.dirty = true;
+                }
+                if !group.target {
+                    // Channel labels are listed in reading order; the
+                    // right-aligned cluster reverses them, because that layout
+                    // lays items out right-to-left.
+                    let mut channel_modes = [
+                        (ChannelMode::Left, "L"),
+                        (ChannelMode::Right, "R"),
+                        (ChannelMode::Both, "Both"),
+                        (ChannelMode::Average, "Avg"),
+                    ];
+                    if !stack_controls {
+                        channel_modes.reverse();
+                    }
+                    for (mode, label) in channel_modes {
+                        if ui
+                            .selectable_label(
+                                self.channel_modes
+                                    .get(&index)
+                                    .copied()
+                                    .unwrap_or_default()
+                                    == mode,
+                                label,
+                            )
+                            .clicked()
+                        {
+                            self.channel_modes.insert(index, mode);
+                            self.dirty = true;
+                        }
+                    }
+                    let variant_index = self
+                        .variant_choices
+                        .get(&index)
+                        .copied()
+                        .unwrap_or(0)
+                        .min(group.variants.len() - 1);
+                    if group_has_imbalance(
+                        &self.curves,
+                        &group.variants[variant_index].curve_indices,
+                    ) {
+                        ui.colored_label(palette.warning, "!")
+                            .on_hover_text(
+                                "Left and right channels differ beyond the imbalance threshold.",
+                            );
+                    }
+                }
+            });
+        });
     }
 
     fn central_panel(&mut self, ui: &mut Ui) {
