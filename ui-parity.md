@@ -192,12 +192,16 @@ Both formats are specified from live captures; implement against these exactly.
 
 - [x] **Tone generator.** One continuous oscillator, sine, log-mapped
       frequency slider, 50 ms glide on drag, 10 ms fade on start and stop. Not
-      an automated sweep, matching the reference. **No new dependency**: the
-      samples are generated in `src/audio.rs` and played through the PipeWire
-      daemon via `pw-cat`, the PipeWire command line player, rather than
-      through cpal or ALSA. Commit `a4d9d01`.
+      an automated sweep, matching the reference. The samples are generated in
+      `src/audio.rs` and carried to a speaker by a backend per platform:
+      `libpipewire` on Linux — the server Linux actually uses, not ALSA and not
+      a helper process — and cpal to CoreAudio and WASAPI on macOS and Windows.
+      Commits `a4d9d01` and `f3c23ed`.
 - [x] **Pink noise.** Kellet's economy pink filter, behind a Play / Stop
-      button and the same A / B slots. Commit `a4d9d01`.
+      button and the same A / B slots. Commits `a4d9d01` and `f3c23ed`.
+- [x] **White noise** as well, beside the pink: it is the signal the pink
+      filter is fed from, and the only honest way to hear what that filter does.
+      Commits `a4d9d01` and `f3c23ed`.
 - [x] **Music playback** with a `Compare A | B` toggle, `+ Add Music`, and a
       platform search shortcut. Depends on an audio dependency. — **Declined.**
       Streaming from a music platform is a website feature with no desktop
@@ -205,7 +209,8 @@ Both formats are specified from live captures; implement against these exactly.
       one; the equalizer's own value does not rest on it. Declined here rather
       than deferred.
 - [x] **Compare A/B** applies to the whole sound-tools section, not one source:
-      two whole settings slots the toggle switches between. Commit `a4d9d01`.
+      two whole settings slots the toggle switches between. Commits `a4d9d01`
+      and `f3c23ed`.
 
 ## P6 — Upload and provenance
 
