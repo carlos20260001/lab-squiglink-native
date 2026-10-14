@@ -1,5 +1,4 @@
-//! Sound tools: a continuous tone generator and pink noise, played through
-//! PipeWire on Linux.
+//! Sound tools: a continuous tone generator, pink noise, and white noise.
 //!
 //! The reference tool drives a Web Audio `OscillatorNode`: one continuous
 //! oscillator whose pitch is dragged along a log-mapped frequency slider, not
@@ -7,19 +6,28 @@
 //! [`Generator`] renders — the generator is plain sample arithmetic,
 //! independent of where the samples go.
 //!
-//! Output goes to the PipeWire daemon through `pw-cat`, the PipeWire command
-//! line player, which reads raw samples from its standard input. Talking to
-//! the daemon that way keeps the application free of a build-time dependency
-//! on `libpipewire` and off ALSA, and it is the same daemon a native client
-//! would connect to. A backend built on `libpipewire` can replace it later;
-//! [`Generator`] is the whole of what such a backend would need.
+//! Three backends carry those samples to a speaker:
+//!
+//! - **Linux** speaks to the PipeWire daemon directly through `libpipewire`
+//!   ([`pipewire`]), because that is the audio server Linux actually uses and
+//!   the one asked for; it is not ALSA, and there is no helper process in
+//!   between.
+//! - **macOS and Windows** go through cpal ([`cpal_sink`]), which reaches
+//!   CoreAudio and WASAPI respectively.
+//! - Everywhere else, [`Player::start`] reports that sound is not wired up
+//!   rather than failing silently.
 //!
 //! Everything in the generator is deterministic and testable without an audio
 //! device: the tests below check the pitch, the glide, and the noise's
-//! spectrum, not that a sound came out.
+//! spectrum, not that a sound came out. The backends are tested against a real
+//! daemon where one is present — see `tests/pipewire_playback.rs`.
 
-use std::io::Write;
-use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+pub mod cpal_sink;
+#[cfg(target_os = "linux")]
+pub mod pipewire;
+#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+use std::sync::mpsc::{Receiver, Sender};
 
 /// The sample rate the generators run at. It matches the equalizer DSP's rate,
 /// so a tone and the curve it is auditioned against sit on the same grid.
@@ -29,9 +37,6 @@ pub const SAMPLE_RATE: u32 = 48_000;
 /// short enough that a drag of the frequency slider reaches the speaker
 /// promptly.
 pub const BUFFER_FRAMES: usize = 512;
-
-/// The PipeWire command line player this module streams to.
-const PW_CAT: &str = "pw-cat";
 
 /// How long a tone takes to reach full volume when it starts or stops, in
 /// seconds. Without it the output clicks on every play and stop.
@@ -52,6 +57,10 @@ pub enum Source {
     },
     /// Pink noise: equal energy per octave, the reference's noise source.
     PinkNoise,
+    /// White noise: equal energy per hertz. Not in the reference's sound
+    /// tools, but the generator that pink noise is filtered from, and the
+    /// honest way to hear what the pink filter is doing.
+    WhiteNoise,
 }
 
 impl Source {
@@ -60,6 +69,7 @@ impl Source {
         match self {
             Self::Tone { .. } => "Tone generator",
             Self::PinkNoise => "Pink noise",
+            Self::WhiteNoise => "White noise",
         }
     }
 
@@ -103,6 +113,9 @@ pub struct Generator {
     /// The gain envelope, smoothed so starting and stopping do not click.
     gain: f32,
     pink: PinkNoise,
+    /// The white noise the pink filter is fed from, kept so the two sources
+    /// share one sequence rather than sounding like different noises.
+    white: White,
     /// Per-sample smoothing coefficients, derived from the time constants.
     glide_coefficient: f64,
     fade_coefficient: f32,
@@ -124,6 +137,7 @@ impl Generator {
             pitch: (1000.0_f64).ln(),
             gain: 0.0,
             pink: PinkNoise::new(seed),
+            white: White::new(seed),
             glide_coefficient: smoothing(sample_rate, GLIDE_SECONDS),
             fade_coefficient: smoothing(sample_rate, f64::from(FADE_SECONDS)) as f32,
         }
@@ -154,6 +168,7 @@ impl Generator {
         let sample = match settings.source {
             Source::Tone { .. } => (std::f64::consts::TAU * self.phase).sin() as f32,
             Source::PinkNoise => self.pink.next_sample(),
+            Source::WhiteNoise => self.white.next_sample(),
         };
         (sample * volume).clamp(-1.0, 1.0)
     }
@@ -164,7 +179,7 @@ impl Generator {
             Source::Tone { freq } => freq.clamp(20.0, 20_000.0).ln(),
             // Noise has no pitch, but the state is kept moving so a switch back
             // to a tone resumes rather than gliding.
-            Source::PinkNoise => self.pitch,
+            Source::PinkNoise | Source::WhiteNoise => self.pitch,
         };
         self.pitch += (target - self.pitch) * self.glide_coefficient;
         let increment = self.pitch.exp() / self.sample_rate;
@@ -264,85 +279,144 @@ impl White {
 /// follower passes the audible band untouched and removes only the constant.
 const DC_BLOCK_COEFFICIENT: f32 = 1.0 / 4_000.0;
 
+/// A single-producer, single-consumer ring of interleaved stereo samples,
+/// shared between the generator thread that fills it and the audio callback
+/// that drains it.
+///
+/// The two ends are different threads, and the consumer is a real-time one that
+/// must not block or allocate. So the ring is a fixed allocation, both ends
+/// advance their own index with atomics, and there is no lock anywhere.
+///
+/// Only one thread ever writes `write` and one ever writes `read`, so the
+/// indices do not need to be a pair of atomics guarding each other; the
+/// `Acquire`/`Release` pair on each is what makes the samples behind an index
+/// visible to the reader.
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+struct SampleRing {
+    buffer: std::sync::Arc<Vec<f32>>,
+    /// Index the producer writes next. Only the producer advances this.
+    write: std::sync::atomic::AtomicUsize,
+    /// Index the consumer reads next. Only the consumer advances this.
+    read: std::sync::atomic::AtomicUsize,
+    capacity: usize,
+}
+
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+impl SampleRing {
+    /// A ring holding `frames` stereo frames.
+    fn new(frames: usize) -> Self {
+        assert!(frames > 0, "a ring needs room for at least one frame");
+        Self {
+            buffer: std::sync::Arc::new(vec![0.0; frames * 2]),
+            write: std::sync::atomic::AtomicUsize::new(0),
+            read: std::sync::atomic::AtomicUsize::new(0),
+            capacity: frames,
+        }
+    }
+
+    /// How many frames are waiting to be read.
+    fn pending(&self) -> usize {
+        self.write
+            .load(std::sync::atomic::Ordering::Acquire)
+            .wrapping_sub(self.read.load(std::sync::atomic::Ordering::Acquire))
+    }
+
+    /// The producing end: hand over a rendered buffer.
+    ///
+    /// When the ring is full this sleeps until the consumer has caught up,
+    /// which is what paces the generator to the device's rate. Dropping samples
+    /// instead would click, and spinning on `yield_now` would burn a core for
+    /// as long as the tone plays.
+    fn push(&self, samples: &[f32]) {
+        use std::sync::atomic::Ordering;
+        let frames = samples.len() / 2;
+        assert!(
+            frames <= self.capacity,
+            "a push larger than the ring would overwrite itself"
+        );
+        while self.pending() + frames > self.capacity {
+            std::thread::sleep(std::time::Duration::from_micros(200));
+        }
+        let write = self.write.load(Ordering::Relaxed);
+        for frame in 0..frames {
+            let index = (write + frame) % self.capacity * 2;
+            // These are the only writes to the ring's storage. The consumer
+            // only reads a slot after seeing the write index pass it, which
+            // the release below orders, so a plain store is enough for the
+            // values themselves.
+            unsafe {
+                *self.buffer.as_ptr().cast_mut().add(index) = samples[frame * 2];
+                *self.buffer.as_ptr().cast_mut().add(index + 1) = samples[frame * 2 + 1];
+            }
+        }
+        self.write
+            .store(write.wrapping_add(frames), Ordering::Release);
+    }
+
+    /// The consuming end: copy up to `out.len() / 2` pending frames into
+    /// `out`, oldest first, and return how many frames were copied. Anything
+    /// the ring does not have is left as silence.
+    ///
+    /// Safe to call from a real-time thread: it only reads two atomics and
+    /// copies, and never waits.
+    fn drain(&self, out: &mut [f32]) -> usize {
+        use std::sync::atomic::Ordering;
+        let write = self.write.load(Ordering::Acquire);
+        let read = self.read.load(Ordering::Relaxed);
+        let frames = write
+            .wrapping_sub(read)
+            .min(out.len() / 2)
+            .min(self.capacity);
+        for frame in 0..frames {
+            let index = (read + frame) % self.capacity * 2;
+            out[frame * 2] = self.buffer[index];
+            out[frame * 2 + 1] = self.buffer[index + 1];
+        }
+        self.read
+            .store(read.wrapping_add(frames), Ordering::Release);
+        frames
+    }
+}
+
 /// What the player thread is told to do.
 enum Command {
     Settings(Settings),
     Stop,
 }
 
-/// A playing generator, streamed to the PipeWire daemon on a background
-/// thread. Dropping it stops the sound.
+/// A playing generator, streamed to the audio device on a background thread.
+/// Dropping it stops the sound.
 pub struct Player {
     commands: Option<Sender<Command>>,
     reports: Receiver<String>,
     thread: Option<std::thread::JoinHandle<()>>,
+    /// Signalled when the backend thread has finished, so `stop` can tell a
+    /// prompt exit from one that had to be forced.
+    done: Option<Receiver<()>>,
+    /// Breaks a backend whose stream has stopped calling back — a device that
+    /// disappeared, say — where the ordinary stop would otherwise wait for a
+    /// callback that will never come.
+    force_quit: Option<Box<dyn Fn() + Send + Sync>>,
 }
 
 impl Player {
     /// Start playing, and report why not if the audio path is unavailable.
     #[cfg(target_os = "linux")]
     pub fn start(settings: Settings) -> Result<Self, String> {
-        let mut child = std::process::Command::new(PW_CAT)
-            .args([
-                "--playback",
-                "--raw",
-                "--format",
-                "f32",
-                "--rate",
-                &SAMPLE_RATE.to_string(),
-                "--channels",
-                "2",
-                "-",
-            ])
-            .stdin(std::process::Stdio::piped())
-            .spawn()
-            .map_err(|error| format!("Unable to start {PW_CAT}, the PipeWire player: {error}"))?;
-        let mut stdin = child
-            .stdin
-            .take()
-            .ok_or_else(|| format!("{PW_CAT} did not open an input stream"))?;
-        let (commands, receiver) = mpsc::channel();
-        let (reports_out, reports) = mpsc::channel();
-        let thread = std::thread::spawn(move || {
-            let mut generator = Generator::new(SAMPLE_RATE);
-            let mut settings = settings;
-            let mut buffer = vec![0.0_f32; BUFFER_FRAMES * 2];
-            let mut bytes = vec![0_u8; BUFFER_FRAMES * 2 * size_of::<f32>()];
-            'play: loop {
-                loop {
-                    match receiver.try_recv() {
-                        Ok(Command::Settings(next)) => settings = next,
-                        Ok(Command::Stop) | Err(TryRecvError::Disconnected) => break 'play,
-                        Err(TryRecvError::Empty) => break,
-                    }
-                }
-                generator.render(&mut buffer, &settings);
-                for (chunk, sample) in bytes.as_chunks_mut::<4>().0.iter_mut().zip(&buffer) {
-                    chunk.copy_from_slice(&sample.to_le_bytes());
-                }
-                if let Err(error) = stdin.write_all(&bytes).and_then(|()| stdin.flush()) {
-                    // A closed pipe means the daemon went away, which is the
-                    // usual reason a stream stops: no device, or the session
-                    // ended.
-                    let _ = reports_out.send(format!("PipeWire stopped the stream: {error}"));
-                    break;
-                }
-            }
-            drop(stdin);
-            let _ = child.wait();
-        });
-        Ok(Self {
-            commands: Some(commands),
-            reports,
-            thread: Some(thread),
-        })
+        crate::audio::pipewire::start(settings)
     }
 
-    /// Playback is not implemented on this platform yet: the tone generator and
-    /// pink noise render, but only the Linux PipeWire path is wired up.
-    #[cfg(not(target_os = "linux"))]
+    /// Start playing on macOS or Windows, through CoreAudio or WASAPI.
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    pub fn start(settings: Settings) -> Result<Self, String> {
+        crate::audio::cpal_sink::start(settings)
+    }
+
+    /// Playback is not implemented on this platform: the generators render, but
+    /// only Linux, macOS, and Windows have a device backend.
+    #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
     pub fn start(_settings: Settings) -> Result<Self, String> {
-        Err("Sound is only wired up on Linux, through PipeWire.".to_owned())
+        Err("Sound is not wired up on this platform yet.".to_owned())
     }
 
     /// Change what is playing. A new frequency is glided to rather than
@@ -359,13 +433,32 @@ impl Player {
     }
 
     /// Stop playing and wait for the stream to close.
+    ///
+    /// A backend that has already gone quiet is nudged rather than waited on:
+    /// if the thread has not finished shortly after the stop request, the
+    /// backend's force-quit hook is called, which is what a lost device would
+    /// otherwise turn into a frozen interface.
     pub fn stop(&mut self) {
         if let Some(commands) = self.commands.take() {
             let _ = commands.send(Command::Stop);
         }
         if let Some(thread) = self.thread.take() {
+            let finished = match self.done.take() {
+                Some(done) => done
+                    .recv_timeout(std::time::Duration::from_millis(500))
+                    .is_ok(),
+                // No completion signal means the backend is expected to stop on
+                // its own, as cpal does.
+                None => true,
+            };
+            if !finished {
+                if let Some(force_quit) = self.force_quit.take() {
+                    force_quit();
+                }
+            }
             let _ = thread.join();
         }
+        self.force_quit = None;
     }
 }
 
@@ -590,6 +683,32 @@ mod tests {
         assert_ne!(a, c);
         // A zero seed must not be a fixed point, which would emit silence.
         assert!((0..1000).any(|_| White::new(0).next_sample() != 0.0));
+    }
+
+    #[test]
+    fn white_noise_is_flat_across_the_spectrum() {
+        // The counterpart to the pink test: white has the same energy at every
+        // frequency, so its high-to-low split matches the reference it is
+        // generated against. This is what makes it useful as the reference for
+        // hearing what the pink filter does.
+        let settings = Settings {
+            source: Source::WhiteNoise,
+            volume: 1.0,
+        };
+        let mut generator = Generator::seeded(SAMPLE_RATE, 20_240_102);
+        let buffer = settled(&mut generator, &settings);
+        let left: Vec<f32> = buffer.iter().step_by(2).copied().collect();
+        let mut white = White::new(20_240_102);
+        let white: Vec<f32> = (0..left.len()).map(|_| white.next_sample()).collect();
+        let corner = 1000.0;
+        let generated = high_to_low_energy(&left, corner);
+        let reference = high_to_low_energy(&white, corner);
+        // The generated white is the same signal the reference describes, so
+        // the two splits agree closely; pink, by contrast, is far lower.
+        assert!(
+            (generated / reference - 1.0).abs() < 0.35,
+            "white noise tilted away from flat: {generated} against {reference}"
+        );
     }
 
     #[test]

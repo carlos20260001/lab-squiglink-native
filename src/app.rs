@@ -1973,20 +1973,23 @@ impl CrinGraphApp {
         // Edited on a copy, so the panel does not hold a borrow across the
         // player's own state.
         let mut settings = self.sound_settings[self.sound_slot];
-        let mut choice = usize::from(!settings.source.is_tone());
+        let mut choice = match settings.source {
+            Source::Tone { .. } => 0,
+            Source::PinkNoise => 1,
+            Source::WhiteNoise => 2,
+        };
         if cgui::segmented(
             ui,
-            &[(0usize, "Tone generator"), (1usize, "Pink noise")],
+            &[(0usize, "Tone"), (1usize, "Pink"), (2usize, "White")],
             &mut choice,
-            None,
+            Some("The generator to audition"),
         ) {
-            settings.source = match choice {
+            settings.source = match (choice, settings.source) {
                 // Keep the frequency the tone was left at when switching back.
-                0 => match settings.source {
-                    Source::Tone { freq } => Source::Tone { freq },
-                    Source::PinkNoise => Source::Tone { freq: 1000.0 },
-                },
-                _ => Source::PinkNoise,
+                (0, Source::Tone { freq }) => Source::Tone { freq },
+                (0, _) => Source::Tone { freq: 1000.0 },
+                (1, _) => Source::PinkNoise,
+                _ => Source::WhiteNoise,
             };
         }
         if let Source::Tone { freq } = &mut settings.source {
