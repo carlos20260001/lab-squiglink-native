@@ -393,6 +393,28 @@ pub fn normalize_by_hz(channels: &[&[FRPoint]], target_hz: f32) -> Result<f32, P
     Ok((60.0 - 20.0 * amplitude_mean.log10()) as f32)
 }
 
+/// A curve's dB at a frequency, linearly interpolated in log frequency.
+///
+/// Outside the curve's measured range the nearest end value is held rather than
+/// extrapolated: a rig calibration that stops at 2 kHz says nothing about
+/// 10 kHz, and inventing a slope there would show up as a correction nobody
+/// measured.
+pub fn interpolate_db(points: &[FRPoint], hz: f32) -> Option<f32> {
+    let first = points.first()?;
+    let last = points.last()?;
+    if hz <= first.hz {
+        return Some(first.db);
+    }
+    if hz >= last.hz {
+        return Some(last.db);
+    }
+    let upper = points.partition_point(|point| point.hz < hz);
+    let left = points.get(upper.checked_sub(1)?)?;
+    let right = points.get(upper)?;
+    let fraction = (hz.ln() - left.hz.ln()) / (right.hz.ln() - left.hz.ln());
+    Some(left.db + fraction * (right.db - left.db))
+}
+
 /// Smooth dB values using the original graph's log-frequency LDL algorithm.
 pub fn smooth(
     curve: &[FRPoint],

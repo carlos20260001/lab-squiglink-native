@@ -1,6 +1,7 @@
 pub mod audio;
 pub mod color;
 pub mod data;
+pub mod delta;
 pub mod equalizer;
 pub mod graph;
 pub mod processing;

@@ -3406,27 +3406,11 @@ fn apply_baseline(curves: &mut [DisplayCurve], baseline_group: usize) -> anyhow:
     let baseline = processing::average_curves(&baseline_channels)?;
     for curve in curves {
         for point in &mut curve.points {
-            point.db -= interpolate_db(&baseline, point.hz)
+            point.db -= processing::interpolate_db(&baseline, point.hz)
                 .ok_or_else(|| anyhow::anyhow!("unable to sample the baseline curve"))?;
         }
     }
     Ok(())
-}
-
-fn interpolate_db(points: &[FRPoint], hz: f32) -> Option<f32> {
-    let first = points.first()?;
-    let last = points.last()?;
-    if hz <= first.hz {
-        return Some(first.db);
-    }
-    if hz >= last.hz {
-        return Some(last.db);
-    }
-    let upper = points.partition_point(|point| point.hz < hz);
-    let left = points.get(upper.checked_sub(1)?)?;
-    let right = points.get(upper)?;
-    let fraction = (hz.ln() - left.hz.ln()) / (right.hz.ln() - left.hz.ln());
-    Some(left.db + fraction * (right.db - left.db))
 }
 
 fn target_category(target: &str) -> &'static str {
@@ -3579,11 +3563,11 @@ fn prepare_curve(
 mod tests {
     use super::{
         apply_baseline, build_groups, decode_share_uri, encode_share_uri, group_has_imbalance,
-        initialize_app_config_from, interpolate_db, matches_search, prepare_channels,
-        read_app_config_from, read_preferences_from, resolve_measurement_dir, target_category,
-        validate_app_config, write_preferences_to, AppConfig, ChannelMode, CrinGraphApp,
-        CurveSource, DisplayCurve, Preferences, SavedGroup, MAX_EQ_ROWS, MAX_SHARE_URI_LENGTH,
-        MAX_SMOOTH_LEVEL, TUTORIAL_SEGMENTS,
+        initialize_app_config_from, matches_search, prepare_channels, read_app_config_from,
+        read_preferences_from, resolve_measurement_dir, target_category, validate_app_config,
+        write_preferences_to, AppConfig, ChannelMode, CrinGraphApp, CurveSource, DisplayCurve,
+        Preferences, SavedGroup, MAX_EQ_ROWS, MAX_SHARE_URI_LENGTH, MAX_SMOOTH_LEVEL,
+        TUTORIAL_SEGMENTS,
     };
     use squiglab::data::{CurveInfo, FRPoint};
     use std::collections::BTreeMap;
@@ -4759,9 +4743,18 @@ smoothing_octaves = 3
                 db: 20.0,
             },
         ];
-        assert_eq!(interpolate_db(&points, 10.0), Some(10.0));
-        assert_eq!(interpolate_db(&points, 10000.0), Some(20.0));
-        assert!((interpolate_db(&points, 316.22778).unwrap() - 15.0).abs() < 0.001);
+        assert_eq!(
+            squiglab::processing::interpolate_db(&points, 10.0),
+            Some(10.0)
+        );
+        assert_eq!(
+            squiglab::processing::interpolate_db(&points, 10000.0),
+            Some(20.0)
+        );
+        assert!(
+            (squiglab::processing::interpolate_db(&points, 316.22778).unwrap() - 15.0).abs()
+                < 0.001
+        );
     }
 
     #[test]
