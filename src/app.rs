@@ -2,6 +2,7 @@ use egui::{Color32, Context, RichText, Ui};
 use serde::{Deserialize, Serialize};
 use squiglab::color::target_color;
 use squiglab::data::{self, CurveInfo, FRPoint, PhoneBook};
+use squiglab::equalizer;
 use squiglab::graph::{export_svg as render_svg, GraphCanvas, PlotCurve, ZoomRegion};
 use squiglab::processing::{self, NormParams, SmoothingParams};
 use std::collections::{BTreeMap, BTreeSet};
@@ -9,6 +10,13 @@ use std::path::{Path, PathBuf};
 
 const MAX_ACTIVE_CURVES: usize = 8;
 const MAX_SMOOTH_LEVEL: usize = 12;
+/// Most filters one curve's equalizer can hold. The reference panel shows five
+/// rows and AutoEQ produces at most a handful more; the bound keeps a corrupt
+/// preferences file from growing without limit.
+const MAX_EQ_ROWS: usize = 20;
+/// Palette slots between a curve and its EQ curve, so the two lines stay
+/// distinguishable without introducing a hue the graph palette does not have.
+const EQ_CURVE_COLOR_SPREAD: usize = 4;
 /// Height of the manager panel's header and padding before any curve rows.
 const MANAGER_HEIGHT_BASE: f32 = 46.0;
 /// Vertical room one curve row occupies in the manager.
@@ -142,11 +150,37 @@ const FREQUENCY_BANDS: [squiglab::graph::FrequencyBand; 7] = {
     ]
 };
 
+/// Where a displayed curve came from. The reference tool renders an
+/// equalizer's result as a synthetic curve added on the same path as a
+/// measurement, back-linked to the parent so normalization and baseline
+/// propagate to both. This is that back-link: an EQ curve names its parent
+/// group, which owns the normalization both share.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum CurveSource {
+    /// A curve loaded from the measurement database.
+    Measurement,
+    /// An equalizer applied to a measurement group's curve.
+    Equalizer,
+}
+
 struct DisplayCurve {
+    /// The measurement group this curve belongs to: the group itself for a
+    /// measurement, its parent for an EQ curve.
     group_index: usize,
+    source: CurveSource,
     label: String,
     points: Vec<FRPoint>,
     target: bool,
+}
+
+/// One row of a curve's equalizer: a filter and whether the row is switched
+/// on. The reference tool keeps a disabled row in place rather than deleting
+/// it, so a filter can be toggled back on without re-entering it.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+struct EqRow {
+    #[serde(flatten)]
+    filter: equalizer::Filter,
+    enabled: bool,
 }
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq, Serialize)]
@@ -179,6 +213,10 @@ struct Preferences {
     tutorial_segment: Option<usize>,
     y_scale: f32,
     curve_color_offsets: BTreeMap<String, usize>,
+    /// Every curve's equalizer, keyed by group key. An equalizer belongs to
+    /// the curve, so it survives the curve being switched off and comes back
+    /// with it, as `p.eq` does in the reference tool.
+    eq_filters: BTreeMap<String, Vec<EqRow>>,
 }
 
 impl Default for Preferences {
@@ -202,6 +240,7 @@ impl Default for Preferences {
             tutorial_segment: None,
             y_scale: 1.0,
             curve_color_offsets: BTreeMap::new(),
+            eq_filters: BTreeMap::new(),
         }
     }
 }
@@ -315,6 +354,8 @@ pub struct CrinGraphApp {
     tutorial_segment: Option<usize>,
     y_scale: f32,
     curve_color_offsets: BTreeMap<String, usize>,
+    /// Per-curve equalizer filter rows, keyed by measurement group index.
+    eq_filters: BTreeMap<usize, Vec<EqRow>>,
     dirty: bool,
     loaded: bool,
     load_error: Option<String>,
@@ -368,6 +409,7 @@ impl Default for CrinGraphApp {
             tutorial_segment: None,
             y_scale: 1.0,
             curve_color_offsets: BTreeMap::new(),
+            eq_filters: BTreeMap::new(),
             rig_description: None,
             dirty: true,
             loaded: false,
@@ -519,6 +561,10 @@ impl CrinGraphApp {
             || preferences
                 .tutorial_segment
                 .is_some_and(|index| index >= TUTORIAL_SEGMENTS.len())
+            || !preferences
+                .eq_filters
+                .values()
+                .all(|rows| eq_rows_are_valid(rows))
         {
             self.settings_error =
                 Some("Unable to load preferences: invalid settings values".into());
@@ -537,6 +583,14 @@ impl CrinGraphApp {
         self.tutorial_segment = preferences.tutorial_segment;
         self.y_scale = preferences.y_scale;
         self.curve_color_offsets = preferences.curve_color_offsets.clone();
+        self.eq_filters.clear();
+        for (index, group) in self.groups.iter().enumerate() {
+            if let Some(rows) = preferences.eq_filters.get(&group_key(group)) {
+                if eq_rows_are_valid(rows) {
+                    self.eq_filters.insert(index, rows.clone());
+                }
+            }
+        }
         for (index, group) in self.groups.iter().enumerate() {
             if let Some(saved) = preferences
                 .active
@@ -616,6 +670,11 @@ impl CrinGraphApp {
             tutorial_segment: self.tutorial_segment,
             y_scale: self.y_scale,
             curve_color_offsets: self.curve_color_offsets.clone(),
+            eq_filters: self
+                .eq_filters
+                .iter()
+                .map(|(&index, rows)| (group_key(&self.groups[index]), rows.clone()))
+                .collect(),
         }
     }
 
@@ -699,13 +758,55 @@ impl CrinGraphApp {
             match normalization_offset {
                 Ok(offset) => {
                     let manual_offset = self.offsets.get(&group_index).copied().unwrap_or(0.0);
+                    // An equalizer curves its parent's response, so the child is
+                    // built from the parent's already-normalized points and
+                    // inherits the parent's normalization by construction.
+                    let eq_rows = self.eq_filters.get(&group_index).filter(|rows| {
+                        !group.target && rows.iter().any(|row| row.enabled && !eq_row_is_inert(row))
+                    });
                     for (channel_name, mut points) in channels {
                         for point in &mut points {
                             point.db += offset + manual_offset;
                         }
+                        let parent_label =
+                            curve_label(&group.name, &variant.name, channel_name.clone());
+                        if let Some(rows) = eq_rows {
+                            let enabled: Vec<equalizer::Filter> = rows
+                                .iter()
+                                .filter(|row| row.enabled)
+                                .map(|row| row.filter)
+                                .collect();
+                            let response: Vec<equalizer::ResponsePoint> = points
+                                .iter()
+                                .map(|point| {
+                                    equalizer::ResponsePoint::new(point.hz as f64, point.db as f64)
+                                })
+                                .collect();
+                            let equalized = equalizer::apply(
+                                &response,
+                                &enabled,
+                                equalizer::DEFAULT_SAMPLE_RATE,
+                            );
+                            // The child is pushed before its parent so it
+                            // draws on top of the curve it shapes.
+                            output.push(DisplayCurve {
+                                group_index,
+                                source: CurveSource::Equalizer,
+                                label: eq_curve_label(&parent_label),
+                                points: equalized
+                                    .into_iter()
+                                    .map(|point| FRPoint {
+                                        hz: point.hz as f32,
+                                        db: point.db as f32,
+                                    })
+                                    .collect(),
+                                target: false,
+                            });
+                        }
                         output.push(DisplayCurve {
                             group_index,
-                            label: curve_label(&group.name, &variant.name, channel_name),
+                            source: CurveSource::Measurement,
+                            label: parent_label,
                             points,
                             target: group.target,
                         });
@@ -782,6 +883,19 @@ impl CrinGraphApp {
                 index,
                 self.color_offset.wrapping_add(personal_offset),
             )
+        }
+    }
+
+    /// Color for a displayed curve. An EQ curve takes a palette slot spread
+    /// away from its parent's, so the two lines are tellable apart while still
+    /// coming from the graph's existing palette rather than a new hue.
+    fn display_curve_color(&self, curve: &DisplayCurve) -> Color32 {
+        match curve.source {
+            CurveSource::Measurement => self.curve_color(curve.group_index),
+            CurveSource::Equalizer => squiglab::color::get_curve_color_with_offset(
+                curve.group_index + EQ_CURVE_COLOR_SPREAD,
+                self.color_offset,
+            ),
         }
     }
 
@@ -1503,7 +1617,7 @@ impl CrinGraphApp {
                     label: &curve.label,
                     label_key: &curve.label,
                     points: &curve.points,
-                    color: self.curve_color(curve.group_index),
+                    color: self.display_curve_color(curve),
                     dashed: curve.target,
                     target: curve.target,
                 })
@@ -1539,7 +1653,7 @@ impl CrinGraphApp {
                 label: &curve.label,
                 label_key: &curve.label,
                 points: &curve.points,
-                color: self.curve_color(curve.group_index),
+                color: self.display_curve_color(curve),
                 dashed: curve.target,
                 target: curve.target,
             })
@@ -1792,14 +1906,38 @@ fn build_groups(phone_books: &[PhoneBook], curves: &[CurveInfo]) -> Vec<Measurem
     groups
 }
 
-/// Compose the label drawn beside a curve.
-///
-/// The reference tool shows one measurement name, optionally suffixed with the
-/// channel, e.g. "Softears Karma (L)". Concatenating the model name with the
-/// variant name instead produced labels like "GAR5 · GarG5 · R", which repeat
-/// the same word twice whenever a model has a single variant. Prefer the variant
-/// name, since it is the more specific of the two, and only fall back to the
-/// model name when no variant is named.
+/// Label for an EQ curve. The reference tool names it "<phone> EQ"; deriving
+/// it from the parent curve's label keeps the pair readable whatever the
+/// model's variant is named, and names it per channel when the parent shows
+/// more than one.
+fn eq_curve_label(parent_label: &str) -> String {
+    format!("{parent_label} EQ")
+}
+
+/// Whether stored equalizer rows are usable: a bounded number of finite rows
+/// with a frequency, Q, and gain. Anything else is refused rather than
+/// partly trusted, so a corrupt preferences file cannot poison the graph.
+fn eq_rows_are_valid(rows: &[EqRow]) -> bool {
+    !rows.is_empty()
+        && rows.len() <= MAX_EQ_ROWS
+        && rows.iter().all(|row| {
+            let (filter, q) = (row.filter, row.filter.q);
+            filter.freq.is_finite()
+                && (1.0..=24_000.0).contains(&filter.freq)
+                && q.is_finite()
+                && q > 0.0
+                && filter.gain.is_finite()
+                && (-40.0..=40.0).contains(&filter.gain)
+        })
+}
+
+/// Whether a row's filter would contribute nothing, the same condition the
+/// DSP uses to drop inert filters before calculating.
+fn eq_row_is_inert(row: &EqRow) -> bool {
+    let filter = row.filter;
+    filter.freq == 0.0 || filter.q == 0.0 || filter.gain == 0.0
+}
+
 fn curve_label(model: &str, variant: &str, channel_name: String) -> String {
     let name = if variant.is_empty() || variant == model {
         model.to_owned()
@@ -2243,10 +2381,11 @@ mod tests {
         initialize_app_config_from, interpolate_db, matches_search, prepare_channels,
         read_app_config_from, read_preferences_from, resolve_measurement_dir, target_category,
         validate_app_config, write_preferences_to, AppConfig, ChannelMode, CrinGraphApp,
-        DisplayCurve, Preferences, SavedGroup, MAX_SHARE_URI_LENGTH, MAX_SMOOTH_LEVEL,
-        TUTORIAL_SEGMENTS,
+        CurveSource, DisplayCurve, Preferences, SavedGroup, MAX_EQ_ROWS, MAX_SHARE_URI_LENGTH,
+        MAX_SMOOTH_LEVEL, TUTORIAL_SEGMENTS,
     };
     use squiglab::data::{CurveInfo, FRPoint};
+    use std::collections::BTreeMap;
 
     /// Serialises tests that redirect the config directory, since the override is
     /// process-global and tests run on parallel threads.
@@ -2445,6 +2584,235 @@ smoothing_octaves = 3
     }
 
     #[test]
+    fn an_equalizer_becomes_a_child_curve_of_its_measurement() {
+        let curves = vec![
+            test_curve("Model", "L", 50.0),
+            test_curve("Model", "R", 50.0),
+        ];
+        let group = super::MeasurementGroup {
+            brand: "Brand".to_owned(),
+            brand_suffix: None,
+            name: "Model".to_owned(),
+            variants: vec![super::MeasurementVariant {
+                name: "Default".to_owned(),
+                curve_indices: vec![0, 1],
+            }],
+            target: false,
+        };
+        let mut app = CrinGraphApp {
+            curves,
+            groups: vec![group],
+            active: [0].into_iter().collect(),
+            ..CrinGraphApp::default()
+        };
+        app.eq_filters.insert(
+            0,
+            vec![super::EqRow {
+                filter: squiglab::equalizer::Filter::new(
+                    squiglab::equalizer::FilterType::Peaking,
+                    500.0,
+                    1.2,
+                    -3.5,
+                ),
+                enabled: true,
+            }],
+        );
+        app.rebuild_display_curves();
+        assert!(app.processing_error.is_none());
+        // One EQ child per channel beside the parent's channel.
+        let eq_children: Vec<_> = app
+            .display_curves
+            .iter()
+            .filter(|curve| curve.source == CurveSource::Equalizer)
+            .collect();
+        assert_eq!(eq_children.len(), 2);
+        assert_eq!(eq_children[0].label, "Default (L) EQ");
+        assert_eq!(eq_children[1].label, "Default (R) EQ");
+        // The child is back-linked to the parent group so the renderer can
+        // resolve its color and normalization from it.
+        assert!(eq_children.iter().all(|child| child.group_index == 0));
+        assert!(eq_children.iter().all(|child| !child.target));
+        // The parent's normalization propagates: the child is the parent's
+        // curve plus the filter's own response. The -3.5 dB cut is deepest at
+        // the filter's 500 Hz centre and vanishes away from it.
+        for child in &eq_children {
+            let parent = app
+                .display_curves
+                .iter()
+                .find(|curve| {
+                    child.label.starts_with(&curve.label) && curve.label.len() < child.label.len()
+                })
+                .expect("the child names its parent");
+            assert_eq!(parent.source, CurveSource::Measurement);
+            let deepest = parent
+                .points
+                .iter()
+                .zip(child.points.iter())
+                .map(|(parent_point, child_point)| {
+                    assert_eq!(parent_point.hz, child_point.hz);
+                    parent_point.db - child_point.db
+                })
+                .fold(0.0_f32, f32::max);
+            assert!(
+                (deepest - 3.5).abs() < 0.05,
+                "the deepest cut was {deepest:.2} dB, not 3.5"
+            );
+            // Two octaves away, at either end of the curve, the cut is only a
+            // fraction of a decibel: a Q of 1.2 is a wide filter, not a notch.
+            for (parent_point, child_point) in [
+                parent.points.first().unwrap(),
+                parent.points.last().unwrap(),
+            ]
+            .into_iter()
+            .zip([child.points.first().unwrap(), child.points.last().unwrap()])
+            {
+                let away = parent_point.db - child_point.db;
+                assert!(
+                    away.abs() < 0.5,
+                    "the cut reached {} Hz by {away:.2} dB",
+                    parent_point.hz
+                );
+            }
+        }
+        // The two curves do not share a color.
+        let parent = app
+            .display_curves
+            .iter()
+            .find(|curve| curve.source == CurveSource::Measurement)
+            .unwrap();
+        assert_ne!(
+            app.display_curve_color(parent),
+            app.display_curve_color(eq_children[0])
+        );
+    }
+
+    #[test]
+    fn a_disabled_or_inert_filter_leaves_the_curve_alone() {
+        let curves = vec![test_curve("Model", "L", 50.0)];
+        let group = super::MeasurementGroup {
+            brand: "Brand".to_owned(),
+            brand_suffix: None,
+            name: "Model".to_owned(),
+            variants: vec![super::MeasurementVariant {
+                name: "Default".to_owned(),
+                curve_indices: vec![0],
+            }],
+            target: false,
+        };
+        let mut app = CrinGraphApp {
+            curves,
+            groups: vec![group],
+            active: [0].into_iter().collect(),
+            ..CrinGraphApp::default()
+        };
+        let row = |enabled: bool, gain: f64| super::EqRow {
+            filter: squiglab::equalizer::Filter::new(
+                squiglab::equalizer::FilterType::Peaking,
+                500.0,
+                1.2,
+                gain,
+            ),
+            enabled,
+        };
+        app.eq_filters.insert(0, vec![row(false, -3.5)]);
+        app.rebuild_display_curves();
+        assert!(app
+            .display_curves
+            .iter()
+            .all(|curve| curve.source == CurveSource::Measurement));
+        // A zero gain is inert: it would not be drawn, so no child curve.
+        app.eq_filters.insert(0, vec![row(true, 0.0)]);
+        app.rebuild_display_curves();
+        assert!(app
+            .display_curves
+            .iter()
+            .all(|curve| curve.source == CurveSource::Measurement));
+    }
+
+    #[test]
+    fn equalizers_round_trip_through_preferences_and_share_links() {
+        with_isolated_config(|| {
+            let mut app = CrinGraphApp::default();
+            app.load_measurements().unwrap();
+            let key = super::group_key(&app.groups[app.active.iter().next().copied().unwrap()]);
+            let rows = vec![super::EqRow {
+                filter: squiglab::equalizer::Filter::new(
+                    squiglab::equalizer::FilterType::LowShelf,
+                    105.0,
+                    0.7,
+                    6.0,
+                ),
+                enabled: true,
+            }];
+            app.eq_filters
+                .insert(app.active.iter().next().copied().unwrap(), rows.clone());
+            let preferences = app.preferences();
+            assert_eq!(preferences.eq_filters.get(&key), Some(&rows));
+
+            let mut restored = CrinGraphApp {
+                curves: app.curves.clone(),
+                groups: app.groups.clone(),
+                ..CrinGraphApp::default()
+            };
+            assert!(restored.apply_preferences(preferences));
+            assert_eq!(restored.eq_filters.values().next(), Some(&rows));
+            restored.dirty = true;
+            restored.rebuild_display_curves();
+            assert!(restored
+                .display_curves
+                .iter()
+                .any(|curve| curve.source == CurveSource::Equalizer));
+        });
+    }
+
+    #[test]
+    fn an_invalid_equalizer_is_refused_rather_than_drawn() {
+        let mut app = CrinGraphApp {
+            groups: vec![super::MeasurementGroup {
+                brand: "Brand".into(),
+                brand_suffix: None,
+                name: "Model".into(),
+                variants: vec![super::MeasurementVariant {
+                    name: "Default".into(),
+                    curve_indices: Vec::new(),
+                }],
+                target: false,
+            }],
+            ..CrinGraphApp::default()
+        };
+        let key = super::group_key(&app.groups[0]);
+        let row = |freq: f64| super::EqRow {
+            filter: squiglab::equalizer::Filter::new(
+                squiglab::equalizer::FilterType::Peaking,
+                freq,
+                1.0,
+                -3.0,
+            ),
+            enabled: true,
+        };
+        for rows in [
+            vec![],
+            vec![row(f64::NAN)],
+            vec![row(-10.0)],
+            vec![row(30_000.0)],
+            vec![row(500.0); MAX_EQ_ROWS + 1],
+        ] {
+            let preferences = Preferences {
+                eq_filters: [(key.clone(), rows.clone())].into_iter().collect(),
+                ..Preferences::default()
+            };
+            assert!(!app.apply_preferences(preferences), "{rows:?}");
+        }
+        // A valid equalizer is accepted.
+        let preferences = Preferences {
+            eq_filters: [(key, vec![row(500.0)])].into_iter().collect(),
+            ..Preferences::default()
+        };
+        assert!(app.apply_preferences(preferences));
+        assert_eq!(app.eq_filters.get(&0).map(Vec::len), Some(1));
+    }
+
+    #[test]
     fn startup_loads_the_configured_measurement_and_targets() {
         with_isolated_config(|| {
             let mut app = CrinGraphApp::default();
@@ -2580,6 +2948,7 @@ smoothing_octaves = 3
     fn baseline_subtracts_the_reference_response_from_every_curve() {
         let mut curves = vec![
             DisplayCurve {
+                source: CurveSource::Measurement,
                 group_index: 0,
                 label: "Base".to_owned(),
                 points: vec![
@@ -2595,6 +2964,7 @@ smoothing_octaves = 3
                 target: false,
             },
             DisplayCurve {
+                source: CurveSource::Measurement,
                 group_index: 1,
                 label: "Compared".to_owned(),
                 points: vec![
@@ -2825,6 +3195,7 @@ smoothing_octaves = 3
             tutorial_segment: Some(3),
             y_scale: 1.75,
             curve_color_offsets: [("Brand\u{1f}Model".into(), 2)].into_iter().collect(),
+            eq_filters: BTreeMap::new(),
         };
         write_preferences_to(&path, &preferences).unwrap();
         assert_eq!(read_preferences_from(&path).unwrap(), Some(preferences));

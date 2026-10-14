@@ -14,6 +14,7 @@
 //! reference implementation, never by editing it by hand.
 
 use once_cell::sync::Lazy;
+use serde::{Deserialize, Serialize};
 use std::f64::consts::PI;
 
 /// Sample rate the biquads and magnitude responses are calculated against.
@@ -41,20 +42,24 @@ const OPTIMIZE_DELTAS: [[f64; 6]; 3] = [
 /// The three filter types the reference tool has. Low-pass and high-pass
 /// filters are deliberately absent: the original has no LP/HP either, and
 /// inventing one here would diverge from its exports.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum FilterType {
     /// Peaking bell, the type every AutoEQ candidate uses.
+    #[serde(rename = "PK")]
     Peaking,
     /// Low shelf.
+    #[serde(rename = "LSQ")]
     LowShelf,
     /// High shelf.
+    #[serde(rename = "HSQ")]
     HighShelf,
 }
 
 /// One parametric filter: a type, a centre or corner frequency in Hz, a Q, and
 /// a gain in dB.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Filter {
+    #[serde(rename = "type")]
     pub filter_type: FilterType,
     pub freq: f64,
     pub q: f64,
