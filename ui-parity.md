@@ -76,28 +76,29 @@ authoritative source for the filter maths.
 The native app is a fixed-width desktop window. The reference has two distinct
 viewports and fluid width behaviour.
 
-- [ ] **Introduce a desktop/compact layout mode.** Below a ~1024px content width,
-      stack graph → tabs → manager. Above it, tabs left and graph right.
-      *egui approach:* branch in `app.rs::ui()` on `ui.available_width()`;
-      `Panel::top` on `Panel::left` becomes conditional.
+- [x] **Introduce a desktop/compact layout mode.** Below 1024px the graph
+      stacks above the library; above it, the library sits beside the graph.
+      `app.rs::ui()` branches on `ui.available_width()`. Commit `1ac7dfd`.
+- [x] **Minimum window width drops to ~430px.** Was `[860, 560]`, which made the
+      compact layout unreachable. Now `[430, 520]`. Commit `1ac7dfd`.
+- [x] **Graph width tracks the viewport.** Verified at 430 and 1600; the
+      container is fluid and `PLOT_ASPECT_RATIO` still caps the plot.
+- [x] **Frequency band labels are density-aware.** A band earns its label only
+      when the band is wider than the label, so the higher bands no longer smear
+      into each other at 430px. Commit `1ac7dfd`.
 - [ ] **The library becomes a tab column, not a permanent sidebar.**
       squig.link's left column is `Brands | Models | Equalizer`. Matching this
-      means the library sidebar and the Equalizer both live in that tab set, so
-      the Equalizer can reuse the same panel slot rather than needing a new
-      window. Depends on P3.
-- [ ] **Graph width tracks the viewport.** The graph should take all remaining
-      width and no more, at every window size — verified at 430/700/900/1100/1600.
-      The plot aspect must stay capped (see the existing `PLOT_ASPECT_RATIO`),
-      but the *container* width must be fluid.
-- [ ] **Minimum window width drops to ~430px** so a compact layout is actually
-      reachable. Currently `with_min_inner_size([860.0, 560.0])` — this forbids
-      the mobile layout entirely. Confirms as a blocker before other work.
+      means the library sidebar and the Equalizer share one panel slot rather
+      than the Equalizer needing a new window. **Still open** — depends on P3.
 - [ ] **Toolbar collapses gracefully.** squig.link's toolbar stays one row but
-      drops controls as width falls. Decide which of SquigLab's controls are
-      dropped first, and hide the rest behind an overflow control rather than
-      wrapping.
+      drops controls as width falls. At 430px SquigLab's toolbar currently wraps
+      to roughly five rows, against the fallback this document agreed. Decide
+      which controls drop first, and hide the rest rather than wrapping.
 - [ ] **Manager rows reflow.** On a compact viewport the row should stack
       identity and controls vertically instead of pressing them into one line.
+
+**Landed so far from this roadmap:** `99c6b34` (test isolation), `1ac7dfd`
+(compact layout and band-label density). Everything from P2 down is unstarted.
 
 ## P2 — Dynamic scrolling and sticky regions
 
