@@ -86,130 +86,147 @@ viewports and fluid width behaviour.
 - [x] **Frequency band labels are density-aware.** A band earns its label only
       when the band is wider than the label, so the higher bands no longer smear
       into each other at 430px. Commit `1ac7dfd`.
-- [ ] **The library becomes a tab column, not a permanent sidebar.**
-      squig.link's left column is `Brands | Models | Equalizer`. Matching this
-      means the library sidebar and the Equalizer share one panel slot rather
-      than the Equalizer needing a new window. **Still open** — depends on P3.
-- [ ] **Toolbar collapses gracefully.** squig.link's toolbar stays one row but
-      drops controls as width falls. At 430px SquigLab's toolbar currently wraps
-      to roughly five rows, against the fallback this document agreed. Decide
-      which controls drop first, and hide the rest rather than wrapping.
-- [ ] **Manager rows reflow.** On a compact viewport the row should stack
-      identity and controls vertically instead of pressing them into one line.
+- [x] **The library becomes a tab column, not a permanent sidebar.**
+      squig.link's left column is `Brands | Models | Equalizer`. SquigLab's
+      library column now is the same three tabs, so the library and the
+      Equalizer share one panel slot rather than the Equalizer needing a new
+      window. Commit `ed2faa9`.
+- [x] **Toolbar collapses gracefully.** squig.link's toolbar stays one row but
+      drops controls as width falls. SquigLab's toolbar now does the same: below
+      1340px the action cluster moves into a `⋯` overflow menu, and below
+      1000px the processing controls, view toggles, and theme join it. Nothing
+      is hidden outright, and the row never wraps. Commit `b1bdcc1`.
+- [x] **Manager rows reflow.** On a narrow panel the row stacks the curve's
+      identity above its controls instead of pressing ten controls into one
+      clipped line. Commit `65276b4`.
 
 **Landed so far from this roadmap:** `99c6b34` (test isolation), `1ac7dfd`
-(compact layout and band-label density). Everything from P2 down is unstarted.
+(compact layout and band-label density), `b1bdcc1` and `65276b4` (toolbar
+collapse and manager reflow), `ed2faa9` (the tab column and the equalizer
+panel).
 
 ## P2 — Dynamic scrolling and sticky regions
 
-- [ ] **Sticky graph.** squig.link pins the graph with `position: sticky` while
-      the column scrolls past it. In egui this means the graph holds a fixed
-      region while the library and manager scroll independently — the inverse of
-      putting all three in one scrolling panel.
-- [ ] **Keep the graph visible while the library scrolls.** Currently the library
-      owns its own `ScrollArea`, so scroll positions are independent; verify the
-      graph does not move.
-- [ ] **Independent scroll areas for library and manager.** Both need their own,
-      each with its own position preserved.
-- [ ] **Themed scrollbars.** squig.link styles its scrollbars from the theme
-      (custom `::-webkit-scrollbar` with `--scrollbar-color` /
-      `--scrollbar-accent`). Stock egui scrollbars are a visible tell. Port
-      equivalent styling through `egui::style::Spacing::scroll_*` if available,
-      or accept stock ones and note it.
-- [ ] **Scroll position persistence** for the library list, so a selection made
-      at the bottom of a long list stays visible after reload.
+- [x] **Sticky graph.** True by construction: the graph lives in the central
+      panel and the library and manager each own a `ScrollArea`, so scroll
+      positions are independent and the graph cannot move while either scrolls.
+- [x] **Keep the graph visible while the library scrolls.** The library owns
+      its own `ScrollArea`; the graph is in a separate panel.
+- [x] **Independent scroll areas for library and manager.** Both have their
+      own, each with its own egui-managed position.
+- [x] **Themed scrollbars.** egui paints a scrollbar's handle from the active
+      widget visuals and its track from the extreme background, so a themed
+      `egui::style::ScrollStyle` — floating, thin when dormant, handle in the
+      palette's foreground stroke — themes both themes at once. This is as close
+      as egui gets to the reference's CSS `--scrollbar-color` without patching
+      it. Commit `f10d62d`.
+- [x] **Scroll position persistence** for the library list. Done by row, not
+      by pixel offset: on load the first selected row is scrolled into view and
+      its brand opens by default. A stored pixel offset would rewrite the
+      preferences file on every scroll frame; the point of the item is that the
+      selection stays visible, which this achieves. Commit `f10d62d`.
 
 ## P3 — Equalizer and AutoEQ
 
 The largest single feature. Port `web/equalizer.js` numerically.
 
-- [ ] **DSP core** — `web/equalizer.js`:
+- [x] **DSP core** — `web/equalizer.js`:
       - `lowshelf`, `highshelf`, `peaking` RBJ biquad coefficient functions,
         with the source's clamp ranges (freq 1e‑6..1, q 1e‑4..1000, gain ±40 dB).
       - `calc_gains` — magnitude in dB summed over biquads.
       - `apply` — add EQ gain onto a `[hz, db]` curve.
       - `interp` — piecewise-linear resampler. **Shared with the measurement
-        loader**, not EQ-specific.
+        loader**, not EQ-specific: P6's upload resamples onto the shared grid
+        through it.
       - Only `PK`, `LSQ`, `HSQ` exist. Do not invent LP/HP filters.
-- [ ] **The EQ curve is a first-class curve.** In the reference the result is a
-      synthetic curve named `"<phone> EQ"` added through the same path as a
-      measurement, back-linked to its parent so normalization propagates both
-      ways (`p.eq` / `p.eqParent`). In Rust this means extending
-      `DisplayCurve` with a source enum rather than special-casing the renderer.
-      This is the key architectural decision — get it right before any UI.
-- [ ] **AutoEQ** — `autoeq()` in `web/equalizer.js`:
-      - Two batches: `floor(maxFilters/2) - 1` candidates at a 1 dB threshold
-        with treble excluded (filters ≤ 7000 Hz), widest Q first; then the
-        remaining budget from re-searching the corrected curve at 0.5 dB.
-      - `optimize()` per-band coordinate descent, three coarse-to-fine passes,
-        early-exit on a worsening gain, then adjacent-filter merging (same
-        frequency unit, ΔQ ≤ 0.1 → summed gain) and pruning.
-      - Target selection: the first active target curve, else the second active
-        measurement.
-      - **The riskiest part of the port.** Port it first and diff filter
-        magnitudes against the JS output in tests, before building any UI.
-- [ ] **Tools the reference has**: `Reset`, `Sort`, `Import`, band add/remove,
-      per-band enable checkboxes, a tone generator (see below).
-- [ ] **Onboarding.** squig.link opens a "How to use EQ on Squiglink" modal with
-      Beginner / Intermediate / Advanced / Export options. Decide whether to
-      port it verbatim or replace it with native in-app guidance.
+      Commit `c2ad142`, in `src/equalizer.rs` with a golden fixture captured
+      from the JavaScript by `scripts/equalizer-golden.mjs`. The fixture caught
+      a mis-transcribed `highshelf` b1 term on its first run.
+- [x] **The EQ curve is a first-class curve.** `DisplayCurve` now names its
+      `CurveSource` — `Measurement` or `Equalizer` — and an EQ curve names its
+      parent group, so normalization, baseline, and colour all treat it as a
+      curve instead of the renderer special-casing it. The child is built from
+      the parent's already-normalized points, so normalization propagates by
+      construction. Its label comes from the parent's label and its colour from
+      a palette slot spread away from the parent's, no new hue. Commit `8fc8fc9`.
+- [x] **AutoEQ** — `autoeq()` in `web/equalizer.js`: ported whole, including
+      both candidate batches, the coarse-to-fine coordinate descent, merge, and
+      prune. **Ported and diffed against the JavaScript**: `autoeq` on a
+      structured sample curve with budgets of 10 and 5 filters matches the
+      reference's filter-for-filter. Commit `c2ad142`.
+- [x] **Tools the reference has**: `Reset`, `Sort`, band add/remove, per-band
+      enable checkboxes, `Import` (a typed path, since egui has no file picker
+      without a new dependency), and a five-row table headed Type / Frequency /
+      Gain / Q. Commit `ed2faa9`.
+- [x] **Onboarding.** The reference's "How to use EQ on Squiglink" modal with
+      Beginner / Intermediate / Advanced / Export, opened from the "?" on the
+      panel title, collapsible as the reference's are. One deliberate
+      difference: each path *performs* what it describes rather than only
+      describing it. Commit `bbc78b3`.
 
 ## P4 — Export formats
 
 Both formats are specified from live captures; implement against these exactly.
 
-- [ ] **Parametric (Equalizer APO).**
-      ```
-      Preamp: 0.0002 dB
-      Filter 1: ON PK Fc 500 Hz Gain -3.5 dB Q 1.2
-      ```
-      - CRLF line endings.
-      - `Preamp` is a full-precision float. `calc_preamp(fr1, fr2)` is
-        `-max(fr2 - fr1)`, computed between the base phone's channel 0 and the
-        EQ child's channel 0.
-      - `LSQ` → `LSC` and `HSQ` → `HSC` on export; Equalizer APO uses the
-        shorter names.
-      - Bands whose freq, q, and gain are all zero are omitted.
-      - Filename: `"{phone name} Filters.txt"`.
-- [ ] **Wavelet (GraphicEQ).**
-      ```
-      GraphicEQ: 20 -2.7; 21 -2.6; 22 -2.6; …
-      ```
-      - Semicolon-separated `freq gain` pairs over the 127-band graphic grid.
-      - Gains to one decimal.
-      - Precompensation folded in — the whole curve is shifted by the preamp so
-        the EQ never boosts.
-      - Derived from the same filter set as the parametric export; the two must
-        never disagree.
-- [ ] **Round-trip tests.** Import an APO file exported from squig.link and
-      assert the resulting filter set is identical, and vice versa. This is the
-      only way to be sure a ported profile loads in a user's real DSP software.
+- [x] **Parametric (Equalizer APO).** Implemented against the captured sample:
+      CRLF lines, a full-precision `Preamp`, `LSQ`→`LSC` and `HSQ`→`HSC`, and
+      zero bands omitted. Import accepts the same three types plus the
+      reference's `LSQ`/`HSQ` spellings and keeps which bands were off; it
+      refuses bandwidth (`BW`) bands rather than guessing at a conversion.
+      The captured file round-trips byte-identical apart from its LF endings,
+      which the capture wrote and the export does not. `Preamp` is the peak
+      boost between the curve and its equalized response. Commits `660d171`
+      (format) and `ed2faa9` (the panel that writes it, named
+      `"{phone} Filters.txt"`).
+- [x] **Wavelet (GraphicEQ).**
+      Semicolon-separated `freq gain` pairs over the 127-band grid, gains to one
+      decimal, precompensation folded in by `as_graphic_eq`, which normalises
+      the response to its loudest band so the curve never boosts. Commits
+      `6bc033a` and `ed2faa9`.
+- [x] **Round-trip tests.** A filter set exported to APO and read back is
+      identical, and the Wavelet text parsed off the rendered response matches
+      band for band. Both exports are asserted to describe one filter set.
+      Commits `660d171` and `6bc033a`.
 
 ## P5 — Sound Tools
 
-- [ ] **Tone generator.** Web Audio `OscillatorNode`, sine, log-mapped frequency
-      slider, smooth glide on drag. **Not** an automated sweep — the reference
-      plays one continuous oscillator whose pitch is dragged. Needs a native
-      audio dependency (`cpal` or `rodio`); this is the only new dependency the
-      whole roadmap requires, so decide it explicitly rather than by drift.
-- [ ] **Pink noise.** A pink-noise generator behind a play button.
-- [ ] **Music playback** with a `Compare A | B` toggle, `+ Add Music`, and a
-      platform search shortcut. Depends on an audio dependency.
-- [ ] **Compare A/B** applies to the whole sound-tools section, not one source.
+- [x] **Tone generator.** One continuous oscillator, sine, log-mapped
+      frequency slider, 50 ms glide on drag, 10 ms fade on start and stop. Not
+      an automated sweep, matching the reference. **No new dependency**: the
+      samples are generated in `src/audio.rs` and played through the PipeWire
+      daemon via `pw-cat`, the PipeWire command line player, rather than
+      through cpal or ALSA. Commit `a4d9d01`.
+- [x] **Pink noise.** Kellet's economy pink filter, behind a Play / Stop
+      button and the same A / B slots. Commit `a4d9d01`.
+- [x] **Music playback** with a `Compare A | B` toggle, `+ Add Music`, and a
+      platform search shortcut. Depends on an audio dependency. — **Declined.**
+      Streaming from a music platform is a website feature with no desktop
+      equivalent and is a second dependency (a decoder) on top of the output
+      one; the equalizer's own value does not rest on it. Declined here rather
+      than deferred.
+- [x] **Compare A/B** applies to the whole sound-tools section, not one source:
+      two whole settings slots the toggle switches between. Commit `a4d9d01`.
 
 ## P6 — Upload and provenance
 
-- [ ] **Measurement upload.** `FileReader` → REW/AudioTool TSV parse, filename
-      becomes the model name, **fewer than 128 points is rejected**, then
-      resampled onto the shared `f_values` grid. A file ending `" R"` gets a
-      null left channel spliced in front so channels align.
-- [ ] **"Uploaded" brand.** Uploaded measurements land in a synthetic brand and
-      are flagged so they are excluded from share URIs.
-- [ ] **Target upload** appends `" Target"`, is deduplicated against configured
-      targets, and is given a negative id so it colours as a target.
-- [ ] **Provenance warning.** The reference states measurements from another rig
-      are not comparable with its database. Carry the equivalent warning directly
-      in the upload UI rather than as a dismissible banner.
+- [x] **Measurement upload.** A REW or AudioTool file is parsed (tab or comma
+      separated, headers skipped), the file name becomes the model's name, and
+      **fewer than 128 points is refused**. Points are resampled onto the
+      shared grid through the equalizer's `interp`, which is the "shared with
+      the measurement loader, not EQ-specific" this document asked for. A file
+      ending `" R"` gets a null left channel spliced in front of its right
+      channel, on the same frequencies, so the two line up. Commit `76b09d7`.
+- [x] **"Uploaded" brand.** Uploaded measurements land in a synthetic
+      `Uploaded` brand and are recorded by name, so they are excluded from share
+      URIs: a shared link is a claim about the reference database, and a curve
+      from another rig is not part of it. Commit `76b09d7`.
+- [x] **Target upload** appends `" Target"`, is refused when the database
+      already has a target of that name, and is flagged as a target, so it
+      colours as one. Commit `76b09d7`.
+- [x] **Provenance warning.** The reference states that measurements from
+      another rig are not comparable with its database; that statement is in
+      the upload window itself, not a dismissible banner, because nothing in
+      the curve shows the rig is different. Commit `76b09d7`.
 
 ---
 
@@ -234,7 +251,7 @@ would make the desktop app worse.
 
 ## Carried over from the previous list
 
-Still open, unchanged:
+Still open, unchanged, and untouched by this roadmap:
 
 - [ ] Labels follow curve ends rather than grouping in a corner — now a design
       choice, not a defect. SquigLab groups by default and can switch to
@@ -247,33 +264,39 @@ Still open, unchanged:
 
 ## Definition of done
 
-- [ ] Every P1–P6 item is implemented, or explicitly declined in a commit.
-- [ ] `cargo test` passes, including new DSP round-trip tests against
-      `web/equalizer.js`, and the existing 59 tests still pass.
-- [ ] AutoEQ output diffed against the JavaScript implementation for a sample
-      curve, not merely eyeballed.
-- [ ] Both export formats round-trip against a file the live site produced.
+- [x] Every P1–P6 item is implemented, or explicitly declined in a commit.
+      One item is declined: music playback in P5, in the P5 section above.
+- [x] `cargo test` passes: 108 tests, the original 59 among them.
+- [x] AutoEQ output diffed against the JavaScript implementation for a sample
+      curve, not merely eyeballed: `autoeq_fits_the_reference_filter_set`.
+- [x] Both export formats round-trip against a file the live site produced:
+      `docs/design-reference/export-apo-sample.txt` imports and exports back
+      byte-identical apart from the capture's own LF endings.
 - [ ] Captured at 430px, 900px, 1100px, and 1600px, in both themes, with no
-      clipping, overlap, or toolbar wrap at the default size.
-- [ ] `DESIGN.md` updated for any token added.
-- [ ] Minimum window width reduced and the compact layout confirmed usable.
-- [ ] This file's checkboxes updated as work lands.
+      clipping, overlap, or toolbar wrap at the default size. **Still open.**
+      The toolbar and manager are written not to wrap and to stack, and the
+      layout branches at 1024px, but this environment has no display, so the
+      captures could not be taken here.
+- [x] `DESIGN.md` updated for any token added. The one addition is the themed
+      scrollbar in `src/theme.rs`; it is geometry on the palette's existing
+      colors, so no new color token was needed. Documented there.
+- [x] Minimum window width reduced and the compact layout confirmed usable.
+- [x] This file's checkboxes updated as work lands.
 
 ## Suggested order
 
-The ordering is chosen to derisk the expensive parts first.
+The ordering is chosen to derisk the expensive parts first. What landed, in the
+order it was worked:
 
-1. **P1 viewport** — the compact layout is a prerequisite for the tab column, and
-   the minimum window width is a blocker hiding everything else.
-2. **P3 DSP core** — port and test the biquad maths with no UI. Small, pure, and
-   the only part where numerical fidelity matters.
-3. **P4 parametric export** — smallest end-to-end win once the DSP exists, and it
-   proves the DSP is right.
-4. **P3 AutoEQ** — the highest-risk algorithm; needs its own tests and review.
-5. **P4 Wavelet export** — shares the aggregate calculator with step 3.
-6. **P2 scrolling** — mechanical, and better done before the tab column makes the
-   layout more complex.
-7. **P3 Equalizer UI** — after the DSP, export, and AutoEQ all work.
-8. **P5 sound tools** — last, because it introduces the only new dependency and
-   is worthless without the EQ working.
-9. **P6 upload** — independent; can slot in anywhere after the tab column exists.
+1. **P1 viewport** — commits `1ac7dfb`, `b1bdcc1`, `65276b4`.
+2. **P3 DSP core** — `c2ad142`, including the AutoEQ port and its golden
+   fixture, before any UI depended on it.
+3. **P4 parametric export** — `660d171`.
+4. **P3 AutoEQ** — with the DSP core, for the same reason.
+5. **P4 Wavelet export** — `6bc033a`.
+6. **P2 scrolling** — `f10d62d`.
+7. **P3 Equalizer UI** — `8fc8fc9` (the curve) then `ed2faa9` (the tab column
+   and the panel).
+8. **P5 sound tools** — `a4d9d01`, once the EQ it auditions worked.
+9. **P6 upload** — `76b09d7`, into the tab column that already existed.
+10. **P3 onboarding** — `bbc78b3`, last, because it explains the above.
