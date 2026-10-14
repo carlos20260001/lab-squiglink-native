@@ -846,7 +846,11 @@ impl CrinGraphApp {
             self.screenshot_pending = true;
             self.screenshot_error = None;
         }
-        if cgui::action_button(ui, "SVG", "Save the current graph as a scalable vector image.") {
+        if cgui::action_button(
+            ui,
+            "SVG",
+            "Save the current graph as a scalable vector image.",
+        ) {
             self.export_svg();
         }
         if cgui::action_button(ui, "Share", "Copy a shareable link to this view.") {
@@ -1324,9 +1328,7 @@ impl CrinGraphApp {
                         self.dirty = true;
                     }
                 }
-                if !group.target
-                    && cgui::action_button(ui, "Recolor", "Cycle this curve's color")
-                {
+                if !group.target && cgui::action_button(ui, "Recolor", "Cycle this curve's color") {
                     let offset = self
                         .curve_color_offsets
                         .entry(group_key(group))
@@ -1400,11 +1402,7 @@ impl CrinGraphApp {
                     for (mode, label) in channel_modes {
                         if ui
                             .selectable_label(
-                                self.channel_modes
-                                    .get(&index)
-                                    .copied()
-                                    .unwrap_or_default()
-                                    == mode,
+                                self.channel_modes.get(&index).copied().unwrap_or_default() == mode,
                                 label,
                             )
                             .clicked()
@@ -1423,10 +1421,9 @@ impl CrinGraphApp {
                         &self.curves,
                         &group.variants[variant_index].curve_indices,
                     ) {
-                        ui.colored_label(palette.warning, "!")
-                            .on_hover_text(
-                                "Left and right channels differ beyond the imbalance threshold.",
-                            );
+                        ui.colored_label(palette.warning, "!").on_hover_text(
+                            "Left and right channels differ beyond the imbalance threshold.",
+                        );
                     }
                 }
             });

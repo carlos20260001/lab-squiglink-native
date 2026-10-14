@@ -211,10 +211,10 @@ pub fn calc_gains(freqs: &[f64], coeffs: &[[f64; 6]], sample_rate: f64) -> Vec<f
         for (index, &freq) in freqs.iter().enumerate() {
             let w = 2.0 * PI * freq / sample_rate;
             let phi = 4.0 * (w / 2.0).sin().powi(2);
-            let numerator = (b0 + b1 + b2).powi(2)
-                + (b0 * b2 * phi - (b1 * (b0 + b2) + 4.0 * b0 * b2)) * phi;
-            let denominator = (a0 + a1 + a2).powi(2)
-                + (a0 * a2 * phi - (a1 * (a0 + a2) + 4.0 * a0 * a2)) * phi;
+            let numerator =
+                (b0 + b1 + b2).powi(2) + (b0 * b2 * phi - (b1 * (b0 + b2) + 4.0 * b0 * b2)) * phi;
+            let denominator =
+                (a0 + a1 + a2).powi(2) + (a0 * a2 * phi - (a1 * (a0 + a2) + 4.0 * a0 * a2)) * phi;
             gains[index] += 10.0 * numerator.log10() - 10.0 * denominator.log10();
         }
     }
@@ -310,9 +310,13 @@ pub fn as_graphic_eq(filters: &[Filter], sample_rate: f64) -> Vec<ResponsePoint>
             ResponsePoint::new(freq, sum / count as f64)
         })
         .collect();
-    let max_gain = result
-        .iter()
-        .fold(f64::NEG_INFINITY, |max, point| if max > point.db { max } else { point.db });
+    let max_gain = result.iter().fold(f64::NEG_INFINITY, |max, point| {
+        if max > point.db {
+            max
+        } else {
+            point.db
+        }
+    });
     for point in &mut result {
         point.db -= max_gain;
     }
@@ -650,9 +654,9 @@ pub fn import_parametric(text: &str) -> anyhow::Result<ImportedFilters> {
             "PK" => FilterType::Peaking,
             "LSC" | "LSQ" => FilterType::LowShelf,
             "HSC" | "HSQ" => FilterType::HighShelf,
-            other => anyhow::bail!(
-                "line {number}: filter type {other} is not one of PK, LSC, or HSC"
-            ),
+            other => {
+                anyhow::bail!("line {number}: filter type {other} is not one of PK, LSC, or HSC")
+            }
         };
         // Fc, Gain, and Q arrive as key/value pairs with their units between
         // them: "Fc 500 Hz Gain -3.5 dB Q 1.2". A key takes the token after it
@@ -670,9 +674,7 @@ pub fn import_parametric(text: &str) -> anyhow::Result<ImportedFilters> {
                 "Q" => q = parse_number(value()?, number)?,
                 "GAIN" => gain = parse_number(value()?, number)?,
                 "HZ" | "DB" => {}
-                "BW" => anyhow::bail!(
-                    "line {number}: bandwidth filters are not supported, only Q"
-                ),
+                "BW" => anyhow::bail!("line {number}: bandwidth filters are not supported, only Q"),
                 other => anyhow::bail!("line {number}: unknown filter field {other}"),
             }
         }
@@ -688,12 +690,33 @@ fn parse_number(token: &str, line: usize) -> anyhow::Result<f64> {
         .map_err(|_| anyhow::anyhow!("line {line}: {token:?} is not a number"))
 }
 
+// ---------------------------------------------------------------------------
+// Wavelet GraphicEQ export
+// ---------------------------------------------------------------------------
+
+/// Render a filter set as a Wavelet GraphicEQ configuration: the smoothed
+/// 127-band response, precompensation already folded in, as semicolon-
+/// separated `freq gain` pairs with gains to one decimal. The response is
+/// normalised by [`as_graphic_eq`], so nothing here boosts.
+pub fn export_graphic_eq(filters: &[Filter], sample_rate: f64) -> String {
+    let mut output = String::from("GraphicEQ:");
+    for band in as_graphic_eq(filters, sample_rate) {
+        // Negative zero would export as "-0.0".
+        let db = if band.db == 0.0 { 0.0 } else { band.db };
+        use std::fmt::Write;
+        let _ = write!(output, " {} {:.1};", band.hz, db);
+    }
+    // The pairs are separated by the semicolons, not terminated by one.
+    output.pop();
+    output
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        apply, as_graphic_eq, autoeq, calc_distance, calc_gains, calc_preamp, export_parametric,
-        highshelf, import_parametric, interp, lowshelf, peaking, Filter, FilterType, ResponsePoint,
-        DEFAULT_SAMPLE_RATE,
+        apply, as_graphic_eq, autoeq, calc_distance, calc_gains, calc_preamp, export_graphic_eq,
+        export_parametric, highshelf, import_parametric, interp, lowshelf, peaking, Filter,
+        FilterType, ResponsePoint, DEFAULT_SAMPLE_RATE,
     };
     use serde::Deserialize;
 
@@ -827,7 +850,7 @@ mod tests {
             assert_close(
                 filter.gain,
                 golden.gain,
-                &format!("{context} filter {index} gain")
+                &format!("{context} filter {index} gain"),
             );
         }
     }
@@ -843,10 +866,12 @@ mod tests {
             ("highshelf", highshelf, golden.highshelf),
             ("peaking", peaking, golden.peaking),
         ] {
-            for (index, (coefficient, reference)) in
-                actual.iter().zip(expected).enumerate()
-            {
-                assert_close(*coefficient, reference, &format!("{name} coefficient {index}"));
+            for (index, (coefficient, reference)) in actual.iter().zip(expected).enumerate() {
+                assert_close(
+                    *coefficient,
+                    reference,
+                    &format!("{name} coefficient {index}"),
+                );
             }
             // a0 is normalised to one on return, as in the original.
             assert_close(actual[0], 1.0, &format!("{name} a0"));
@@ -862,11 +887,15 @@ mod tests {
         let coeffs: Vec<[f64; 6]> = filters
             .iter()
             .map(|filter| match filter.filter_type {
-                FilterType::LowShelf => lowshelf(filter.freq, filter.q, filter.gain, golden.sample_rate),
+                FilterType::LowShelf => {
+                    lowshelf(filter.freq, filter.q, filter.gain, golden.sample_rate)
+                }
                 FilterType::HighShelf => {
                     highshelf(filter.freq, filter.q, filter.gain, golden.sample_rate)
                 }
-                FilterType::Peaking => peaking(filter.freq, filter.q, filter.gain, golden.sample_rate),
+                FilterType::Peaking => {
+                    peaking(filter.freq, filter.q, filter.gain, golden.sample_rate)
+                }
             })
             .collect();
         let gains = calc_gains(&freqs, &coeffs, golden.sample_rate);
@@ -991,12 +1020,16 @@ mod tests {
             DEFAULT_SAMPLE_RATE,
         );
         let top = peaked.last().unwrap();
-        assert!(top.db > 5.0, "the peaking filter missed the treble: {top:?}");
+        assert!(
+            top.db > 5.0,
+            "the peaking filter missed the treble: {top:?}"
+        );
     }
 
     /// The Equalizer APO configuration captured from the live site, the only
     /// authority on the export format.
-    const CAPTURED_APO_SAMPLE: &str = include_str!("../docs/design-reference/export-apo-sample.txt");
+    const CAPTURED_APO_SAMPLE: &str =
+        include_str!("../docs/design-reference/export-apo-sample.txt");
 
     #[test]
     fn captured_sample_imports_and_exports_back_identically() {
@@ -1043,9 +1076,7 @@ mod tests {
         assert_eq!(imported.filters, filters);
         // And again: importing a file exported from the reference's own names
         // gives the same filters as one exported from this port.
-        let reference_names = exported
-            .replace("LSC", "LSQ")
-            .replace("HSC", "HSQ");
+        let reference_names = exported.replace("LSC", "LSQ").replace("HSC", "HSQ");
         let imported = import_parametric(&reference_names).unwrap();
         assert_eq!(imported.filters, filters);
     }
@@ -1066,5 +1097,84 @@ mod tests {
             import_parametric("Filter 1: OFF PK Fc 500 Hz Gain -3.5 dB Q 1.2\r\n").unwrap();
         assert_eq!(imported.filters.len(), 1);
         assert_eq!(imported.enabled, [false]);
+    }
+
+    /// The semicolon-separated `freq gain` pairs of a Wavelet export.
+    fn graphic_eq_pairs(exported: &str) -> Vec<(f64, f64)> {
+        exported
+            .strip_prefix("GraphicEQ:")
+            .expect("a Wavelet export opens with GraphicEQ:")
+            .split(';')
+            .map(|pair| {
+                let (freq, gain) = pair
+                    .trim()
+                    .split_once(' ')
+                    .expect("a band is a frequency and a gain");
+                (
+                    freq.parse().expect("the frequency is a number"),
+                    gain.parse().expect("the gain is a number"),
+                )
+            })
+            .collect()
+    }
+
+    #[test]
+    fn graphic_eq_export_is_127_one_decimal_bands_that_never_boost() {
+        let golden = fixture();
+        let filters = to_filters(&golden.filters);
+        let exported = export_graphic_eq(&filters, golden.sample_rate);
+        // The reference capture opens with the first band and one-decimal
+        // gains: "GraphicEQ: 20 -2.7; 21 -2.6; 22 -2.6; …".
+        assert!(exported.starts_with("GraphicEQ: 20 "), "{exported}");
+        let pairs = graphic_eq_pairs(&exported);
+        assert_eq!(pairs.len(), 127, "the graphic grid has 127 bands");
+        for (freq, gain) in &pairs {
+            assert!(freq.fract() == 0.0, "band {freq} is not a whole frequency");
+            assert!(
+                (gain * 10.0).round() == gain * 10.0,
+                "band gain {gain} is not one decimal place"
+            );
+            assert!(gain <= &0.0, "band gain {gain} boosts");
+        }
+    }
+
+    #[test]
+    fn graphic_eq_export_matches_the_response_and_parses_back() {
+        let golden = fixture();
+        let filters = to_filters(&golden.filters);
+        let exported = export_graphic_eq(&filters, golden.sample_rate);
+        let pairs = graphic_eq_pairs(&exported);
+        let bands = as_graphic_eq(&filters, golden.sample_rate);
+        assert_eq!(pairs.len(), bands.len());
+        for ((freq, gain), band) in pairs.iter().zip(&bands) {
+            assert!(*freq == band.hz, "band frequency {freq} != {}", band.hz);
+            // The text rounds to one decimal; nothing else may move.
+            assert!(
+                (gain - band.db).abs() < 0.05,
+                "band gain {gain} != {}",
+                band.db
+            );
+        }
+        // Precompensation leaves the loudest band at exactly zero.
+        assert!(pairs.iter().any(|(_, gain)| *gain == 0.0));
+        assert!(pairs.iter().all(|(_, gain)| *gain <= 0.05));
+    }
+
+    #[test]
+    fn the_two_export_formats_describe_one_filter_set() {
+        let golden = fixture();
+        let filters = to_filters(&golden.filters);
+        // Round-trip the parametric export, then render the filters it carries
+        // as a Wavelet export: the two formats must agree on the response.
+        let parametric = export_parametric(
+            &filters,
+            calc_preamp(&to_curve(&golden.curve), &to_curve(&golden.apply)),
+        );
+        let imported = import_parametric(&parametric).unwrap();
+        assert_eq!(imported.filters, filters);
+        let from_parametric =
+            graphic_eq_pairs(&export_graphic_eq(&imported.filters, golden.sample_rate));
+        let direct = graphic_eq_pairs(&export_graphic_eq(&filters, golden.sample_rate));
+        assert_eq!(from_parametric, direct);
     }
 }
