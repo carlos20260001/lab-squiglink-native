@@ -332,6 +332,9 @@ pub struct CrinGraphApp {
     share_message: Option<String>,
     debug_hooks: bool,
     rig_description: Option<String>,
+    /// Set while the selected curve still needs scrolling into view in the
+    /// library. Session-only: it is an action to take once, not a preference.
+    library_reveal_pending: bool,
 }
 
 impl Default for CrinGraphApp {
@@ -382,6 +385,7 @@ impl Default for CrinGraphApp {
             share_input: String::new(),
             share_message: None,
             debug_hooks: false,
+            library_reveal_pending: false,
         }
     }
 }
@@ -478,6 +482,10 @@ impl CrinGraphApp {
         self.loaded = true;
         self.dirty = true;
         self.last_saved_preferences = Some(self.preferences());
+        // The library list scrolls independently, so a session restored with a
+        // curve selected far down it must scroll that row into view rather
+        // than opening at the top of a list of thousands.
+        self.library_reveal_pending = !self.active.is_empty() || !self.active_targets.is_empty();
         Ok(())
     }
 
@@ -1139,64 +1147,107 @@ impl CrinGraphApp {
                     .push((index, group.name.clone()));
             }
         }
-        let mut toggles = Vec::new();
-        egui::ScrollArea::vertical().show(ui, |ui| {
-            cgui::section_header(ui, "Measurements", None);
-            ui.add_space(cgui::Spacing::MICRO);
-            for (brand, models) in measurements {
-                ui.collapsing(
-                    RichText::new(format!("{brand} ({})", models.len())).strong(),
-                    |ui| {
-                        ui.spacing_mut().item_spacing.y = cgui::Spacing::TIGHT;
-                        for (index, model_name) in models {
-                            let mut selected = self.active.contains(&index);
-                            let response = ui.add_enabled(
-                                !self.pinned.contains(&index)
-                                    && (selected || self.active.len() < MAX_ACTIVE_CURVES),
-                                egui::Checkbox::new(
-                                    &mut selected,
-                                    RichText::new(model_name)
-                                        .size(squiglab::theme::TypeStep::Body.size()),
-                                ),
-                            );
-                            if response.changed() {
-                                toggles.push(index);
-                            }
-                        }
-                    },
-                );
+        let mut section = LibrarySection::default();
+        egui::ScrollArea::vertical()
+            .id_salt("library")
+            .show(ui, |ui| {
+                cgui::section_header(ui, "Measurements", None);
+                ui.add_space(cgui::Spacing::MICRO);
+                for (brand, models) in measurements {
+                    self.brand_section(ui, "library_brand", &brand, &models, false, &mut section);
+                }
+                ui.add_space(cgui::Spacing::TIGHT);
+                ui.separator();
+                cgui::section_header(ui, "Targets", Some(&self.active_targets.len().to_string()));
+                ui.add_space(cgui::Spacing::MICRO);
+                for (category, models) in targets {
+                    self.brand_section(
+                        ui,
+                        "library_target",
+                        &category,
+                        &models,
+                        true,
+                        &mut section,
+                    );
+                }
+            });
+        for index in section.toggles {
+            self.toggle_curve(index);
+        }
+        // Scroll the first selected row into view once: a session restored
+        // with a curve far down a list of thousands would otherwise open at
+        // the top with its selection off screen.
+        if self.library_reveal_pending {
+            self.library_reveal_pending = false;
+            if let Some(rect) = section.reveal_rect {
+                ui.scroll_to_rect(rect, None);
             }
-            ui.add_space(cgui::Spacing::TIGHT);
-            ui.separator();
-            cgui::section_header(ui, "Targets", Some(&self.active_targets.len().to_string()));
-            ui.add_space(cgui::Spacing::MICRO);
-            for (category, models) in targets {
-                ui.collapsing(
-                    RichText::new(format!("{category} ({})", models.len())).strong(),
-                    |ui| {
-                        ui.spacing_mut().item_spacing.y = cgui::Spacing::TIGHT;
-                        for (index, target_name) in models {
-                            let mut selected = self.active_targets.contains(&index);
-                            if ui
-                                .add_enabled(
-                                    !self.pinned.contains(&index) || !selected,
-                                    egui::Checkbox::new(
-                                        &mut selected,
-                                        RichText::new(target_name)
-                                            .size(squiglab::theme::TypeStep::Body.size()),
-                                    ),
-                                )
-                                .on_hover_text("Target curves do not use a measurement slot.")
-                                .changed()
-                            {
-                                toggles.push(index);
-                            }
-                        }
-                    },
+        }
+    }
+
+    /// One brand of the library: a collapsing header and its checkboxes.
+    ///
+    /// The header's persistent id is derived from the brand name, so its open
+    /// state survives the search filter changing the counts in its title, and a
+    /// brand holding a selected curve opens by default so the selection is not
+    /// hidden inside a collapsed brand.
+    fn brand_section(
+        &mut self,
+        ui: &mut Ui,
+        id_salt: &str,
+        name: &str,
+        models: &[(usize, String)],
+        target: bool,
+        section: &mut LibrarySection,
+    ) {
+        use squiglab::ui as cgui;
+        let contains_active = models
+            .iter()
+            .any(|(index, _)| self.active.contains(index) || self.active_targets.contains(index));
+        let mut state = egui::collapsing_header::CollapsingState::load_with_default_open(
+            ui.ctx(),
+            egui::Id::new((id_salt, name)),
+            contains_active,
+        );
+        if self.library_reveal_pending && contains_active {
+            state.set_open(true);
+        }
+        let header_response = state.show_header(ui, |ui| {
+            ui.label(RichText::new(format!("{name} ({})", models.len())).strong());
+        });
+        header_response.body(|ui| {
+            ui.spacing_mut().item_spacing.y = cgui::Spacing::TIGHT;
+            for (index, model_name) in models {
+                let mut selected = if target {
+                    self.active_targets.contains(index)
+                } else {
+                    self.active.contains(index)
+                };
+                // Targets do not spend a measurement slot, so they stay
+                // checkable when the slots are full; measurements do not.
+                let enabled = if target {
+                    !self.pinned.contains(index) || !selected
+                } else {
+                    !self.pinned.contains(index)
+                        && (selected || self.active.len() < MAX_ACTIVE_CURVES)
+                };
+                let mut response = ui.add_enabled(
+                    enabled,
+                    egui::Checkbox::new(
+                        &mut selected,
+                        RichText::new(model_name).size(squiglab::theme::TypeStep::Body.size()),
+                    ),
                 );
-            }
-            for index in toggles {
-                self.toggle_curve(index);
+                if target {
+                    response =
+                        response.on_hover_text("Target curves do not use a measurement slot.");
+                }
+                if selected && section.reveal_rect.is_none() {
+                    section.reveal_rect = Some(response.rect);
+                }
+                if response.changed() {
+                    section.toggles.push(*index);
+                }
             }
         });
     }
@@ -1607,6 +1658,14 @@ impl eframe::App for CrinGraphApp {
             }
         });
     }
+}
+
+/// What rendering one brand section of the library found: the checkboxes the
+/// user toggled, and the rect of the first selected row if the brand holds one.
+#[derive(Default)]
+struct LibrarySection {
+    toggles: Vec<usize>,
+    reveal_rect: Option<egui::Rect>,
 }
 
 fn matches_search(candidate: &str, query: &str) -> bool {
@@ -2402,6 +2461,33 @@ smoothing_octaves = 3
             app.rebuild_display_curves();
             assert!(app.display_curves.len() >= app.active.len());
             assert!(app.processing_error.is_none());
+        });
+    }
+
+    #[test]
+    fn loading_with_a_selection_asks_the_library_to_reveal_it() {
+        with_isolated_config(|| {
+            // A first launch selects a default curve, which the library must
+            // scroll into view.
+            let mut app = CrinGraphApp::default();
+            app.load_measurements().unwrap();
+            assert!(!app.active.is_empty());
+            assert!(app.library_reveal_pending);
+
+            // A restored session that selected nothing has nothing to reveal.
+            let path = super::preferences_path().unwrap();
+            write_preferences_to(
+                &path,
+                &Preferences {
+                    active: Vec::new(),
+                    ..Preferences::default()
+                },
+            )
+            .unwrap();
+            let mut restored = CrinGraphApp::default();
+            restored.load_measurements().unwrap();
+            assert!(restored.active.is_empty());
+            assert!(!restored.library_reveal_pending);
         });
     }
 

@@ -207,6 +207,59 @@ impl Spacing {
 }
 
 // ---------------------------------------------------------------------------
+// Scrolling
+// ---------------------------------------------------------------------------
+
+/// Scrollbar geometry, applied through [`egui::style::Spacing::scroll`].
+///
+/// The reference tool themes its scrollbars from CSS custom properties: thin,
+/// floating, and recoloured on hover. egui paints a scrollbar's handle from
+/// the active widget visuals and its track from the extreme background, so the
+/// themed equivalent is a floating bar with the handle drawn in the palette's
+/// foreground stroke, which brightens on hover through the same widget states
+/// every other control uses. Without this the scrollbars are stock egui grey,
+/// which is a visible tell next to the rest of the interface.
+pub mod scroll {
+    use super::SPACE_UNIT;
+    /// Width of the bar at rest.
+    pub const BAR_WIDTH: f32 = 10.0;
+    /// Thin width the floating bar collapses to when the pointer is elsewhere.
+    pub const FLOATING_WIDTH: f32 = 4.0;
+    /// Space always reserved for the floating bar, so it appears without
+    /// covering content.
+    pub const FLOATING_ALLOCATED_WIDTH: f32 = SPACE_UNIT;
+    /// Shortest the handle is ever drawn, so a long list still shows a
+    /// grabbable span.
+    pub const HANDLE_MIN_LENGTH: f32 = 24.0;
+    /// Gap between the content and the bar.
+    pub const BAR_INNER_MARGIN: f32 = SPACE_UNIT * 0.5;
+
+    /// The themed scrollbar style, shared by both palettes.
+    pub fn style() -> egui::style::ScrollStyle {
+        egui::style::ScrollStyle {
+            floating: true,
+            bar_width: BAR_WIDTH,
+            floating_width: FLOATING_WIDTH,
+            floating_allocated_width: FLOATING_ALLOCATED_WIDTH,
+            handle_min_length: HANDLE_MIN_LENGTH,
+            bar_inner_margin: BAR_INNER_MARGIN,
+            // The handle is painted with the widget's foreground stroke, so it
+            // uses the palette's text colors rather than stock egui grey.
+            foreground_color: true,
+            // Dormant opacities keep the bar a hint rather than a permanent
+            // stripe, and the hovered opacities answer the pointer arriving.
+            dormant_handle_opacity: 0.35,
+            active_handle_opacity: 0.6,
+            interact_handle_opacity: 1.0,
+            dormant_background_opacity: 0.0,
+            active_background_opacity: 0.1,
+            interact_background_opacity: 0.2,
+            ..Default::default()
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Registration and application
 // ---------------------------------------------------------------------------
 /// Register the application fonts. Must be called once before the first frame.
@@ -286,6 +339,7 @@ fn style_for(dark: bool) -> Style {
             indent: Spacing::COMPACT + Spacing::TIGHT,
             interact_size: egui::vec2(80.0, 22.0),
             combo_height: Spacing::COMPACT * 3.0,
+            scroll: scroll::style(),
             ..Default::default()
         },
         visuals: visuals(&palette),
