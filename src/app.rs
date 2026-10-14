@@ -41,8 +41,13 @@ fn default_eq_filters() -> Vec<EqRow> {
 }
 /// Height of the manager panel's header and padding before any curve rows.
 const MANAGER_HEIGHT_BASE: f32 = 46.0;
-/// Vertical room one curve row occupies in the manager.
+/// Vertical room one curve row occupies when identity and controls share a line.
 const MANAGER_ROW_HEIGHT: f32 = 32.0;
+/// Vertical room one row occupies when it stacks: a second line of controls plus
+/// the gap between them. Sizing the panel with the single-line figure here is
+/// what made stacked rows overflow and scroll out of sight.
+const MANAGER_STACKED_ROW_HEIGHT: f32 = 48.0;
+const _: () = assert!(MANAGER_STACKED_ROW_HEIGHT > MANAGER_ROW_HEIGHT);
 /// Row width below which the manager stacks a curve's controls under its
 /// identity instead of pressing everything into one line. The identity and
 /// control clusters measure ~800px together at the app's type scale, and a
@@ -2529,8 +2534,17 @@ impl CrinGraphApp {
         // growing once every curve is visible. The panel stays resizable, and a
         // hand-resized height is remembered over this default.
         let curve_count = self.active.len() + self.active_targets.len();
+        // Size the panel from the row height this viewport will actually use,
+        // so every selected curve is visible without scrolling inside a panel
+        // that is too short to hold it.
+        let stacked = ui.available_width() < MANAGER_ROW_STACK_WIDTH;
+        let row_height = if stacked {
+            MANAGER_STACKED_ROW_HEIGHT
+        } else {
+            MANAGER_ROW_HEIGHT
+        };
         let default_height =
-            (MANAGER_HEIGHT_BASE + curve_count as f32 * MANAGER_ROW_HEIGHT).clamp(76.0, 340.0);
+            (MANAGER_HEIGHT_BASE + curve_count as f32 * row_height).clamp(76.0, 340.0);
         // The manager sits under the graph and spans the full width, matching
         // the reference tool. A row has the whole width to work with, so curve
         // identity sits on the left and every control for that curve lines up on
@@ -2574,10 +2588,12 @@ impl CrinGraphApp {
             });
     }
 
-    /// One curve row in the manager: identity on the first line, and the curve's
-    /// controls either right-aligned beside it or stacked beneath it when the
-    /// panel is too narrow to hold both, which is what the reference tool does
-    /// on its compact viewport.
+    /// One curve row in the manager.
+    ///
+    /// Wide viewports keep the row on one line — identity on the left, controls
+    /// right-aligned against it — which is both the reference's shape and what
+    /// lets every selected curve be visible at once. Only a viewport too narrow
+    /// to hold that line stacks the controls onto a second one.
     fn manager_row(
         &mut self,
         ui: &mut Ui,
@@ -2586,166 +2602,173 @@ impl CrinGraphApp {
         stack_controls: bool,
         removals: &mut Vec<usize>,
     ) {
+        if stack_controls {
+            ui.vertical(|ui| {
+                ui.horizontal(|ui| self.manager_row_identity(ui, index, group));
+                // Wrapped, so a long control list flows rather than clipping.
+                ui.horizontal_wrapped(|ui| {
+                    ui.spacing_mut().item_spacing.x = squiglab::ui::Spacing::COMPACT;
+                    self.manager_row_controls(ui, index, group, false, removals);
+                });
+            });
+        } else {
+            ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = squiglab::ui::Spacing::COMPACT;
+                self.manager_row_identity(ui, index, group);
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    ui.spacing_mut().item_spacing.x = squiglab::ui::Spacing::COMPACT;
+                    self.manager_row_controls(ui, index, group, true, removals);
+                });
+            });
+        }
+    }
+
+    /// A row's identity: its colour swatch, its name, and the variant chooser.
+    fn manager_row_identity(&mut self, ui: &mut Ui, index: usize, group: &MeasurementGroup) {
         use squiglab::ui as cgui;
         let palette = squiglab::theme::Palette::resolve(ui.visuals().dark_mode);
         let color = self.curve_color(index);
+        let (swatch, _) = ui.allocate_exact_size(egui::vec2(10.0, 10.0), egui::Sense::hover());
+        ui.painter().circle_filled(swatch.center(), 5.0, color);
+        if group.target {
+            ui.label(
+                egui::RichText::new(format!("Target: {}", group.name))
+                    .strong()
+                    .size(squiglab::theme::TypeStep::Body.size())
+                    .color(palette.text_secondary),
+            );
+        } else {
+            ui.label(
+                egui::RichText::new(&group.name)
+                    .strong()
+                    .size(squiglab::theme::TypeStep::Body.size())
+                    .color(color),
+            );
+        }
+        if !group.brand.is_empty() {
+            ui.label(
+                egui::RichText::new(&group.brand)
+                    .size(squiglab::theme::TypeStep::Micro.size())
+                    .color(palette.text_tertiary),
+            );
+        }
+
+        // Variant chooser, when the model has more than one.
+        if group.variants.len() > 1 {
+            let mut selected_variant = self
+                .variant_choices
+                .get(&index)
+                .copied()
+                .unwrap_or(0)
+                .min(group.variants.len() - 1);
+            egui::ComboBox::from_id_salt(("variant", index))
+                .selected_text(&group.variants[selected_variant].name)
+                .show_ui(ui, |ui| {
+                    for (variant_index, variant) in group.variants.iter().enumerate() {
+                        ui.selectable_value(&mut selected_variant, variant_index, &variant.name);
+                    }
+                });
+            if self.variant_choices.get(&index).copied().unwrap_or(0) != selected_variant {
+                self.variant_choices.insert(index, selected_variant);
+                self.dirty = true;
+            }
+        }
+        if !group.target && cgui::action_button(ui, "Recolor", "Cycle this curve's color") {
+            let offset = self
+                .curve_color_offsets
+                .entry(group_key(group))
+                .or_default();
+            *offset = offset.wrapping_add(1);
+        }
+    }
+
+    /// A row's controls: remove, hide, pin, baseline, offset, and channel mode.
+    fn manager_row_controls(
+        &mut self,
+        ui: &mut Ui,
+        index: usize,
+        group: &MeasurementGroup,
+        right_to_left: bool,
+        removals: &mut Vec<usize>,
+    ) {
+        let palette = squiglab::theme::Palette::resolve(ui.visuals().dark_mode);
         let pinned = self.pinned.contains(&index);
         let hidden = self.hidden.contains(&index);
         let baseline = self.baseline == Some(index);
-        ui.vertical(|ui| {
-            // --- identity, left ---
-            ui.horizontal(|ui| {
-                ui.spacing_mut().item_spacing.x = cgui::Spacing::COMPACT;
-                let (swatch, _) =
-                    ui.allocate_exact_size(egui::vec2(10.0, 10.0), egui::Sense::hover());
-                ui.painter().circle_filled(swatch.center(), 5.0, color);
-                if group.target {
-                    ui.label(
-                        egui::RichText::new(format!("Target: {}", group.name))
-                            .strong()
-                            .size(squiglab::theme::TypeStep::Body.size())
-                            .color(palette.text_secondary),
-                    );
-                } else {
-                    ui.label(
-                        egui::RichText::new(&group.name)
-                            .strong()
-                            .size(squiglab::theme::TypeStep::Body.size())
-                            .color(color),
-                    );
-                }
-                if !group.brand.is_empty() {
-                    ui.label(
-                        egui::RichText::new(&group.brand)
-                            .size(squiglab::theme::TypeStep::Micro.size())
-                            .color(palette.text_tertiary),
-                    );
-                }
-
-                // Variant chooser, when the model has more than one.
-                if group.variants.len() > 1 {
-                    let mut selected_variant = self
-                        .variant_choices
-                        .get(&index)
-                        .copied()
-                        .unwrap_or(0)
-                        .min(group.variants.len() - 1);
-                    egui::ComboBox::from_id_salt(("variant", index))
-                        .selected_text(&group.variants[selected_variant].name)
-                        .show_ui(ui, |ui| {
-                            for (variant_index, variant) in group.variants.iter().enumerate() {
-                                ui.selectable_value(
-                                    &mut selected_variant,
-                                    variant_index,
-                                    &variant.name,
-                                );
-                            }
-                        });
-                    if self.variant_choices.get(&index).copied().unwrap_or(0) != selected_variant {
-                        self.variant_choices.insert(index, selected_variant);
-                        self.dirty = true;
-                    }
-                }
-                if !group.target && cgui::action_button(ui, "Recolor", "Cycle this curve's color") {
-                    let offset = self
-                        .curve_color_offsets
-                        .entry(group_key(group))
-                        .or_default();
-                    *offset = offset.wrapping_add(1);
-                }
-            });
-
-            // --- controls, as one cluster ---
-            // A wide row right-aligns the cluster against the identity; a narrow
-            // row wraps it onto its own line below, so every control stays
-            // reachable without the row growing taller than the panel allows.
-            let layout = if stack_controls {
-                egui::Layout::left_to_right(egui::Align::Center).with_main_wrap(true)
+        let remove = ui.add_enabled(!pinned, egui::Button::new("Remove"));
+        let remove = if pinned {
+            remove.on_hover_text("Unpin this curve before removing it.")
+        } else {
+            remove
+        };
+        if remove.clicked() {
+            removals.push(index);
+        }
+        let mut hidden = hidden;
+        if ui.checkbox(&mut hidden, "Hide").changed() {
+            if hidden {
+                self.hidden.insert(index);
             } else {
-                egui::Layout::right_to_left(egui::Align::Center)
-            };
-            ui.with_layout(layout, |ui| {
-                ui.spacing_mut().item_spacing.x = cgui::Spacing::COMPACT;
-                let remove = ui.add_enabled(!pinned, egui::Button::new("Remove"));
-                let remove = if pinned {
-                    remove.on_hover_text("Unpin this curve before removing it.")
-                } else {
-                    remove
-                };
-                if remove.clicked() {
-                    removals.push(index);
-                }
-                let mut hidden = hidden;
-                if ui.checkbox(&mut hidden, "Hide").changed() {
-                    if hidden {
-                        self.hidden.insert(index);
-                    } else {
-                        self.hidden.remove(&index);
-                    }
-                    self.dirty = true;
-                }
-                let mut pinned = pinned;
-                if ui.checkbox(&mut pinned, "Pin").changed() {
-                    if pinned {
-                        self.pinned.insert(index);
-                    } else {
-                        self.pinned.remove(&index);
-                    }
-                }
-                let mut baseline = baseline;
-                if ui.checkbox(&mut baseline, "Baseline").changed() {
-                    self.baseline = baseline.then_some(index);
-                    self.dirty = true;
-                }
-                let offset = self.offsets.entry(index).or_default();
+                self.hidden.remove(&index);
+            }
+            self.dirty = true;
+        }
+        let mut pinned = pinned;
+        if ui.checkbox(&mut pinned, "Pin").changed() {
+            if pinned {
+                self.pinned.insert(index);
+            } else {
+                self.pinned.remove(&index);
+            }
+        }
+        let mut baseline = baseline;
+        if ui.checkbox(&mut baseline, "Baseline").changed() {
+            self.baseline = baseline.then_some(index);
+            self.dirty = true;
+        }
+        let offset = self.offsets.entry(index).or_default();
+        if ui
+            .add(egui::DragValue::new(offset).speed(0.1).suffix(" dB"))
+            .changed()
+        {
+            self.dirty = true;
+        }
+        if !group.target {
+            // Listed in reading order; a right-aligned cluster reverses them,
+            // because that layout lays items out right-to-left.
+            let mut channel_modes = [
+                (ChannelMode::Left, "L"),
+                (ChannelMode::Right, "R"),
+                (ChannelMode::Both, "Both"),
+                (ChannelMode::Average, "Avg"),
+            ];
+            if right_to_left {
+                channel_modes.reverse();
+            }
+            for (mode, label) in channel_modes {
                 if ui
-                    .add(egui::DragValue::new(offset).speed(0.1).suffix(" dB"))
-                    .changed()
+                    .selectable_label(
+                        self.channel_modes.get(&index).copied().unwrap_or_default() == mode,
+                        label,
+                    )
+                    .clicked()
                 {
+                    self.channel_modes.insert(index, mode);
                     self.dirty = true;
                 }
-                if !group.target {
-                    // Channel labels are listed in reading order; the
-                    // right-aligned cluster reverses them, because that layout
-                    // lays items out right-to-left.
-                    let mut channel_modes = [
-                        (ChannelMode::Left, "L"),
-                        (ChannelMode::Right, "R"),
-                        (ChannelMode::Both, "Both"),
-                        (ChannelMode::Average, "Avg"),
-                    ];
-                    if !stack_controls {
-                        channel_modes.reverse();
-                    }
-                    for (mode, label) in channel_modes {
-                        if ui
-                            .selectable_label(
-                                self.channel_modes.get(&index).copied().unwrap_or_default() == mode,
-                                label,
-                            )
-                            .clicked()
-                        {
-                            self.channel_modes.insert(index, mode);
-                            self.dirty = true;
-                        }
-                    }
-                    let variant_index = self
-                        .variant_choices
-                        .get(&index)
-                        .copied()
-                        .unwrap_or(0)
-                        .min(group.variants.len() - 1);
-                    if group_has_imbalance(
-                        &self.curves,
-                        &group.variants[variant_index].curve_indices,
-                    ) {
-                        ui.colored_label(palette.warning, "!").on_hover_text(
-                            "Left and right channels differ beyond the imbalance threshold.",
-                        );
-                    }
-                }
-            });
-        });
+            }
+            let variant_index = self
+                .variant_choices
+                .get(&index)
+                .copied()
+                .unwrap_or(0)
+                .min(group.variants.len() - 1);
+            if group_has_imbalance(&self.curves, &group.variants[variant_index].curve_indices) {
+                ui.colored_label(palette.warning, "!").on_hover_text(
+                    "Left and right channels differ beyond the imbalance threshold.",
+                );
+            }
+        }
     }
 
     fn central_panel(&mut self, ui: &mut Ui) {
@@ -4509,6 +4532,44 @@ smoothing_octaves = 3
             app.import_upload();
             assert!(app.upload_error.is_some());
         });
+    }
+
+    /// The manager's default height for a viewport of a given width, derived the
+    /// same way the panel derives it. Kept as a function so the test below pins
+    /// the same arithmetic the panel uses rather than restating it.
+    fn manager_height_for(width: f32, curve_count: usize) -> f32 {
+        let row_height = if width < super::MANAGER_ROW_STACK_WIDTH {
+            super::MANAGER_STACKED_ROW_HEIGHT
+        } else {
+            super::MANAGER_ROW_HEIGHT
+        };
+        (super::MANAGER_HEIGHT_BASE + curve_count as f32 * row_height).clamp(76.0, 340.0)
+    }
+
+    #[test]
+    fn the_manager_is_tall_enough_to_show_every_selected_curve() {
+        // A manager shorter than its own rows pushes the last ones out of sight
+        // and makes the user scroll a sliver, which reads as "my selection is
+        // not showing". A wide viewport fits eight curves without scrolling.
+        for count in 1..=8 {
+            let height = manager_height_for(1440.0, count);
+            let needed = super::MANAGER_HEIGHT_BASE + count as f32 * super::MANAGER_ROW_HEIGHT;
+            assert!(
+                height >= needed,
+                "{count} curves need {needed}px but the manager defaults to {height}px"
+            );
+        }
+        // A narrow viewport stacks the controls onto a second line, so the
+        // panel has to budget for that too.
+        for count in 1..=4 {
+            let height = manager_height_for(430.0, count);
+            let needed =
+                super::MANAGER_HEIGHT_BASE + count as f32 * super::MANAGER_STACKED_ROW_HEIGHT;
+            assert!(
+                height >= needed,
+                "{count} stacked curves need {needed}px but the manager defaults to {height}px"
+            );
+        }
     }
 
     #[test]
