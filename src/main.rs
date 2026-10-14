@@ -27,7 +27,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .with_app_id(env!("CRINGRAPH_APP_ID"))
             .with_icon(window_icon())
             .with_inner_size([1440.0, 900.0])
-            .with_min_inner_size([860.0, 560.0]),
+            // Wide enough for the compact layout the reference tool falls back
+            // to below ~1024px. A larger minimum would make the responsive path
+            // unreachable.
+            .with_min_inner_size([430.0, 520.0]),
         ..Default::default()
     };
     eframe::run_native(

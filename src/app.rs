@@ -16,6 +16,7 @@ const MANAGER_ROW_HEIGHT: f32 = 32.0;
 /// Content width below which the layout stacks instead of running the tab column
 /// beside the graph. Matches the reference tool's transition, which sits between
 /// 900 and 1100px.
+const COMPACT_LAYOUT_WIDTH: f32 = 1024.0;
 const CONFIG_DIRECTORY_NAME: &str = "squiglab";
 const SHARE_URI_PREFIX: &str = "squiglab://state/v1/";
 /// Share links issued before the rename. Still decoded so links people already
@@ -968,123 +969,131 @@ impl CrinGraphApp {
         if !self.show_measurements {
             return;
         }
-        egui::Panel::left("selector")
-            .resizable(true)
-            .default_size(250.0)
-            .size_range(190.0..=420.0)
-            .show(ui, |ui| {
-                use squiglab::ui as cgui;
-                let palette = squiglab::theme::Palette::resolve(ui.visuals().dark_mode);
-                squiglab::ui::section_header(
-                    ui,
-                    "Library",
-                    Some(&format!("{}/{}", self.active.len(), MAX_ACTIVE_CURVES)),
-                );
-                ui.add_space(cgui::Spacing::TIGHT);
-                ui.add(
-                    egui::TextEdit::singleline(&mut self.search)
-                        .hint_text("Search measurements and targets")
-                        .font(squiglab::theme::font(squiglab::theme::TypeStep::Body))
-                        .text_color(palette.text_primary),
-                );
-                ui.add_space(cgui::Spacing::TIGHT);
+        if ui.available_width() < COMPACT_LAYOUT_WIDTH {
+            // Compact viewport: the library sits below the graph, matching the
+            // reference tool's stacked order, and takes the width it needs.
+            egui::Panel::bottom("selector")
+                .resizable(true)
+                .default_size(280.0)
+                .size_range(120.0..=620.0)
+                .show(ui, |ui| self.library_contents(ui));
+        } else {
+            egui::Panel::left("selector")
+                .resizable(true)
+                .default_size(250.0)
+                .size_range(190.0..=420.0)
+                .show(ui, |ui| self.library_contents(ui));
+        }
+    }
 
-                if let Some(error) = &self.load_error {
-                    ui.colored_label(Color32::LIGHT_RED, error);
-                    if ui.button("Retry loading").clicked() {
-                        self.loaded = false;
-                        self.load_error = None;
-                    }
-                    return;
-                }
+    /// The library body, shared by both viewports so the two layouts cannot
+    /// drift apart.
+    fn library_contents(&mut self, ui: &mut Ui) {
+        use squiglab::ui as cgui;
+        let palette = squiglab::theme::Palette::resolve(ui.visuals().dark_mode);
+        squiglab::ui::section_header(
+            ui,
+            "Library",
+            Some(&format!("{}/{}", self.active.len(), MAX_ACTIVE_CURVES)),
+        );
+        ui.add_space(cgui::Spacing::TIGHT);
+        ui.add(
+            egui::TextEdit::singleline(&mut self.search)
+                .hint_text("Search measurements and targets")
+                .font(squiglab::theme::font(squiglab::theme::TypeStep::Body))
+                .text_color(palette.text_primary),
+        );
+        ui.add_space(cgui::Spacing::TIGHT);
 
-                let mut measurements = BTreeMap::<String, Vec<(usize, String)>>::new();
-                let mut targets = BTreeMap::<String, Vec<(usize, String)>>::new();
-                for (index, group) in self.groups.iter().enumerate() {
-                    let brand = group
-                        .brand_suffix
-                        .as_ref()
-                        .map(|suffix| format!("{} {suffix}", group.brand))
-                        .unwrap_or_else(|| group.brand.clone());
-                    if matches_search(&format!("{brand} {}", group.name), &self.search) {
-                        let groups = if group.target {
-                            &mut targets
-                        } else {
-                            &mut measurements
-                        };
-                        groups
-                            .entry(brand)
-                            .or_default()
-                            .push((index, group.name.clone()));
-                    }
-                }
-                let mut toggles = Vec::new();
-                egui::ScrollArea::vertical().show(ui, |ui| {
-                    cgui::section_header(ui, "Measurements", None);
-                    ui.add_space(cgui::Spacing::MICRO);
-                    for (brand, models) in measurements {
-                        ui.collapsing(
-                            RichText::new(format!("{brand} ({})", models.len())).strong(),
-                            |ui| {
-                                ui.spacing_mut().item_spacing.y = cgui::Spacing::TIGHT;
-                                for (index, model_name) in models {
-                                    let mut selected = self.active.contains(&index);
-                                    let response = ui.add_enabled(
-                                        !self.pinned.contains(&index)
-                                            && (selected || self.active.len() < MAX_ACTIVE_CURVES),
-                                        egui::Checkbox::new(
-                                            &mut selected,
-                                            RichText::new(model_name)
-                                                .size(squiglab::theme::TypeStep::Body.size()),
-                                        ),
-                                    );
-                                    if response.changed() {
-                                        toggles.push(index);
-                                    }
-                                }
-                            },
-                        );
-                    }
-                    ui.add_space(cgui::Spacing::TIGHT);
-                    ui.separator();
-                    cgui::section_header(
-                        ui,
-                        "Targets",
-                        Some(&self.active_targets.len().to_string()),
-                    );
-                    ui.add_space(cgui::Spacing::MICRO);
-                    for (category, models) in targets {
-                        ui.collapsing(
-                            RichText::new(format!("{category} ({})", models.len())).strong(),
-                            |ui| {
-                                ui.spacing_mut().item_spacing.y = cgui::Spacing::TIGHT;
-                                for (index, target_name) in models {
-                                    let mut selected = self.active_targets.contains(&index);
-                                    if ui
-                                        .add_enabled(
-                                            !self.pinned.contains(&index) || !selected,
-                                            egui::Checkbox::new(
-                                                &mut selected,
-                                                RichText::new(target_name)
-                                                    .size(squiglab::theme::TypeStep::Body.size()),
-                                            ),
-                                        )
-                                        .on_hover_text(
-                                            "Target curves do not use a measurement slot.",
-                                        )
-                                        .changed()
-                                    {
-                                        toggles.push(index);
-                                    }
-                                }
-                            },
-                        );
-                    }
-                    for index in toggles {
-                        self.toggle_curve(index);
-                    }
-                });
-            });
+        if let Some(error) = &self.load_error {
+            ui.colored_label(Color32::LIGHT_RED, error);
+            if ui.button("Retry loading").clicked() {
+                self.loaded = false;
+                self.load_error = None;
+            }
+            return;
+        }
+
+        let mut measurements = BTreeMap::<String, Vec<(usize, String)>>::new();
+        let mut targets = BTreeMap::<String, Vec<(usize, String)>>::new();
+        for (index, group) in self.groups.iter().enumerate() {
+            let brand = group
+                .brand_suffix
+                .as_ref()
+                .map(|suffix| format!("{} {suffix}", group.brand))
+                .unwrap_or_else(|| group.brand.clone());
+            if matches_search(&format!("{brand} {}", group.name), &self.search) {
+                let groups = if group.target {
+                    &mut targets
+                } else {
+                    &mut measurements
+                };
+                groups
+                    .entry(brand)
+                    .or_default()
+                    .push((index, group.name.clone()));
+            }
+        }
+        let mut toggles = Vec::new();
+        egui::ScrollArea::vertical().show(ui, |ui| {
+            cgui::section_header(ui, "Measurements", None);
+            ui.add_space(cgui::Spacing::MICRO);
+            for (brand, models) in measurements {
+                ui.collapsing(
+                    RichText::new(format!("{brand} ({})", models.len())).strong(),
+                    |ui| {
+                        ui.spacing_mut().item_spacing.y = cgui::Spacing::TIGHT;
+                        for (index, model_name) in models {
+                            let mut selected = self.active.contains(&index);
+                            let response = ui.add_enabled(
+                                !self.pinned.contains(&index)
+                                    && (selected || self.active.len() < MAX_ACTIVE_CURVES),
+                                egui::Checkbox::new(
+                                    &mut selected,
+                                    RichText::new(model_name)
+                                        .size(squiglab::theme::TypeStep::Body.size()),
+                                ),
+                            );
+                            if response.changed() {
+                                toggles.push(index);
+                            }
+                        }
+                    },
+                );
+            }
+            ui.add_space(cgui::Spacing::TIGHT);
+            ui.separator();
+            cgui::section_header(ui, "Targets", Some(&self.active_targets.len().to_string()));
+            ui.add_space(cgui::Spacing::MICRO);
+            for (category, models) in targets {
+                ui.collapsing(
+                    RichText::new(format!("{category} ({})", models.len())).strong(),
+                    |ui| {
+                        ui.spacing_mut().item_spacing.y = cgui::Spacing::TIGHT;
+                        for (index, target_name) in models {
+                            let mut selected = self.active_targets.contains(&index);
+                            if ui
+                                .add_enabled(
+                                    !self.pinned.contains(&index) || !selected,
+                                    egui::Checkbox::new(
+                                        &mut selected,
+                                        RichText::new(target_name)
+                                            .size(squiglab::theme::TypeStep::Body.size()),
+                                    ),
+                                )
+                                .on_hover_text("Target curves do not use a measurement slot.")
+                                .changed()
+                            {
+                                toggles.push(index);
+                            }
+                        }
+                    },
+                );
+            }
+            for index in toggles {
+                self.toggle_curve(index);
+            }
+        });
     }
 
     fn manager_panel(&mut self, ui: &mut Ui) {
@@ -1408,9 +1417,18 @@ impl eframe::App for CrinGraphApp {
         self.toolbar(ui);
         self.share_window(&ctx);
         self.tutorial_window(&ctx);
-        self.selector_panel(ui);
+        // The reference tool has two viewports: below ~1024px content width the
+        // graph stacks above the tab column, and above it the tabs sit beside the
+        // graph. Branch on available width rather than tracking window size.
+        let compact = ui.available_width() < COMPACT_LAYOUT_WIDTH;
+        if compact {
+            self.central_panel(ui);
+            self.selector_panel(ui);
+        } else {
+            self.selector_panel(ui);
+            self.central_panel(ui);
+        }
         self.manager_panel(ui);
-        self.central_panel(ui);
         if self.loaded && self.load_error.is_none() {
             self.persist_preferences_if_changed();
         }

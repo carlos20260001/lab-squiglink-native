@@ -415,7 +415,12 @@ impl GraphCanvas<'_> {
             }
             let start = transform.hz_to_x(low).max(plot_rect.left());
             let end = transform.hz_to_x(high).min(plot_rect.right());
-            if end - start < 24.0 {
+            // A band only earns its label if the band is wider than the label
+            // itself. On a narrow viewport the higher bands collapse to a few
+            // pixels, and printing their names there overlaps the neighbours into
+            // an unreadable smear.
+            let label_width = band.title.len() as f32 * TypeStep::Micro.size() * 0.58;
+            if end - start < label_width + 6.0 {
                 continue;
             }
             let active = self.tutorial_band.map(|(title, _)| title) == Some(band.title);
