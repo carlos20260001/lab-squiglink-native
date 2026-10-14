@@ -447,6 +447,12 @@ pub struct CrinGraphApp {
     /// The names of the curves the user uploaded, so they are excluded from
     /// shared state no matter which brand they were filed under.
     uploaded_names: BTreeSet<String>,
+    /// Whether the equalizer's "How to use" window is open. Session state: the
+    /// reference shows it to a first-time visitor, and this offers it again
+    /// from the panel's help control.
+    onboarding_open: bool,
+    /// Which of the four paths is open in that window.
+    onboarding_section: usize,
     upload_open: bool,
     upload_path: String,
     upload_as_target: bool,
@@ -522,6 +528,8 @@ impl Default for CrinGraphApp {
             sound_message: None,
             upload_grid: Vec::new(),
             uploaded_names: BTreeSet::new(),
+            onboarding_open: false,
+            onboarding_section: 0,
             upload_open: false,
             upload_path: String::new(),
             upload_as_target: false,
@@ -1756,6 +1764,112 @@ impl CrinGraphApp {
         });
     }
 
+    /// The equalizer's "How to use" window: the four paths the reference's
+    /// onboarding modal offers, in the same order and with the same intent.
+    ///
+    /// The difference is that each path here performs what it describes rather
+    /// than describing it. A modal that only talks about Auto EQ is worse
+    /// guidance than the button that runs it, and the reference's own copy
+    /// ("What do you want to do?") is a question the app can answer by
+    /// pressing a button.
+    fn onboarding_window(&mut self, ctx: &Context) {
+        if !self.onboarding_open {
+            return;
+        }
+        let mut open = true;
+        let mut finished = false;
+        let palette = squiglab::theme::Palette::resolve(self.dark_mode);
+        egui::Window::new("How to use the equalizer")
+            .open(&mut open)
+            .resizable(false)
+            .collapsible(false)
+            .default_width(420.0)
+            .show(ctx, |ui| {
+                ui.label(
+                    RichText::new("How to use the equalizer")
+                        .font(squiglab::theme::font_bold(squiglab::theme::TypeStep::Heading))
+                        .color(palette.text_primary),
+                );
+                ui.add_space(squiglab::ui::Spacing::COMPACT);
+                ui.label(
+                    RichText::new(
+                        "The equalizer customises the sound of any headphone. What do you want to do?",
+                    )
+                    .color(palette.text_secondary),
+                );
+                ui.add_space(squiglab::ui::Spacing::COMPACT);
+
+                // Each path is collapsible, as the reference's are, so the
+                // window can be read without committing to anything.
+                let sections: [(&str, &str, &str); 4] = [
+                    (
+                        "Beginner",
+                        "Fit a correction to a target response.",
+                        "Choose a target in the dropdown above and press Auto EQ. It fits bands to move the measurement as close to that target as the bands allow, and you can adjust any of them afterwards.",
+                    ),
+                    (
+                        "Intermediate",
+                        "Fit a correction to another headphone.",
+                        "Choose a second measurement as the target instead. Auto EQ will match this headphone to that one, which is how you hear one pair's sound in another.",
+                    ),
+                    (
+                        "Advanced",
+                        "Make manual corrections yourself.",
+                        "Every band is editable: its type, frequency, gain, and Q, and each can be switched off without losing it. A few wide bands usually sound better than many narrow ones.",
+                    ),
+                    (
+                        "Export",
+                        "Take the bands to your system.",
+                        "Export writes an Equalizer APO configuration for a parametric EQ, or the Wavelet GraphicEQ format. Both carry a preamp, so the result never boosts.",
+                    ),
+                ];
+                for (index, (title, summary, detail)) in sections.into_iter().enumerate() {
+                    let header = egui::CollapsingHeader::new(
+                        RichText::new(format!("{title}: {summary}")).strong(),
+                    )
+                    .default_open(self.onboarding_section == index)
+                    .id_salt(("onboarding", index))
+                    .show(ui, |ui| {
+                        ui.set_width(ui.available_width());
+                        ui.label(RichText::new(detail).color(palette.text_secondary));
+                        match index {
+                            // Auto EQ to the chosen target, falling back to the
+                            // reference's first active target.
+                            0 | 1 => {
+                                if ui.button("Auto EQ now").clicked() {
+                                    self.run_auto_eq();
+                                    finished = true;
+                                }
+                            }
+                            2 => {
+                                if ui.button("Show the bands").clicked() {
+                                    finished = true;
+                                }
+                            }
+                            _ => {
+                                if ui.button("Export now").clicked() {
+                                    let exported = self.parametric_export();
+                                    self.report_export(exported, "Parametric EQ");
+                                    finished = true;
+                                }
+                            }
+                        }
+                    });
+                    if header.header_response.clicked() {
+                        self.onboarding_section = index;
+                    }
+                }
+                ui.horizontal(|ui| {
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if ui.button("Done").clicked() {
+                            finished = true;
+                        }
+                    });
+                });
+            });
+        self.onboarding_open = open && !finished;
+    }
+
     /// The upload window. The reference asks for a file; egui has no file
     /// picker without a new dependency, so the path is typed, as it is for
     /// importing a parametric configuration.
@@ -1938,6 +2052,17 @@ impl CrinGraphApp {
                     ))
                     .color(palette.text_primary),
             );
+            // The reference's title carries a "?" that opens its guidance; the
+            // same control opens the guidance here.
+            if ui
+                .add(egui::Button::new(
+                    RichText::new("?").color(palette.text_secondary),
+                ))
+                .on_hover_text("How to use the equalizer")
+                .clicked()
+            {
+                self.onboarding_open = true;
+            }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.menu_button("Settings", |ui| {
                     ui.label(
@@ -2727,6 +2852,7 @@ impl eframe::App for CrinGraphApp {
         self.share_window(&ctx);
         self.equalizer_import_window(&ctx);
         self.upload_window(&ctx);
+        self.onboarding_window(&ctx);
         self.tutorial_window(&ctx);
         // The reference tool has two viewports: below ~1024px content width the
         // graph stacks above the tab column, and above it the tabs sit beside the
