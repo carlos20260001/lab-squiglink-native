@@ -565,11 +565,135 @@ pub fn autoeq(
     strip(all_filters)
 }
 
+// ---------------------------------------------------------------------------
+// Equalizer APO parametric export
+// ---------------------------------------------------------------------------
+
+/// An imported Equalizer APO configuration: the filter bands in file order,
+/// and which of them the file switches on.
+pub struct ImportedFilters {
+    pub filters: Vec<Filter>,
+    pub enabled: Vec<bool>,
+}
+
+/// Render a filter set as an Equalizer APO parametric EQ configuration,
+/// against `preamp`, the negative peak of the EQ'd curve so it never boosts.
+///
+/// Lines are CRLF separated, as Equalizer APO expects. `Preamp` is written at
+/// full precision. Shelf filters use APO's shorter `LSC` and `HSC` names, and
+/// bands whose frequency, Q, and gain are all zero are omitted, matching the
+/// reference tool's exports.
+pub fn export_parametric(filters: &[Filter], preamp: f64) -> String {
+    // Negative zero would export as "-0", which Equalizer APO accepts but no
+    // other tool round-trips cleanly.
+    let preamp = if preamp == 0.0 { 0.0 } else { preamp };
+    let mut output = format!("Preamp: {preamp} dB\r\n");
+    let mut number = 1;
+    for filter in filters {
+        if filter.freq == 0.0 && filter.q == 0.0 && filter.gain == 0.0 {
+            continue;
+        }
+        let filter_type = match filter.filter_type {
+            FilterType::Peaking => "PK",
+            FilterType::LowShelf => "LSC",
+            FilterType::HighShelf => "HSC",
+        };
+        use std::fmt::Write;
+        let _ = write!(
+            output,
+            "Filter {number}: ON {filter_type} Fc {} Hz Gain {} dB Q {}\r\n",
+            filter.freq, filter.gain, filter.q
+        );
+        number += 1;
+    }
+    output
+}
+
+/// Parse an Equalizer APO parametric EQ configuration. Only the three filter
+/// types the reference tool has are accepted; a bandwidth (`BW`) band or a
+/// filter type outside `PK`, `LSC`, and `HSC` is refused rather than guessed
+/// at, because a silent conversion would not round-trip.
+pub fn import_parametric(text: &str) -> anyhow::Result<ImportedFilters> {
+    let mut filters = Vec::new();
+    let mut enabled = Vec::new();
+    for (index, line) in text.lines().enumerate() {
+        let line = line.trim();
+        let number = index + 1;
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let lowered = line.to_ascii_lowercase();
+        if lowered.starts_with("preamp") {
+            continue;
+        }
+        // Everything after "Filter <n>:", so a missing or renumbered prefix
+        // does not matter.
+        let body = match line.split_once(':') {
+            Some((_, body)) => body.trim(),
+            None => anyhow::bail!("line {number}: not a filter band: {line}"),
+        };
+        let mut tokens = body.split_whitespace();
+        let state = tokens
+            .next()
+            .ok_or_else(|| anyhow::anyhow!("line {number}: a filter band needs a state"))?;
+        let on = match state.to_ascii_lowercase().as_str() {
+            "on" => true,
+            "off" => false,
+            other => anyhow::bail!("line {number}: unknown filter state {other:?}"),
+        };
+        let filter_type = match tokens
+            .next()
+            .ok_or_else(|| anyhow::anyhow!("line {number}: a filter band needs a type"))?
+            .to_ascii_uppercase()
+            .as_str()
+        {
+            "PK" => FilterType::Peaking,
+            "LSC" | "LSQ" => FilterType::LowShelf,
+            "HSC" | "HSQ" => FilterType::HighShelf,
+            other => anyhow::bail!(
+                "line {number}: filter type {other} is not one of PK, LSC, or HSC"
+            ),
+        };
+        // Fc, Gain, and Q arrive as key/value pairs with their units between
+        // them: "Fc 500 Hz Gain -3.5 dB Q 1.2". A key takes the token after it
+        // as its value, and the units are skipped on their own.
+        let (mut freq, mut q, mut gain) = (0.0, 0.0, 0.0);
+        let mut tokens = tokens.peekable();
+        while let Some(key) = tokens.next() {
+            let mut value = || {
+                tokens
+                    .next()
+                    .ok_or_else(|| anyhow::anyhow!("line {number}: {key} has no value"))
+            };
+            match key.to_ascii_uppercase().as_str() {
+                "FC" => freq = parse_number(value()?, number)?,
+                "Q" => q = parse_number(value()?, number)?,
+                "GAIN" => gain = parse_number(value()?, number)?,
+                "HZ" | "DB" => {}
+                "BW" => anyhow::bail!(
+                    "line {number}: bandwidth filters are not supported, only Q"
+                ),
+                other => anyhow::bail!("line {number}: unknown filter field {other}"),
+            }
+        }
+        filters.push(Filter::new(filter_type, freq, q, gain));
+        enabled.push(on);
+    }
+    Ok(ImportedFilters { filters, enabled })
+}
+
+fn parse_number(token: &str, line: usize) -> anyhow::Result<f64> {
+    token
+        .parse::<f64>()
+        .map_err(|_| anyhow::anyhow!("line {line}: {token:?} is not a number"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        apply, as_graphic_eq, autoeq, calc_distance, calc_gains, calc_preamp, highshelf, interp,
-        lowshelf, peaking, Filter, FilterType, ResponsePoint, DEFAULT_SAMPLE_RATE,
+        apply, as_graphic_eq, autoeq, calc_distance, calc_gains, calc_preamp, export_parametric,
+        highshelf, import_parametric, interp, lowshelf, peaking, Filter, FilterType, ResponsePoint,
+        DEFAULT_SAMPLE_RATE,
     };
     use serde::Deserialize;
 
@@ -868,5 +992,79 @@ mod tests {
         );
         let top = peaked.last().unwrap();
         assert!(top.db > 5.0, "the peaking filter missed the treble: {top:?}");
+    }
+
+    /// The Equalizer APO configuration captured from the live site, the only
+    /// authority on the export format.
+    const CAPTURED_APO_SAMPLE: &str = include_str!("../docs/design-reference/export-apo-sample.txt");
+
+    #[test]
+    fn captured_sample_imports_and_exports_back_identically() {
+        let imported = import_parametric(CAPTURED_APO_SAMPLE).unwrap();
+        assert_eq!(imported.enabled, [true]);
+        assert_eq!(
+            imported.filters,
+            [Filter::new(FilterType::Peaking, 500.0, 1.2, -3.5)]
+        );
+        // The capture was saved with LF endings; the export writes CRLF, so
+        // the comparison is on the text with endings normalised.
+        let exported = export_parametric(&imported.filters, 0.0002);
+        assert_eq!(exported.replace("\r\n", "\n"), CAPTURED_APO_SAMPLE);
+    }
+
+    #[test]
+    fn parametric_export_writes_crlf_apo_names_and_drops_empty_bands() {
+        let filters = [
+            Filter::new(FilterType::Peaking, 500.0, 1.2, -3.5),
+            Filter::new(FilterType::LowShelf, 105.0, 0.71, 6.0),
+            Filter::new(FilterType::HighShelf, 9000.0, 0.71, -4.0),
+            Filter::new(FilterType::Peaking, 0.0, 0.0, 0.0),
+        ];
+        let exported = export_parametric(&filters, -5.989272033886169);
+        assert_eq!(
+            exported,
+            "Preamp: -5.989272033886169 dB\r\n\
+             Filter 1: ON PK Fc 500 Hz Gain -3.5 dB Q 1.2\r\n\
+             Filter 2: ON LSC Fc 105 Hz Gain 6 dB Q 0.71\r\n\
+             Filter 3: ON HSC Fc 9000 Hz Gain -4 dB Q 0.71\r\n"
+        );
+    }
+
+    #[test]
+    fn parametric_round_trip_preserves_the_filter_set() {
+        let filters = [
+            Filter::new(FilterType::Peaking, 42.0, 0.9, 6.6),
+            Filter::new(FilterType::LowShelf, 105.0, 0.71, 6.0),
+            Filter::new(FilterType::HighShelf, 9000.0, 0.71, -4.0),
+        ];
+        let exported = export_parametric(&filters, -2.0);
+        let imported = import_parametric(&exported).unwrap();
+        assert!(imported.enabled.iter().all(|&on| on));
+        assert_eq!(imported.filters, filters);
+        // And again: importing a file exported from the reference's own names
+        // gives the same filters as one exported from this port.
+        let reference_names = exported
+            .replace("LSC", "LSQ")
+            .replace("HSC", "HSQ");
+        let imported = import_parametric(&reference_names).unwrap();
+        assert_eq!(imported.filters, filters);
+    }
+
+    #[test]
+    fn parametric_import_refuses_what_it_cannot_represent() {
+        assert!(import_parametric("Filter 1: ON LPQ Fc 500 Hz Gain -3.5 dB").is_err());
+        assert!(import_parametric("Filter 1: ON PK Fc 500 Hz Gain -3.5 dB BW 2").is_err());
+        assert!(import_parametric("Filter 1: MAYBE PK Fc 500 Hz Gain -3.5 dB").is_err());
+        assert!(import_parametric("Filter 1: ON PK Fc five Hz Gain -3.5 dB").is_err());
+        assert!(import_parametric("this is not a filter band").is_err());
+        // A preamp line and blank and commented lines are skipped, not errors.
+        let imported =
+            import_parametric("# exported by squig.link\r\n\r\nPreamp: -3 dB\r\n").unwrap();
+        assert!(imported.filters.is_empty());
+        // An off band is imported switched off.
+        let imported =
+            import_parametric("Filter 1: OFF PK Fc 500 Hz Gain -3.5 dB Q 1.2\r\n").unwrap();
+        assert_eq!(imported.filters.len(), 1);
+        assert_eq!(imported.enabled, [false]);
     }
 }
