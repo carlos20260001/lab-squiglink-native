@@ -912,14 +912,14 @@ impl CrinGraphApp {
                             ui.separator();
                         }
                         self.toolbar_actions(ui);
-                        if !density.shows_theme() {
-                            if cgui::action_button(
+                        if !density.shows_theme()
+                            && cgui::action_button(
                                 ui,
                                 if self.dark_mode { "Light" } else { "Dark" },
                                 "Switch between the dark and light themes",
-                            ) {
-                                self.dark_mode = !self.dark_mode;
-                            }
+                            )
+                        {
+                            self.dark_mode = !self.dark_mode;
                         }
                     })
                     .response
@@ -1242,19 +1242,7 @@ impl CrinGraphApp {
                         .collect::<Vec<_>>()
                     {
                         let group = self.groups[index].clone();
-                        let pinned = self.pinned.contains(&index);
-                        let hidden = self.hidden.contains(&index);
-                        let baseline = self.baseline == Some(index);
-                        self.manager_row(
-                            ui,
-                            index,
-                            &group,
-                            pinned,
-                            hidden,
-                            baseline,
-                            stack_rows,
-                            &mut removals,
-                        );
+                        self.manager_row(ui, index, &group, stack_rows, &mut removals);
                         ui.separator();
                     }
                     for index in removals {
@@ -1273,15 +1261,15 @@ impl CrinGraphApp {
         ui: &mut Ui,
         index: usize,
         group: &MeasurementGroup,
-        pinned: bool,
-        hidden: bool,
-        baseline: bool,
         stack_controls: bool,
         removals: &mut Vec<usize>,
     ) {
         use squiglab::ui as cgui;
         let palette = squiglab::theme::Palette::resolve(ui.visuals().dark_mode);
         let color = self.curve_color(index);
+        let pinned = self.pinned.contains(&index);
+        let hidden = self.hidden.contains(&index);
+        let baseline = self.baseline == Some(index);
         ui.vertical(|ui| {
             // --- identity, left ---
             ui.horizontal(|ui| {
@@ -1336,14 +1324,14 @@ impl CrinGraphApp {
                         self.dirty = true;
                     }
                 }
-                if !group.target {
-                    if cgui::action_button(ui, "Recolor", "Cycle this curve's color") {
-                        let offset = self
-                            .curve_color_offsets
-                            .entry(group_key(group))
-                            .or_default();
-                        *offset = offset.wrapping_add(1);
-                    }
+                if !group.target
+                    && cgui::action_button(ui, "Recolor", "Cycle this curve's color")
+                {
+                    let offset = self
+                        .curve_color_offsets
+                        .entry(group_key(group))
+                        .or_default();
+                    *offset = offset.wrapping_add(1);
                 }
             });
 
