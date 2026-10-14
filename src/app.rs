@@ -1,5 +1,6 @@
 use egui::{Color32, Context, RichText, Ui};
 use serde::{Deserialize, Serialize};
+use squiglab::audio::Player;
 use squiglab::color::target_color;
 use squiglab::data::{self, CurveInfo, FRPoint, PhoneBook};
 use squiglab::equalizer;
@@ -425,6 +426,17 @@ pub struct CrinGraphApp {
     eq_import_error: Option<String>,
     eq_export_message: Option<String>,
     eq_export_error: Option<String>,
+    /// The playing sound, if it is playing. Stopped and dropped by
+    /// [`stop_sound`].
+    player: Option<squiglab::audio::Player>,
+    /// Which of the Compare A | B settings the controls are editing.
+    sound_slot: usize,
+    /// The two settings Compare A | B switches between. They live with the
+    /// session rather than in preferences: a sound setting is something the
+    /// user is auditioning now, not a view to restore.
+    sound_settings: [squiglab::audio::Settings; 2],
+    /// A message from the sound player, shown in the panel.
+    sound_message: Option<String>,
     /// Set while the selected curve still needs scrolling into view in the
     /// library. Session-only: it is an action to take once, not a preference.
     library_reveal_pending: bool,
@@ -489,6 +501,10 @@ impl Default for CrinGraphApp {
             eq_import_error: None,
             eq_export_message: None,
             eq_export_error: None,
+            player: None,
+            sound_slot: 0,
+            sound_settings: [squiglab::audio::Settings::default(); 2],
+            sound_message: None,
             library_reveal_pending: false,
         }
     }
@@ -1561,6 +1577,106 @@ impl CrinGraphApp {
         }
     }
 
+    /// The sound tools: a tone generator and pink noise, with the Compare A | B
+    /// toggle the reference puts above them.
+    ///
+    /// The player is created on the first play and dropped on stop, so nothing
+    /// is held open while the sound is not wanted.
+    fn sound_tools(&mut self, ui: &mut Ui) {
+        use squiglab::audio::Source;
+        use squiglab::ui as cgui;
+        let palette = squiglab::theme::Palette::resolve(ui.visuals().dark_mode);
+        ui.add_space(cgui::Spacing::RELAXED);
+        cgui::section_header(ui, "Sound Tools", None);
+        ui.add_space(cgui::Spacing::TIGHT);
+        ui.horizontal(|ui| {
+            cgui::segmented(
+                ui,
+                &[(0usize, "Compare A"), (1usize, "Compare B")],
+                &mut self.sound_slot,
+                Some("Switch between the two sound settings"),
+            );
+            let playing = self.player.is_some();
+            if cgui::action_button(
+                ui,
+                if playing { "Stop" } else { "Play" },
+                "Play or stop the tone generator",
+            ) {
+                if playing {
+                    self.stop_sound();
+                } else {
+                    self.start_sound();
+                }
+            }
+        });
+        ui.add_space(cgui::Spacing::TIGHT);
+
+        // Edited on a copy, so the panel does not hold a borrow across the
+        // player's own state.
+        let mut settings = self.sound_settings[self.sound_slot];
+        let mut choice = usize::from(!settings.source.is_tone());
+        if cgui::segmented(
+            ui,
+            &[(0usize, "Tone generator"), (1usize, "Pink noise")],
+            &mut choice,
+            None,
+        ) {
+            settings.source = match choice {
+                // Keep the frequency the tone was left at when switching back.
+                0 => match settings.source {
+                    Source::Tone { freq } => Source::Tone { freq },
+                    Source::PinkNoise => Source::Tone { freq: 1000.0 },
+                },
+                _ => Source::PinkNoise,
+            };
+        }
+        if let Source::Tone { freq } = &mut settings.source {
+            // A log slider, because pitch is heard geometrically and a linear
+            // one would crowd every low frequency into a corner.
+            ui.add(
+                egui::Slider::new(freq, 20.0..=20_000.0)
+                    .logarithmic(true)
+                    .suffix(" Hz")
+                    .text("Tone"),
+            );
+        }
+        ui.add(egui::Slider::new(&mut settings.volume, 0.0..=1.0).text("Volume"));
+        self.sound_settings[self.sound_slot] = settings;
+        // A playing tone follows the controls: the pitch glides to a new
+        // frequency rather than jumping, which is the reference's behaviour
+        // when the slider is dragged.
+        if let Some(player) = &self.player {
+            player.set_settings(settings);
+        }
+        if let Some(message) = self.player.as_mut().and_then(Player::take_message) {
+            self.sound_message = Some(message);
+        }
+        if let Some(message) = &self.sound_message {
+            ui.colored_label(palette.text_secondary, message);
+        }
+    }
+
+    /// Start the sound, reporting why not if the audio path is unavailable.
+    fn start_sound(&mut self) {
+        let settings = self.sound_settings[self.sound_slot];
+        match Player::start(settings) {
+            Ok(player) => {
+                self.player = Some(player);
+                self.sound_message = Some(format!("Playing {}.", settings.source.name()));
+            }
+            Err(error) => {
+                self.sound_message = Some(error);
+            }
+        }
+    }
+
+    /// Stop the sound. Dropping the player closes the stream and joins the
+    /// thread that was writing to it.
+    fn stop_sound(&mut self) {
+        self.player = None;
+        self.sound_message = Some("Stopped.".to_owned());
+    }
+
     /// The parametric equalizer panel: the curve being edited, its filter
     /// table, Auto EQ, and the two export formats, laid out as the reference
     /// arranges them.
@@ -1836,6 +1952,8 @@ impl CrinGraphApp {
         if let Some(error) = &self.eq_export_error {
             ui.colored_label(palette.error, error);
         }
+
+        self.sound_tools(ui);
     }
 
     /// The Equalizer APO import window. The reference opens a file picker;
@@ -3724,6 +3842,44 @@ smoothing_octaves = 3
             .display_curves
             .iter()
             .all(|curve| curve.source == CurveSource::Measurement));
+    }
+
+    #[test]
+    fn the_sound_settings_default_to_a_tone_and_keep_two_slots() {
+        let app = CrinGraphApp::default();
+        // Both Compare slots start identical, on a mid tone at a low volume.
+        assert_eq!(
+            app.sound_settings[0],
+            squiglab::audio::Settings {
+                source: squiglab::audio::Source::Tone { freq: 1000.0 },
+                volume: 0.2
+            }
+        );
+        assert_eq!(app.sound_settings[0], app.sound_settings[1]);
+        assert_eq!(app.sound_slot, 0);
+        assert!(
+            app.player.is_none(),
+            "nothing is playing on a fresh session"
+        );
+    }
+
+    #[test]
+    fn starting_the_sound_reports_why_it_cannot() {
+        // Playback is wired up on Linux through PipeWire; on other platforms the
+        // player says so rather than failing silently. Either way the app is
+        // left in a coherent state: playing or a message explaining why not.
+        let mut app = CrinGraphApp::default();
+        app.start_sound();
+        if app.player.is_none() {
+            assert!(
+                app.sound_message.is_some(),
+                "a failed start must explain itself"
+            );
+        } else {
+            app.stop_sound();
+            assert!(app.player.is_none());
+            assert_eq!(app.sound_message.as_deref(), Some("Stopped."));
+        }
     }
 
     #[test]
