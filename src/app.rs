@@ -52,6 +52,10 @@ const MANAGER_ROW_STACK_WIDTH: f32 = 800.0;
 /// beside the graph. Matches the reference tool's transition, which sits between
 /// 900 and 1100px.
 const COMPACT_LAYOUT_WIDTH: f32 = 1024.0;
+/// The brand uploaded measurements are listed under. A synthetic brand keeps a
+/// user's own measurements out of the reference database's brands, and marks
+/// them so they are left out of shared links.
+const UPLOADED_BRAND: &str = "Uploaded";
 const CONFIG_DIRECTORY_NAME: &str = "squiglab";
 const SHARE_URI_PREFIX: &str = "squiglab://state/v1/";
 /// Share links issued before the rename. Still decoded so links people already
@@ -437,6 +441,17 @@ pub struct CrinGraphApp {
     sound_settings: [squiglab::audio::Settings; 2],
     /// A message from the sound player, shown in the panel.
     sound_message: Option<String>,
+    /// The measurement grid uploads are resampled onto, captured at load so an
+    /// upload lands on the same frequencies as the database.
+    upload_grid: Vec<f32>,
+    /// The names of the curves the user uploaded, so they are excluded from
+    /// shared state no matter which brand they were filed under.
+    uploaded_names: BTreeSet<String>,
+    upload_open: bool,
+    upload_path: String,
+    upload_as_target: bool,
+    upload_error: Option<String>,
+    upload_message: Option<String>,
     /// Set while the selected curve still needs scrolling into view in the
     /// library. Session-only: it is an action to take once, not a preference.
     library_reveal_pending: bool,
@@ -505,6 +520,13 @@ impl Default for CrinGraphApp {
             sound_slot: 0,
             sound_settings: [squiglab::audio::Settings::default(); 2],
             sound_message: None,
+            upload_grid: Vec::new(),
+            uploaded_names: BTreeSet::new(),
+            upload_open: false,
+            upload_path: String::new(),
+            upload_as_target: false,
+            upload_error: None,
+            upload_message: None,
             library_reveal_pending: false,
         }
     }
@@ -531,7 +553,9 @@ impl CrinGraphApp {
             Path::new("data"),
             &config_path,
         );
-        let (mut curves, _) = data::load_data(&database_dir)?;
+        let (mut curves, grid) = data::load_data(&database_dir)?;
+        self.upload_grid = grid;
+        self.uploaded_names.clear();
         let mut phone_books = vec![data::load_phone_book(
             &database_dir.join("phone_book.json"),
         )?];
@@ -555,6 +579,7 @@ impl CrinGraphApp {
                 .then(left.variant.cmp(&right.variant))
         });
         self.groups = build_groups(&phone_books, &curves);
+
         if self.debug_hooks {
             eprintln!(
                 "SquigLab loaded {} curves across {} measurement groups.",
@@ -722,6 +747,11 @@ impl CrinGraphApp {
                 .active
                 .iter()
                 .chain(self.active_targets.iter())
+                // An uploaded curve is excluded: a shared link is a claim about
+                // the reference database, and a measurement from another rig is
+                // not part of it, so a link that carried one would restore a
+                // curve the recipient does not have and cannot check.
+                .filter(|&&index| !self.is_uploaded(index))
                 .map(|&index| SavedGroup {
                     key: group_key(&self.groups[index]),
                     variant: self.variant_choices.get(&index).copied().unwrap_or(0),
@@ -964,6 +994,15 @@ impl CrinGraphApp {
         }
     }
 
+    /// Whether a group is a curve the user uploaded rather than one from the
+    /// reference database. An upload is recorded by name when it is accepted,
+    /// because a group can be rebuilt or renamed and the shared state has to
+    /// keep excluding it either way.
+    fn is_uploaded(&self, index: usize) -> bool {
+        let group = &self.groups[index];
+        group.brand == UPLOADED_BRAND || self.uploaded_names.contains(&group.name)
+    }
+
     /// Color for a displayed curve. An EQ curve takes a palette slot spread
     /// away from its parent's, so the two lines are tellable apart while still
     /// coming from the graph's existing palette rather than a new hue.
@@ -1056,6 +1095,13 @@ impl CrinGraphApp {
         if cgui::action_button(ui, "Share", "Copy a shareable link to this view.") {
             self.share_window_open = true;
             self.share_message = None;
+        }
+        if cgui::action_button(
+            ui,
+            "Upload",
+            "Add your own measurement or target from a REW or AudioTool file.",
+        ) {
+            self.open_upload();
         }
         if cgui::action_button(
             ui,
@@ -1575,6 +1621,205 @@ impl CrinGraphApp {
                 self.eq_import_error = Some(format!("Unable to import the file: {error:#}"));
             }
         }
+    }
+
+    /// Read an uploaded file into the database of curves, as a measurement or as
+    /// a target.
+    ///
+    /// An uploaded measurement lands in a synthetic "Uploaded" brand, so it is
+    /// never confused with the reference database's, and its curves are not
+    /// written into shared links: a measurement from someone else's rig is not
+    /// the thing the link was sharing. A target upload is named "<name> Target"
+    /// and dropped if the database already has that target, which is how the
+    /// reference deduplicates uploads against its configured targets.
+    fn import_upload(&mut self) {
+        let file_name = match std::path::Path::new(&self.upload_path)
+            .file_stem()
+            .and_then(|stem| stem.to_str())
+        {
+            Some(name) if !name.is_empty() => name.to_owned(),
+            _ => {
+                self.upload_error = Some("That path has no file name in it.".to_owned());
+                return;
+            }
+        };
+        let contents = match std::fs::read_to_string(&self.upload_path) {
+            Ok(contents) => contents,
+            Err(error) => {
+                self.upload_error = Some(format!("Unable to read the file: {error:#}"));
+                return;
+            }
+        };
+        let target = self.upload_as_target;
+        let uploaded = match data::parse_upload(&file_name, &contents, &self.upload_grid, target) {
+            Ok(uploaded) => uploaded,
+            Err(error) => {
+                self.upload_error = Some(format!("{file_name} was not accepted: {error}"));
+                return;
+            }
+        };
+        if target {
+            // A target the database already carries would draw twice, so the
+            // upload is refused rather than shadowing it.
+            if self
+                .groups
+                .iter()
+                .any(|group| group.target && group.name == file_name)
+            {
+                self.upload_error =
+                    Some(format!("{file_name} is already a target in this database."));
+                return;
+            }
+        }
+        let curve = uploaded.curve;
+        // A right-channel-only file is stored beside a null left channel so the
+        // two line up on the same frequencies, exactly as a right-only
+        // measurement from the database is.
+        let model = curve.model.clone();
+        let right_only = curve.variant == "R";
+        let mut indices = Vec::new();
+        self.curves.push(curve);
+        indices.push(self.curves.len() - 1);
+        if !target && right_only {
+            self.curves.push(data::CurveInfo {
+                model,
+                variant: "L".to_owned(),
+                points: self
+                    .upload_grid
+                    .iter()
+                    .map(|frequency| FRPoint {
+                        hz: *frequency,
+                        // A null channel: every point at zero, which the
+                        // channel picker skips in favour of the right one.
+                        db: 0.0,
+                    })
+                    .collect(),
+            });
+            indices.push(self.curves.len() - 1);
+        }
+        self.uploaded_names.insert(file_name.clone());
+        self.rebuild_uploaded_group(&file_name, target, &indices);
+        self.upload_error = None;
+        self.upload_message = Some(if target {
+            format!("Added {file_name} as a target.")
+        } else {
+            format!("Added {file_name} under Uploaded.")
+        });
+        self.dirty = true;
+    }
+
+    /// Rebuild the group an uploaded curve belongs to, so a second upload of
+    /// the same name joins the first rather than making a second group.
+    fn rebuild_uploaded_group(&mut self, name: &str, target: bool, curve_indices: &[usize]) {
+        let brand = if target {
+            target_category(name).to_owned()
+        } else {
+            UPLOADED_BRAND.to_owned()
+        };
+        let existing = self
+            .groups
+            .iter()
+            .position(|group| group.brand == brand && group.name == name);
+        let index = match existing {
+            // Re-uploading a name the user already uploaded replaces that
+            // group's curves rather than piling a second copy of the same
+            // model into it.
+            Some(index) if self.is_uploaded(index) => {
+                self.groups[index].variants[0].curve_indices.clear();
+                index
+            }
+            Some(index) => index,
+            None => {
+                self.groups.push(MeasurementGroup {
+                    brand,
+                    brand_suffix: None,
+                    name: name.to_owned(),
+                    variants: vec![MeasurementVariant {
+                        name: "Uploaded".to_owned(),
+                        curve_indices: Vec::new(),
+                    }],
+                    target,
+                });
+                self.groups.len() - 1
+            }
+        };
+        let variant = &mut self.groups[index].variants[0];
+        variant.curve_indices.extend(curve_indices.iter().copied());
+        variant.curve_indices.sort_unstable();
+        variant.curve_indices.dedup();
+        // Keep the group list in the same order the database loader uses, so
+        // the library and the shared links do not reshuffle.
+        self.groups.sort_by(|left, right| {
+            left.brand
+                .cmp(&right.brand)
+                .then(left.name.cmp(&right.name))
+        });
+    }
+
+    /// The upload window. The reference asks for a file; egui has no file
+    /// picker without a new dependency, so the path is typed, as it is for
+    /// importing a parametric configuration.
+    fn upload_window(&mut self, ctx: &Context) {
+        use squiglab::ui as cgui;
+        if !self.upload_open {
+            return;
+        }
+        let mut open = true;
+        let mut cancelled = false;
+        let palette = squiglab::theme::Palette::resolve(self.dark_mode);
+        egui::Window::new("Upload measurement")
+            .open(&mut open)
+            .resizable(false)
+            .collapsible(false)
+            .default_width(460.0)
+            .show(ctx, |ui| {
+                // The reference states this in the upload itself rather than as
+                // a dismissible banner, because a measurement taken on another
+                // rig is not comparable with the database's and nothing in the
+                // curve will show that.
+                ui.label(
+                    RichText::new(
+                        "Measurements from another rig are not comparable with this database.",
+                    )
+                    .color(palette.warning)
+                    .small(),
+                );
+                ui.add_space(cgui::Spacing::TIGHT);
+                ui.label("Path to a REW or AudioTool export:");
+                ui.add(
+                    egui::TextEdit::singleline(&mut self.upload_path)
+                        .hint_text("/path/to/measurement.txt"),
+                );
+                ui.checkbox(
+                    &mut self.upload_as_target,
+                    "Upload as a target instead of a measurement",
+                )
+                .on_hover_text(
+                    "A target is a curve to correct towards, not a measurement of a device.",
+                );
+                ui.horizontal(|ui| {
+                    if ui.button("Upload").clicked() {
+                        self.import_upload();
+                    }
+                    if ui.button("Cancel").clicked() {
+                        cancelled = true;
+                    }
+                });
+                if let Some(error) = &self.upload_error {
+                    ui.colored_label(palette.error, error);
+                }
+                if let Some(message) = &self.upload_message {
+                    ui.label(message);
+                }
+            });
+        self.upload_open = open && !cancelled;
+    }
+
+    /// Open the upload window from the toolbar's overflow menu.
+    fn open_upload(&mut self) {
+        self.upload_open = true;
+        self.upload_error = None;
+        self.upload_message = None;
     }
 
     /// The sound tools: a tone generator and pink noise, with the Compare A | B
@@ -2481,6 +2726,7 @@ impl eframe::App for CrinGraphApp {
         self.toolbar(ui);
         self.share_window(&ctx);
         self.equalizer_import_window(&ctx);
+        self.upload_window(&ctx);
         self.tutorial_window(&ctx);
         // The reference tool has two viewports: below ~1024px content width the
         // graph stacks above the tab column, and above it the tabs sit beside the
@@ -3189,6 +3435,7 @@ mod tests {
     };
     use squiglab::data::{CurveInfo, FRPoint};
     use std::collections::BTreeMap;
+    use std::path::PathBuf;
 
     /// Serialises tests that redirect the config directory, since the override is
     /// process-global and tests run on parallel threads.
@@ -3880,6 +4127,259 @@ smoothing_octaves = 3
             assert!(app.player.is_none());
             assert_eq!(app.sound_message.as_deref(), Some("Stopped."));
         }
+    }
+
+    /// A REW export with the given number of points, written to a temp file.
+    fn write_measurement(name: &str, points: usize) -> PathBuf {
+        // The file's name is the measurement's name, which is what the
+        // reference tool uses, so the file is named exactly that.
+        let directory =
+            std::env::temp_dir().join(format!("squiglab-uploads-{}", std::process::id()));
+        std::fs::create_dir_all(&directory).unwrap();
+        let path = directory.join(format!("{name}.txt"));
+        let mut text = String::from("Freq\tLevel\n");
+        for index in 0..points {
+            text.push_str(&format!(
+                "{:.3}\t{:.2}\n",
+                20.0 + index as f64 * 40.0,
+                70.0 - (index % 5) as f64
+            ));
+        }
+        std::fs::write(&path, text).unwrap();
+        path
+    }
+
+    #[test]
+    fn an_uploaded_measurement_lands_in_the_uploaded_brand() {
+        with_isolated_config(|| {
+            let mut app = CrinGraphApp::default();
+            app.load_measurements().unwrap();
+            let groups_before = app.groups.len();
+            let path = write_measurement("My Headphones", 300);
+            app.upload_path = path.to_string_lossy().into_owned();
+            app.import_upload();
+            assert!(app.upload_error.is_none(), "{:?}", app.upload_error);
+            assert!(
+                app.upload_message
+                    .as_deref()
+                    .is_some_and(|m| m.contains("Uploaded")),
+                "{:?}",
+                app.upload_message
+            );
+            assert_eq!(app.groups.len(), groups_before + 1);
+
+            let group = app
+                .groups
+                .iter()
+                .find(|group| group.name == "My Headphones")
+                .expect("the upload is listed");
+            assert_eq!(group.brand, super::UPLOADED_BRAND);
+            assert!(!group.target);
+            assert!(app.is_uploaded(
+                app.groups
+                    .iter()
+                    .position(|g| g.name == "My Headphones")
+                    .unwrap()
+            ));
+            std::fs::remove_file(path).unwrap();
+        });
+    }
+
+    #[test]
+    fn an_uploaded_measurement_is_left_out_of_a_shared_link() {
+        with_isolated_config(|| {
+            let mut app = CrinGraphApp::default();
+            app.load_measurements().unwrap();
+            let path = write_measurement("Shared Away", 300);
+            app.upload_path = path.to_string_lossy().into_owned();
+            app.import_upload();
+            assert!(app.upload_error.is_none());
+            let index = app
+                .groups
+                .iter()
+                .position(|group| group.name == "Shared Away")
+                .unwrap();
+            app.active.insert(index);
+            app.rebuild_display_curves();
+            assert!(app.processing_error.is_none(), "{:?}", app.processing_error);
+            // The upload is on the graph, but a link made now does not carry
+            // it: the recipient has no such measurement.
+            assert!(
+                app.display_curves
+                    .iter()
+                    .any(|curve| curve.group_index == index),
+                "the upload did not reach the graph"
+            );
+            let preferences = app.preferences();
+            assert!(
+                !preferences
+                    .active
+                    .iter()
+                    .any(|saved| saved.key == super::group_key(&app.groups[index])),
+                "an uploaded curve leaked into the shared state"
+            );
+            let uri = encode_share_uri(&preferences).unwrap();
+            let restored = decode_share_uri(&uri).unwrap();
+            assert_eq!(restored, preferences);
+            std::fs::remove_file(path).unwrap();
+        });
+    }
+
+    #[test]
+    fn a_second_upload_of_the_same_measurement_joins_the_first() {
+        with_isolated_config(|| {
+            let mut app = CrinGraphApp::default();
+            app.load_measurements().unwrap();
+            let path = write_measurement("Twice", 300);
+            app.upload_path = path.to_string_lossy().into_owned();
+            app.import_upload();
+            let groups_after_first = app
+                .groups
+                .iter()
+                .filter(|group| group.name == "Twice")
+                .count();
+            app.import_upload();
+            let groups_after_second = app
+                .groups
+                .iter()
+                .filter(|group| group.name == "Twice")
+                .count();
+            assert_eq!(
+                groups_after_first, 1,
+                "the first upload should make one group"
+            );
+            assert_eq!(
+                groups_after_second, 1,
+                "the second upload made a second group"
+            );
+            // And the second file replaced the first rather than being stacked
+            // beside it: measuring the same model again shows one curve.
+            let index = app
+                .groups
+                .iter()
+                .position(|group| group.name == "Twice")
+                .unwrap();
+            assert_eq!(
+                app.groups[index].variants[0].curve_indices.len(),
+                1,
+                "the second upload was stacked on the first"
+            );
+            std::fs::remove_file(path).unwrap();
+        });
+    }
+
+    #[test]
+    fn a_right_channel_upload_gains_a_null_left_channel() {
+        with_isolated_config(|| {
+            let mut app = CrinGraphApp::default();
+            app.load_measurements().unwrap();
+            let path = write_measurement("Right Only R", 300);
+            app.upload_path = path.to_string_lossy().into_owned();
+            app.import_upload();
+            assert!(app.upload_error.is_none(), "{:?}", app.upload_error);
+            let index = app
+                .groups
+                .iter()
+                .position(|group| group.name == "Right Only R")
+                .unwrap();
+            let indices = &app.groups[index].variants[0].curve_indices;
+            assert_eq!(indices.len(), 2, "a right-only upload needs a left channel");
+            let right = &app.curves[indices[0]];
+            let left = &app.curves[indices[1]];
+            assert_eq!(right.variant, "R");
+            assert_eq!(left.variant, "L");
+            // The null channel is on the same frequencies as the right one, so
+            // the two line up rather than one being shifted.
+            assert_eq!(right.points.len(), left.points.len());
+            for (right_point, left_point) in right.points.iter().zip(&left.points) {
+                assert_eq!(right_point.hz, left_point.hz);
+            }
+            assert!(left.points.iter().all(|point| point.db == 0.0));
+            std::fs::remove_file(path).unwrap();
+        });
+    }
+
+    #[test]
+    fn a_target_upload_is_named_flagged_and_deduplicated() {
+        with_isolated_config(|| {
+            let mut app = CrinGraphApp::default();
+            app.load_measurements().unwrap();
+            let path = write_measurement("Brand New Target", 300);
+            app.upload_path = path.to_string_lossy().into_owned();
+            app.upload_as_target = true;
+            app.import_upload();
+            assert!(app.upload_error.is_none(), "{:?}", app.upload_error);
+            // The curve is named with the " Target" suffix the database uses, so
+            // the loader's own name splitter treats it as a target.
+            assert!(app
+                .curves
+                .iter()
+                .any(|curve| curve.model == "Brand New Target Target"));
+            let index = app
+                .groups
+                .iter()
+                .position(|group| group.name == "Brand New Target")
+                .expect("the target is listed");
+            assert!(app.groups[index].target, "an uploaded target is a target");
+            assert!(app.is_uploaded(index));
+            assert!(
+                app.active_targets.is_empty(),
+                "an upload is not selected on the user's behalf"
+            );
+
+            // A target the database already has is refused rather than
+            // shadowing it.
+            app.upload_path = write_measurement("Harman", 300)
+                .to_string_lossy()
+                .into_owned();
+            app.import_upload();
+            assert!(
+                app.upload_error
+                    .as_deref()
+                    .is_some_and(|error| error.contains("already a target")),
+                "{:?}",
+                app.upload_error
+            );
+            std::fs::remove_file(path).unwrap();
+        });
+    }
+
+    #[test]
+    fn a_short_upload_is_refused_and_nothing_is_added() {
+        with_isolated_config(|| {
+            let mut app = CrinGraphApp::default();
+            app.load_measurements().unwrap();
+            let groups_before = app.groups.len();
+            let curves_before = app.curves.len();
+            let path = write_measurement("Fragment", 50);
+            app.upload_path = path.to_string_lossy().into_owned();
+            app.import_upload();
+            assert!(
+                app.upload_error
+                    .as_deref()
+                    .is_some_and(|error| error.contains("at least 128")),
+                "{:?}",
+                app.upload_error
+            );
+            assert_eq!(app.groups.len(), groups_before);
+            assert_eq!(app.curves.len(), curves_before);
+            std::fs::remove_file(path).unwrap();
+        });
+    }
+
+    #[test]
+    fn a_missing_upload_file_is_reported_not_ignored() {
+        with_isolated_config(|| {
+            let mut app = CrinGraphApp::default();
+            app.load_measurements().unwrap();
+            app.upload_path = "/nonexistent/measurement.txt".to_owned();
+            app.import_upload();
+            assert!(app.upload_error.is_some());
+            // And a path with no file name in it is refused before any read.
+            app.upload_path = "/".to_owned();
+            app.import_upload();
+            assert!(app.upload_error.is_some());
+        });
     }
 
     #[test]

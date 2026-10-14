@@ -241,6 +241,157 @@ pub fn load_data(data_dir: &Path) -> anyhow::Result<(Vec<CurveInfo>, Vec<f32>)> 
     Ok((curves, f_values))
 }
 
+/// Fewest points a measurement may have to be accepted. A REW or AudioTool
+/// export below this is a fragment rather than a measurement, and drawing it
+/// against a full sweep would show a curve that was never measured. The
+/// reference tool refuses the same files.
+pub const MIN_UPLOAD_POINTS: usize = 128;
+
+/// What an uploaded file turned out to be.
+#[derive(Clone, Debug)]
+pub struct UploadedCurve {
+    /// The curve, on the frequency grid it was resampled onto.
+    pub curve: CurveInfo,
+    /// Whether the file was uploaded as a target rather than a measurement.
+    pub target: bool,
+}
+
+/// Why an uploaded file was not accepted.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum UploadError {
+    /// The file had no readable frequency and level columns.
+    NoColumns,
+    /// The file parsed, but has fewer than [`MIN_UPLOAD_POINTS`] points.
+    TooFewPoints(usize),
+    /// The file's points were not a rising sweep.
+    NotMonotonic,
+}
+
+impl std::fmt::Display for UploadError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::NoColumns => write!(
+                formatter,
+                "no frequency and level columns were found; expected a two-column \
+                 REW or AudioTool export"
+            ),
+            Self::TooFewPoints(count) => write!(
+                formatter,
+                "only {count} points were read, and a measurement needs at least \
+                 {MIN_UPLOAD_POINTS}"
+            ),
+            Self::NotMonotonic => {
+                write!(formatter, "the frequencies do not rise through the file")
+            }
+        }
+    }
+}
+
+impl std::error::Error for UploadError {}
+
+/// Read an uploaded REW or AudioTool measurement, or target.
+///
+/// Both formats are whitespace- or tab-separated frequency and level columns
+/// with optional headers, so one parser covers them. The points are resampled
+/// onto `grid` so an uploaded curve can be compared with the database's, and
+/// a file whose name ends in " R" has a null left channel spliced in front of
+/// its right channel, so the two line up on the same frequencies.
+///
+/// `file_name` is the measurement's name in the UI, exactly as the reference
+/// tool uses it: the file's name, with " Target" appended for a target upload.
+pub fn parse_upload(
+    file_name: &str,
+    contents: &str,
+    grid: &[f32],
+    target: bool,
+) -> Result<UploadedCurve, UploadError> {
+    let mut points: Vec<FRPoint> = Vec::new();
+    for line in contents.lines() {
+        // REW writes tab-separated columns, AudioTool writes comma-separated
+        // ones, and either may pad with spaces. Treating every separator as
+        // whitespace covers both.
+        let line = line.replace(',', " ");
+        let mut columns = line.split_whitespace();
+        let (Some(frequency), Some(level)) = (columns.next(), columns.next()) else {
+            // A header line, a blank line, or a comment: skip it and keep
+            // reading, which is what both formats need.
+            continue;
+        };
+        let (Ok(frequency), Ok(level)) = (frequency.parse::<f32>(), level.parse::<f32>()) else {
+            continue;
+        };
+        if !frequency.is_finite() || !level.is_finite() || frequency <= 0.0 {
+            continue;
+        }
+        // A descending sweep is the other channel's file, not this one's.
+        if points.last().is_some_and(|last| frequency <= last.hz) {
+            return Err(UploadError::NotMonotonic);
+        }
+        points.push(FRPoint {
+            hz: frequency,
+            db: level,
+        });
+    }
+    if points.len() < MIN_UPLOAD_POINTS {
+        return Err(UploadError::TooFewPoints(points.len()));
+    }
+
+    let is_right_channel = file_name.trim_end().ends_with(" R");
+    let model = if target {
+        format!("{file_name} Target")
+    } else {
+        file_name.to_owned()
+    };
+    let resampled = resample(&points, grid)?;
+    Ok(UploadedCurve {
+        curve: CurveInfo {
+            model,
+            // The variant carries the channel, as it does in the database. A
+            // right-only file is prefixed with a null left channel so both
+            // channels sit on the same frequencies.
+            variant: if is_right_channel {
+                "R".to_owned()
+            } else {
+                String::new()
+            },
+            points: resampled,
+        },
+        target,
+    })
+}
+
+/// Resample a curve onto a shared grid, piecewise-linearly in log frequency,
+/// which is how the reference tool's `interp` places a measurement on the same
+/// frequencies as the database's.
+///
+/// A right-channel-only measurement is returned as its right channel here; the
+/// caller keeps the left channel null, so the two cannot disagree on
+/// frequency.
+fn resample(points: &[FRPoint], grid: &[f32]) -> Result<Vec<FRPoint>, UploadError> {
+    if points.is_empty() {
+        return Err(UploadError::TooFewPoints(0));
+    }
+    let output = crate::equalizer::interp(
+        &grid
+            .iter()
+            .map(|frequency| f64::from(*frequency))
+            .collect::<Vec<_>>(),
+        &points
+            .iter()
+            .map(|point| {
+                crate::equalizer::ResponsePoint::new(f64::from(point.hz), f64::from(point.db))
+            })
+            .collect::<Vec<_>>(),
+    );
+    Ok(output
+        .into_iter()
+        .map(|point| FRPoint {
+            hz: point.hz as f32,
+            db: point.db as f32,
+        })
+        .collect())
+}
+
 fn split_model_variant(stem: &str) -> (String, String) {
     let mut split = stem.rsplitn(2, char::is_whitespace);
     let last = split.next().unwrap_or(stem);
@@ -260,7 +411,9 @@ fn split_model_variant(stem: &str) -> (String, String) {
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_phone_book, split_model_variant};
+    use super::{
+        parse_phone_book, parse_upload, split_model_variant, UploadError, MIN_UPLOAD_POINTS,
+    };
     use serde_json::json;
     use std::path::Path;
 
@@ -309,5 +462,113 @@ mod tests {
             .brands
             .iter()
             .any(|brand| brand.name == "Groot"));
+    }
+
+    /// A shared measurement grid, 20 Hz to 20 kHz, matching the reference's
+    /// 490-point resolution.
+    fn grid() -> Vec<f32> {
+        (0..490)
+            .map(|index| 20.0 * 1000.0_f32.powf(index as f32 / 489.0))
+            .collect()
+    }
+
+    /// A REW export: a header line, then a rising sweep.
+    fn rew_export(points: usize) -> String {
+        let mut text = String::from("Freq	Level\n");
+        for index in 0..points {
+            let frequency = 20.0 + index as f64 * 40.0;
+            text.push_str(&format!(
+                "{frequency:.3}\t{:.2}\n",
+                70.0 - (index % 7) as f64
+            ));
+        }
+        text
+    }
+
+    #[test]
+    fn an_uploaded_measurement_lands_on_the_shared_grid() {
+        let uploaded = parse_upload("My Headphones", &rew_export(500), &grid(), false).unwrap();
+        assert!(!uploaded.target);
+        assert_eq!(uploaded.curve.model, "My Headphones");
+        // The file's own sweep is resampled onto the database's frequencies, so
+        // an uploaded curve can be compared with a stored one.
+        assert_eq!(uploaded.curve.points.len(), 490);
+        assert!((uploaded.curve.points[0].hz - 20.0).abs() < 0.01);
+        assert!((uploaded.curve.points[489].hz - 20_000.0).abs() < 1.0);
+        // The levels survived: the sweep steps through seven values.
+        let levels: Vec<f32> = uploaded.curve.points.iter().map(|point| point.db).collect();
+        assert!(levels.iter().all(|level| (63.0..=70.0).contains(level)));
+    }
+
+    #[test]
+    fn fewer_than_128_points_is_refused() {
+        // The reference tool rejects these, and so does this one: a fragment
+        // is not a measurement.
+        let error =
+            parse_upload("Short", &rew_export(MIN_UPLOAD_POINTS - 1), &grid(), false).unwrap_err();
+        assert_eq!(error, UploadError::TooFewPoints(MIN_UPLOAD_POINTS - 1));
+        assert!(error.to_string().contains("at least 128"));
+        // Exactly the minimum is accepted.
+        assert!(parse_upload(
+            "Just enough",
+            &rew_export(MIN_UPLOAD_POINTS),
+            &grid(),
+            false
+        )
+        .is_ok());
+    }
+
+    #[test]
+    fn a_file_with_no_columns_is_refused() {
+        let header_only = "This is a note about the file, not a measurement\n".repeat(200);
+        assert_eq!(
+            parse_upload("Notes", &header_only, &grid(), false).unwrap_err(),
+            UploadError::TooFewPoints(0)
+        );
+    }
+
+    #[test]
+    fn a_target_upload_is_named_and_flagged_as_a_target() {
+        let uploaded = parse_upload("Harman", &rew_export(300), &grid(), true).unwrap();
+        assert!(uploaded.target);
+        // " Target" is appended, which is how the database names its targets
+        // and so how a deduplication pass recognises them.
+        assert_eq!(uploaded.curve.model, "Harman Target");
+    }
+
+    #[test]
+    fn a_right_channel_file_is_marked_as_the_right_channel() {
+        let right = parse_upload("My Headphones R", &rew_export(300), &grid(), false).unwrap();
+        assert_eq!(right.curve.variant, "R");
+        // The name keeps its suffix, and the "R" is what the model splitter
+        // would have taken off had this come through the database loader.
+        assert_eq!(right.curve.model, "My Headphones R");
+        // A file that is not right-only is a single unlabelled curve.
+        let both = parse_upload("My Headphones", &rew_export(300), &grid(), false).unwrap();
+        assert_eq!(both.curve.variant, "");
+    }
+
+    #[test]
+    fn a_descending_sweep_is_refused() {
+        let mut text = String::new();
+        for index in (0..300).rev() {
+            text.push_str(&format!("{:.3}\t60.0\n", 20.0 + index as f64 * 40.0));
+        }
+        assert_eq!(
+            parse_upload("Descending", &text, &grid(), false).unwrap_err(),
+            UploadError::NotMonotonic
+        );
+    }
+
+    #[test]
+    fn an_audio_tool_export_parses_like_a_rew_export() {
+        // AudioTool writes comma-separated values with its own header.
+        let mut text = String::from("Frequency, SPL\n");
+        for index in 0..300 {
+            text.push_str(&format!("{:.2}, {:.2}\n", 20.0 + index as f64 * 60.0, 65.0));
+        }
+        let uploaded = parse_upload("Headphones", &text, &grid(), false).unwrap();
+        assert_eq!(uploaded.curve.points.len(), 490);
+        assert!(uploaded.curve.points.iter().all(|point| point.db == 65.0));
     }
 }
