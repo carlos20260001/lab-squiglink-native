@@ -71,16 +71,18 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
-      - name: Install PipeWire headers and libclang
-        # The sound tools speak to PipeWire through libpipewire, and the Rust
-        # bindings are generated from PipeWire's headers at build time, so the
-        # development files and libclang are needed to compile. For the native
-        # target they come from the runner; for cross builds, cross reads them
-        # from the same host packages.
+      - name: Install PipeWire, libspa, clang and libclang development files
+        # The sound tools speak to PipeWire through libpipewire and libspa, and
+        # pkg-config locates them via their .pc files while the Rust bindings are
+        # generated from their headers at build time, so the development files
+        # are needed. libclang-dev provides the shared library and headers the
+        # bindgen step uses to parse those headers.
         run: |
           sudo apt-get update
           sudo apt-get install --no-install-recommends -y \
-            libpipewire-0.3-dev clang
+            libpipewire-0.3-dev libspa-0.2-dev \
+            clang libclang-dev \
+            pkg-config
         shell: bash
 
       - name: Install cross-compilation tool

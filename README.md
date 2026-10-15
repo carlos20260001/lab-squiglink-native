@@ -80,7 +80,7 @@ Rust bindings are generated from PipeWire's headers at build time:
 
 ```bash
 # Debian, Ubuntu
-sudo apt install libpipewire-0.3-dev clang
+sudo apt install libpipewire-0.3-dev libspa-0.2-dev clang libclang-dev pkg-config
 
 # Fedora
 sudo dnf install pipewire-devel clang
@@ -103,16 +103,22 @@ cargo build --release
 
 The release workflow also builds Linux x86_64, x86 (i686), ARM hard-float
 (armhf), and ARM64 (aarch64) packages. To build a particular Rust target
-yourself, pass its target triple to the script (cross targets require the
-appropriate toolchain; the workflow uses `cross` for non-host Linux targets):
+yourself, pass its target triple to the script, preceded by `--crosscompile`
+because a target the machine does not run natively is a cross-compilation and
+has to be asked for:
 
 ```bash
-./build.sh i686-unknown-linux-gnu
-./build.sh armv7-unknown-linux-gnueabihf
-./build.sh aarch64-unknown-linux-gnu
+./build.sh --crosscompile i686-unknown-linux-gnu
+./build.sh --crosscompile armv7-unknown-linux-gnueabihf
+./build.sh --crosscompile aarch64-unknown-linux-gnu
 ```
 
 Without a target argument, `./build.sh` builds for the current machine.
+Cross-compiled Linux targets need `cross` (`cargo install cross --locked`),
+which builds them in containers that pull in the PipeWire development files
+for the target's own architecture (`Cross.toml`). The release workflow installs
+`cross` for its non-native targets and needs no flag there, because GitHub
+Actions is detected as the cross-compilation mechanism.
 
 #### Windows
 
@@ -133,6 +139,13 @@ binaries. The x86 build targets `i686-pc-windows-msvc` and is intended for
 Windows 10 32-bit; ARM64 builds run on GitHub's public ARM64 Windows runner.
 To choose a target explicitly, pass `i686-pc-windows-msvc`,
 `x86_64-pc-windows-msvc`, or `aarch64-pc-windows-msvc` to `build.cmd`.
+A target whose architecture differs from the machine's is a cross-compilation
+and has to be asked for with the `-crossxw` flag:
+
+```powershell
+.\build.cmd -crossxw i686-pc-windows-msvc
+```
+
 The 32-bit executable is written to
 `target\i686-pc-windows-msvc\release\squiglab.exe`.
 
@@ -159,7 +172,12 @@ cargo build --release
 
 The executable is created at `target/release/squiglab`. Build on macOS
 to produce a native macOS binary; binaries are platform-specific.
-You can also build with `./build.sh`.
+You can also build with `./build.sh`; to build for the other macOS
+architecture, ask for the cross-compilation explicitly:
+
+```bash
+./build.sh --crosscompile x86_64-apple-darwin
+```
 
 #### App identity and bundles
 
