@@ -2505,9 +2505,15 @@ impl CrinGraphApp {
                         &mut section,
                     );
                 }
+                ui.add_space(cgui::Spacing::TIGHT);
+                ui.separator();
+                self.delta_library_section(ui, &mut section);
             });
         for index in section.toggles {
             self.toggle_curve(index);
+        }
+        for index in section.delta_toggles {
+            self.toggle_delta(index);
         }
         // Scroll the first selected row into view once: a session restored
         // with a curve far down a list of thousands would otherwise open at
@@ -2518,6 +2524,73 @@ impl CrinGraphApp {
                 ui.scroll_to_rect(rect, None);
             }
         }
+    }
+
+    /// The delta targets in the library.
+    ///
+    /// They sit apart from the targets they correct against, because they are
+    /// not curves to compare: selecting one says the readings were taken on a
+    /// rig that needs correcting, and nothing else. They never spend one of the
+    /// eight measurement slots, for the same reason targets do not.
+    fn delta_library_section(&mut self, ui: &mut Ui, section: &mut LibrarySection) {
+        use squiglab::ui as cgui;
+        cgui::section_header(
+            ui,
+            "Delta targets",
+            (!self.active_deltas.is_empty()).then_some(&self.active_deltas.len().to_string()),
+        );
+        ui.add_space(cgui::Spacing::MICRO);
+        if let Some(error) = &self.delta_error {
+            ui.colored_label(Color32::LIGHT_RED, error);
+            return;
+        }
+        if self.delta_targets.is_empty() {
+            ui.label(
+                RichText::new("No rig corrections in the delta directory.")
+                    .size(squiglab::theme::TypeStep::Body.size()),
+            );
+            return;
+        }
+        for index in 0..self.delta_targets.len() {
+            let target = &self.delta_targets[index];
+            let mut selected = self.active_deltas.contains(&index);
+            let row = ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = cgui::Spacing::COMPACT;
+                let response = ui.checkbox(
+                    &mut selected,
+                    RichText::new(&target.name).size(squiglab::theme::TypeStep::Body.size()),
+                );
+                // A placeholder corrects nothing, so saying so next to the name
+                // is the difference between a stub and a rig someone trusts.
+                if target.is_placeholder() {
+                    ui.colored_label(
+                        squiglab::theme::Palette::resolve(ui.visuals().dark_mode).warning,
+                        "placeholder",
+                    )
+                    .on_hover_text(
+                        "Built from placeholder calibrations, not measurements. It corrects nothing.",
+                    );
+                }
+                response
+            });
+            if let Some(note) = &target.note {
+                row.response.on_hover_text(note);
+            }
+            if row.inner.changed() {
+                section.delta_toggles.push(index);
+            }
+            ui.spacing_mut().item_spacing.y = cgui::Spacing::MICRO;
+        }
+    }
+
+    /// Turn a rig correction on or off.
+    fn toggle_delta(&mut self, index: usize) {
+        if self.active_deltas.contains(&index) {
+            self.active_deltas.remove(&index);
+        } else {
+            self.active_deltas.insert(index);
+        }
+        self.dirty = true;
     }
 
     /// One brand of the library: a collapsing header and its checkboxes.
@@ -2596,7 +2669,11 @@ impl CrinGraphApp {
         // space it freed: one row per active curve, no scrolling, and stop
         // growing once every curve is visible. The panel stays resizable, and a
         // hand-resized height is remembered over this default.
-        let curve_count = self.active.len() + self.active_targets.len();
+        // A selected rig correction occupies a row here like any other curve:
+        // it is something the graph is currently being corrected by, and it has
+        // to be visible and removable in the same place as everything else it
+        // is doing.
+        let curve_count = self.active.len() + self.active_targets.len() + self.active_deltas.len();
         // Size the panel from the row height this viewport will actually use,
         // so every selected curve is visible without scrolling inside a panel
         // that is too short to hold it.
@@ -2617,19 +2694,21 @@ impl CrinGraphApp {
             .default_size(default_height)
             .size_range(76.0..=340.0)
             .show(ui, |ui| {
-                let count = self.active.len() + self.active_targets.len();
+                let count =
+                    self.active.len() + self.active_targets.len() + self.active_deltas.len();
                 squiglab::ui::section_header(
                     ui,
                     "Active curves",
                     (count > 0).then_some(&count.to_string()),
                 );
                 ui.add_space(cgui::Spacing::TIGHT);
-                if self.active.is_empty() && self.active_targets.is_empty() {
+                if count == 0 {
                     ui.label("Select up to eight measurements.");
                     return;
                 }
                 egui::ScrollArea::vertical().show(ui, |ui| {
                     let mut removals = Vec::new();
+                    let mut delta_removals = Vec::new();
                     // A row too narrow for identity and controls side by side
                     // stacks them instead of clipping the controls off the edge.
                     let stack_rows = ui.available_width() < MANAGER_ROW_STACK_WIDTH;
@@ -2644,11 +2723,76 @@ impl CrinGraphApp {
                         self.manager_row(ui, index, &group, stack_rows, &mut removals);
                         ui.separator();
                     }
+                    // Rig corrections come last: they are corrections to what
+                    // is above them, not independent curves to read against.
+                    for index in self.active_deltas.iter().copied().collect::<Vec<_>>() {
+                        let target = self.delta_targets[index].clone();
+                        self.manager_delta_row(ui, index, &target, stack_rows, &mut delta_removals);
+                        ui.separator();
+                    }
                     for index in removals {
                         self.toggle_curve(index);
                     }
+                    for index in delta_removals {
+                        self.toggle_delta(index);
+                    }
                 });
             });
+    }
+
+    /// One rig-correction row in the manager.
+    ///
+    /// A delta target is not a curve, so it is offered none of the per-curve
+    /// controls: no channel mode, no baseline, no offset. What it does have is
+    /// the pair of rigs it stands between, which is the claim it makes and the
+    /// one worth being able to read at a glance.
+    fn manager_delta_row(
+        &mut self,
+        ui: &mut Ui,
+        index: usize,
+        target: &DeltaTarget,
+        stack_controls: bool,
+        removals: &mut Vec<usize>,
+    ) {
+        use squiglab::ui as cgui;
+        let palette = squiglab::theme::Palette::resolve(ui.visuals().dark_mode);
+        let identity = |ui: &mut Ui| {
+            ui.label(
+                egui::RichText::new(&target.name)
+                    .strong()
+                    .size(squiglab::theme::TypeStep::Body.size())
+                    .color(palette.text_secondary),
+            );
+            ui.label(
+                egui::RichText::new(format!("{} → {}", target.clone_rig, target.original_rig))
+                    .size(squiglab::theme::TypeStep::Micro.size())
+                    .color(palette.text_tertiary),
+            );
+            if target.is_placeholder() {
+                ui.colored_label(palette.warning, "placeholder")
+                    .on_hover_text(
+                    "Built from placeholder calibrations, not measurements. It corrects nothing.",
+                );
+            }
+        };
+        let controls = |ui: &mut Ui| {
+            ui.spacing_mut().item_spacing.x = cgui::Spacing::COMPACT;
+            if cgui::action_button(ui, "Remove", "Stop applying this rig correction.") {
+                removals.push(index);
+            }
+        };
+        if stack_controls {
+            ui.vertical(|ui| {
+                ui.horizontal(identity);
+                ui.horizontal_wrapped(controls);
+            });
+        } else {
+            ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = cgui::Spacing::COMPACT;
+                identity(ui);
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), controls);
+            });
+        }
     }
 
     /// One curve row in the manager.
@@ -3021,6 +3165,9 @@ impl eframe::App for CrinGraphApp {
 #[derive(Default)]
 struct LibrarySection {
     toggles: Vec<usize>,
+    /// Delta targets toggled this frame, held apart from `toggles` because an
+    /// index into the groups is not an index into the delta targets.
+    delta_toggles: Vec<usize>,
     reveal_rect: Option<egui::Rect>,
 }
 
