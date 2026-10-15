@@ -55,6 +55,11 @@ const _: () = assert!(MANAGER_STACKED_ROW_HEIGHT > MANAGER_ROW_HEIGHT);
 /// single line narrower than that clips the right-hand controls off the edge.
 const MANAGER_ROW_STACK_WIDTH: f32 = 800.0;
 /// The most the manager will ever take from the graph.
+/// How tall the target strip is, and the only height it can be: it is a single
+/// row of chips, and letting it grow would take the room from the manager and
+/// the graph rather than from anything a user chose to give it.
+const TARGET_STRIP_HEIGHT: f32 = 44.0;
+
 const MANAGER_MAX_HEIGHT: f32 = 460.0;
 
 /// How wide a curve's preview is in its row.
@@ -302,6 +307,18 @@ enum CurveSource {
 }
 
 /// One row of the delta bar, before it becomes a plot curve.
+/// One chip in the target strip: which curve it stands for, what it is called,
+/// whether it is in play, and what to say when it is hovered.
+///
+/// Built out of state rather than read from it while drawing, because toggling
+/// a chip needs the borrow the drawing loop is holding.
+struct TargetChip {
+    index: usize,
+    label: String,
+    selected: bool,
+    tooltip: String,
+}
+
 struct DeviationCurve {
     label: String,
     points: Vec<FRPoint>,
@@ -3539,6 +3556,190 @@ impl CrinGraphApp {
         self.show_delta = open;
     }
 
+    /// The strip of targets between the graph and the manager.
+    ///
+    /// What is being read against is a different question from how far the
+    /// headphones are from it, and on the reference tool the two get their own
+    /// bands for that reason. The strip answers the first: which reference
+    /// targets, and which rig corrections. The manager below it answers the
+    /// second, one row per curve.
+    ///
+    /// Both lists scroll sideways rather than wrapping, so the strip stays one
+    /// row however many targets are selected, and a wide one costs nothing.
+    /// The status line, at the very bottom.
+    ///
+    /// A bottom panel like the rest, so it is laid out with them and not after
+    /// the central one. Drawn last in that group, which puts it under the strip
+    /// and the manager: the manager's rows are the selection you are working
+    /// with, and the status line is about the app rather than about them.
+    fn status_panel(&mut self, ui: &mut Ui) {
+        egui::Panel::bottom("status")
+            .resizable(false)
+            .default_size(24.0)
+            .show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    ui.label(format!(
+                        "{} active · {} total · {} Hz–{} Hz",
+                        self.display_curves.len(),
+                        self.groups.len(),
+                        self.zoom.x_range().0 as u32,
+                        self.zoom.x_range().1 as u32
+                    ));
+                    if let Some(index) = self.baseline {
+                        ui.label(format!("Baseline: {}", self.groups[index].name));
+                    }
+                    if self.processing_error.is_some()
+                        || self.load_error.is_some()
+                        || self.settings_error.is_some()
+                        || self.screenshot_error.is_some()
+                        || self.svg_error.is_some()
+                        || self.curve_export_error.is_some()
+                    {
+                        ui.colored_label(Color32::LIGHT_RED, "Some issues need attention.");
+                    }
+                });
+                if let Some(error) = &self.settings_error {
+                    ui.colored_label(Color32::LIGHT_RED, error);
+                }
+                if let Some(error) = &self.screenshot_error {
+                    ui.colored_label(Color32::LIGHT_RED, error);
+                }
+                if let Some(message) = &self.screenshot_message {
+                    ui.label(message);
+                }
+                if let Some(error) = &self.svg_error {
+                    ui.colored_label(Color32::LIGHT_RED, error);
+                }
+                if let Some(message) = &self.svg_message {
+                    ui.label(message);
+                }
+                if let Some(error) = &self.curve_export_error {
+                    ui.colored_label(Color32::LIGHT_RED, error);
+                }
+                if let Some(message) = &self.curve_export_message {
+                    ui.label(message);
+                }
+            });
+    }
+
+    /// The rig corrections, as chips.
+    ///
+    /// Built out of state rather than read from it as the loop draws, because
+    /// toggling one needs the borrow the drawing loop is holding. Each carries
+    /// its own placeholder warning: a chip is the only place a rig correction
+    /// can say it corrects nothing, and a chip nobody distrusted is worse than
+    /// no chip at all.
+    fn delta_chips(&self) -> Vec<TargetChip> {
+        self.delta_targets
+            .iter()
+            .enumerate()
+            .map(|(index, target)| TargetChip {
+                index,
+                label: format!("\u{394} {}", target.name),
+                selected: self.active_deltas.contains(&index),
+                tooltip: if target.is_placeholder() {
+                    format!(
+                        "{}\n\nBuilt from placeholder calibrations, not measurements. It corrects nothing.",
+                        target.note.as_deref().unwrap_or("This rig correction.")
+                    )
+                } else {
+                    target.note.clone().unwrap_or_default()
+                },
+            })
+            .collect()
+    }
+
+    /// The reference targets, as chips.
+    fn target_chips(&self) -> Vec<TargetChip> {
+        self.groups
+            .iter()
+            .enumerate()
+            .filter(|(_, group)| group.target)
+            .map(|(index, group)| TargetChip {
+                index,
+                label: group.name.clone(),
+                selected: self.active_targets.contains(&index),
+                tooltip: group.brand.clone(),
+            })
+            .collect()
+    }
+
+    /// The strip of targets between the graph and the manager.
+    ///
+    /// What is being read against is a different question from how far the
+    /// headphones are from it, and on the reference tool the two get their own
+    /// bands for that reason. The strip answers the first — which reference
+    /// targets, and which rig corrections. The manager below it answers the
+    /// second, one row per curve.
+    ///
+    /// Both lists scroll sideways rather than wrapping, so the strip stays one
+    /// row however many targets are in play, and a wide one costs nothing.
+    fn target_strip(&mut self, ui: &mut Ui) {
+        use squiglab::ui as cgui;
+        let palette = squiglab::theme::Palette::resolve(ui.visuals().dark_mode);
+        let delta_open = self.show_delta;
+        egui::Panel::bottom("target_strip")
+            .resizable(false)
+            .exact_size(TARGET_STRIP_HEIGHT)
+            .frame(
+                egui::Frame::default()
+                    .fill(palette.surface_panel)
+                    .inner_margin(egui::Margin::symmetric(cgui::Spacing::COMPACT as i8, 0)),
+            )
+            .show(ui, |ui| {
+                ui.horizontal_centered(|ui| {
+                    ui.spacing_mut().item_spacing.x = cgui::Spacing::COMPACT;
+
+                    // The deviation window's switch, here rather than in the
+                    // toolbar because it is a question about the targets named
+                    // beside it.
+                    let glyph_color = if delta_open {
+                        palette.on_accent
+                    } else {
+                        palette.text_secondary
+                    };
+                    if cgui::pill(
+                        ui,
+                        "DELTA",
+                        delta_open,
+                        "Open the window showing how far each curve is from the target.",
+                    )
+                    .clicked()
+                    {
+                        self.show_delta = !self.show_delta;
+                    }
+                    ui.label(
+                        egui::RichText::new("\u{25b2}")
+                            .font(squiglab::theme::font(squiglab::theme::TypeStep::Caption))
+                            .color(glyph_color),
+                    );
+
+                    if !self.delta_targets.is_empty() {
+                        for chip in self.delta_chips() {
+                            if cgui::pill(ui, &chip.label, chip.selected, chip.tooltip).clicked() {
+                                self.toggle_delta(chip.index);
+                            }
+                        }
+                    }
+                    if let Some(error) = &self.delta_error {
+                        ui.colored_label(Color32::LIGHT_RED, error);
+                    }
+
+                    cgui::cluster_rule(ui);
+
+                    // A target is what everything else is read against, so it
+                    // says so rather than sharing a heading with the
+                    // corrections.
+                    cgui::cluster_label(ui, "Reference targets");
+                    for chip in self.target_chips() {
+                        if cgui::pill(ui, &chip.label, chip.selected, chip.tooltip).clicked() {
+                            self.toggle_curve(chip.index);
+                        }
+                    }
+                });
+            });
+    }
+
     fn central_panel(&mut self, ui: &mut Ui) {
         egui::CentralPanel::default().show(ui, |ui| {
             if let Some(error) = &self.processing_error {
@@ -3665,7 +3866,9 @@ impl eframe::App for CrinGraphApp {
         // so that it spans the full width and the library sits beside the graph
         // above it. The other way round, the library would own the full height
         // and the manager would be squeezed into the column beside it.
+        self.status_panel(ui);
         self.manager_panel(ui);
+        self.target_strip(ui);
         self.selector_panel(ui);
         self.central_panel(ui);
         if self.loaded && self.load_error.is_none() {
@@ -3689,49 +3892,6 @@ impl eframe::App for CrinGraphApp {
                 }
             }
         }
-        egui::Panel::bottom("status").show(ui, |ui| {
-            ui.horizontal(|ui| {
-                ui.label(format!(
-                    "{} active · {} total · {} Hz–{} Hz",
-                    self.display_curves.len(),
-                    self.groups.len(),
-                    self.zoom.x_range().0 as u32,
-                    self.zoom.x_range().1 as u32
-                ));
-                if let Some(index) = self.baseline {
-                    ui.label(format!("Baseline: {}", self.groups[index].name));
-                }
-                if self.processing_error.is_some()
-                    || self.load_error.is_some()
-                    || self.settings_error.is_some()
-                    || self.screenshot_error.is_some()
-                    || self.svg_error.is_some()
-                {
-                    ui.colored_label(Color32::LIGHT_RED, "Some issues need attention.");
-                }
-            });
-            if let Some(error) = &self.settings_error {
-                ui.colored_label(Color32::LIGHT_RED, error);
-            }
-            if let Some(error) = &self.screenshot_error {
-                ui.colored_label(Color32::LIGHT_RED, error);
-            }
-            if let Some(message) = &self.screenshot_message {
-                ui.label(message);
-            }
-            if let Some(error) = &self.svg_error {
-                ui.colored_label(Color32::LIGHT_RED, error);
-            }
-            if let Some(message) = &self.svg_message {
-                ui.label(message);
-            }
-            if let Some(error) = &self.curve_export_error {
-                ui.colored_label(Color32::LIGHT_RED, error);
-            }
-            if let Some(message) = &self.curve_export_message {
-                ui.label(message);
-            }
-        });
     }
 }
 
@@ -5914,6 +6074,94 @@ smoothing_octaves = 3
         app.rebuild_display_curves();
         assert_eq!(app.display_curves.len(), 1);
         assert!(app.display_curves[0].target);
+    }
+
+    /// An app with one target, one headphone, and one rig correction.
+    fn chip_app() -> CrinGraphApp {
+        let mut app = bar_app();
+        app.delta_targets = vec![DeltaTarget {
+            name: "5128DF".to_owned(),
+            clone_rig: "clone".to_owned(),
+            original_rig: "original".to_owned(),
+            synthetic: false,
+            note: Some("calibrated 2026-01-14".to_owned()),
+            points: vec![FRPoint {
+                hz: 1000.0,
+                db: 0.5,
+            }],
+        }];
+        app
+    }
+
+    #[test]
+    fn a_rig_correction_chip_says_what_it_corrects_what_it_measured() {
+        let app = chip_app();
+        let chips = app.delta_chips();
+        assert_eq!(chips.len(), 1);
+        // Named with a delta because it is a difference between two rigs.
+        assert_eq!(chips[0].label, "\u{394} 5128DF");
+        assert!(!chips[0].selected);
+        assert_eq!(chips[0].tooltip, "calibrated 2026-01-14");
+    }
+
+    #[test]
+    fn a_selected_correction_chip_says_it_is_selected() {
+        let mut app = chip_app();
+        app.toggle_delta(0);
+        let chips = app.delta_chips();
+        assert_eq!(chips.len(), 1);
+        assert!(chips[0].selected);
+        // And its own state round-trips through the toggle.
+        assert_eq!(app.active_deltas.len(), 1);
+        app.toggle_delta(0);
+        assert!(!app.delta_chips()[0].selected);
+    }
+
+    #[test]
+    fn a_placeholder_correction_warns_that_it_corrects_nothing() {
+        let mut app = chip_app();
+        app.delta_targets[0].synthetic = true;
+        let chips = app.delta_chips();
+        // A chip is the only place a rig correction can carry a warning, and a
+        // chip nobody distrusted is worse than no chip at all.
+        assert!(
+            chips[0].tooltip.contains("placeholder"),
+            "the tooltip said {:?}",
+            chips[0].tooltip
+        );
+        // It keeps whatever note it had, so the reason is not lost.
+        assert!(chips[0].tooltip.contains("calibrated 2026-01-14"));
+    }
+
+    #[test]
+    fn a_reference_target_chip_carries_the_target_it_is_one_of() {
+        let app = chip_app();
+        let chips = app.target_chips();
+        // Only targets: a chip strip of everything would not say what is being
+        // read against.
+        assert_eq!(chips.len(), 1);
+        assert!(!chips[0].label.contains("Headphone"));
+    }
+
+    #[test]
+    fn chips_stay_in_the_order_the_strip_lays_them_out() {
+        // Two rig corrections and two targets: the chips have to come back in a
+        // stable order or the strip would reshuffle under the pointer.
+        let mut app = chip_app();
+        app.delta_targets.push(DeltaTarget {
+            name: "711 clone".to_owned(),
+            clone_rig: "clone".to_owned(),
+            original_rig: "original".to_owned(),
+            synthetic: false,
+            note: None,
+            points: Vec::new(),
+        });
+        let labels: Vec<String> = app
+            .delta_chips()
+            .into_iter()
+            .map(|chip| chip.label)
+            .collect();
+        assert_eq!(labels, vec!["\u{394} 5128DF", "\u{394} 711 clone"]);
     }
 
     /// A curve, a variant and a mode, to name and format.

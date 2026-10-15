@@ -98,6 +98,43 @@ pub fn action_button(ui: &mut Ui, label: &str, tooltip: &str) -> bool {
     .clicked()
 }
 
+/// A rounded selectable chip.
+///
+/// The reference tool marks what is in play with pills rather than with
+/// checkboxes, because a row of them reads as a set of switches rather than as a
+/// list of options, and at the density a target strip runs at the difference
+/// matters. Selected means filled with the accent; unselected means an outline,
+/// so the set is legible without a label saying which is which.
+pub fn pill(
+    ui: &mut Ui,
+    label: &str,
+    selected: bool,
+    tooltip: impl Into<String>,
+) -> egui::Response {
+    let palette = Palette::resolve(ui.visuals().dark_mode);
+    let (text_color, fill, stroke) = if selected {
+        (palette.on_accent, palette.accent, Stroke::NONE)
+    } else {
+        (
+            palette.text_secondary,
+            Color32::TRANSPARENT,
+            palette.control_stroke(),
+        )
+    };
+    ui.add(
+        egui::Button::new(
+            RichText::new(label)
+                .font(theme::font(TypeStep::Caption))
+                .color(text_color),
+        )
+        .fill(fill)
+        .stroke(stroke)
+        .corner_radius(egui::CornerRadius::same(11))
+        .min_size(egui::vec2(0.0, 22.0)),
+    )
+    .on_hover_text(tooltip.into())
+}
+
 /// Panel section heading: a bold title with an optional right-aligned meta count.
 pub fn section_header(ui: &mut Ui, title: &str, meta: Option<&str>) {
     let palette = Palette::resolve(ui.visuals().dark_mode);
