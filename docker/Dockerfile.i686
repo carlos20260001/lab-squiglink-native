@@ -1,0 +1,51 @@
+# The i686 build runs on Debian rather than on one of cross's own images. cross
+# tags its images with the version of cross that uses them, and the tagged ones
+# are Ubuntu 16.04, which has no PipeWire at all. Debian keeps i386 as a
+# release architecture, so the 1.4 PipeWire headers and libraries install as
+# i386 packages inside an amd64 container, and the cross toolchain sysroot sits
+# where cross expects it. Only the compiler, the build tools and those libraries
+# are needed; the Rust toolchain is mounted in from the host by cross.
+FROM debian:trixie
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# The build tools that run in the container: bindgen needs libclang to parse the
+# PipeWire headers, pkg-config finds the libraries, and git and the certificates
+# are what cargo fetches the registry with.
+RUN apt-get update \
+    && apt-get install --assume-yes --no-install-recommends \
+        ca-certificates \
+        clang \
+        file \
+        git \
+        libclang-dev \
+        make \
+        pkg-config \
+    && rm -rf /var/lib/apt/lists/*
+
+# The C toolchain for the target goes into its own sysroot, while PipeWire's
+# headers land in the architecture-independent /usr/include and its libraries
+# and .pc files in the i386 directory that pkg-config searches below.
+RUN dpkg --add-architecture i386 \
+    && apt-get update \
+    && apt-get install --assume-yes --no-install-recommends \
+        g++-i686-linux-gnu \
+        gcc-i686-linux-gnu \
+        libc6-dev-i386-cross \
+        libpipewire-0.3-dev:i386 \
+        libspa-0.2-dev:i386 \
+    && rm -rf /var/lib/apt/lists/*
+
+# The contract cross's own images set, which is how cargo, the cc crate,
+# bindgen and pkg-config find the target toolchain and libraries from inside
+# the container. PKG_CONFIG_ALLOW_CROSS is what stops pkg-config refusing to
+# describe libraries built for another architecture.
+ENV CROSS_SYSROOT=/usr/i686-linux-gnu \
+    CROSS_TOOLCHAIN_PREFIX=i686-linux-gnu- \
+    CARGO_TARGET_I686_UNKNOWN_LINUX_GNU_LINKER=i686-linux-gnu-gcc \
+    AR_i686_unknown_linux_gnu=i686-linux-gnu-ar \
+    CC_i686_unknown_linux_gnu=i686-linux-gnu-gcc \
+    CXX_i686_unknown_linux_gnu=i686-linux-gnu-g++ \
+    BINDGEN_EXTRA_CLANG_ARGS_i686_unknown_linux_gnu=--sysroot=/usr/i686-linux-gnu -idirafter/usr/include \
+    PKG_CONFIG_PATH=/usr/lib/i386-linux-gnu/pkgconfig/ \
+    PKG_CONFIG_ALLOW_CROSS=1

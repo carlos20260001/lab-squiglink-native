@@ -1,22 +1,21 @@
 # Cross builds run inside a container, so the apt packages installed on the
-# runner are not visible there. Each cross target installs the PipeWire
-# development files for its own architecture — the headers bindgen parses and
-# the libraries the linker resolves — plus clang and libclang, which bindgen
-# uses on the container's native architecture. pkg-config is already in the
-# image; it is named here so the list below stays self-explanatory.
+# runner are not visible there.
 #
-# `image = ":main"` asks for the current image of each target rather than the
-# one tagged to the installed cross. That default is Ubuntu 16.04, which has no
-# PipeWire at all, while the current images are Ubuntu 24.04 and carry the
-# 1.0 headers the bindings need. Each one already points pkg-config at the
-# target's own pkgconfig directory and allows it to cross.
+# The 32-bit x86 build uses a Debian image of its own (docker/Dockerfile.i686):
+# cross's version-tagged images are Ubuntu 16.04, which has no PipeWire, and
+# Debian keeps i386 as a release architecture, so it can supply the headers,
+# libraries and cross toolchain an i686 build needs.
+#
+# The 64-bit targets use cross's current images, which are Ubuntu 24.04: they
+# carry the 1.0 PipeWire headers the bindings are generated from, and they
+# already point pkg-config at each target's own pkgconfig directory and allow
+# it to cross. What is left is the PipeWire development files for the target's
+# own architecture — the headers bindgen parses and the libraries the linker
+# resolves — which the pre-build hooks install. clang and libclang come from
+# the image; they are named again so each list below stands on its own.
 
 [target.i686-unknown-linux-gnu]
-image = ":main"
-pre-build = [
-    "dpkg --add-architecture $CROSS_DEB_ARCH",
-    "apt-get update && apt-get install --assume-yes --no-install-recommends libpipewire-0.3-dev:$CROSS_DEB_ARCH libspa-0.2-dev:$CROSS_DEB_ARCH clang libclang-dev pkg-config",
-]
+dockerfile = "docker/Dockerfile.i686"
 
 [target.armv7-unknown-linux-gnueabihf]
 image = ":main"
