@@ -46,6 +46,6 @@ ENV CROSS_SYSROOT=/usr/i686-linux-gnu \
     AR_i686_unknown_linux_gnu=i686-linux-gnu-ar \
     CC_i686_unknown_linux_gnu=i686-linux-gnu-gcc \
     CXX_i686_unknown_linux_gnu=i686-linux-gnu-g++ \
-    BINDGEN_EXTRA_CLANG_ARGS_i686_unknown_linux_gnu=--sysroot=/usr/i686-linux-gnu -idirafter/usr/include \
+    BINDGEN_EXTRA_CLANG_ARGS_i686_unknown_linux_gnu="--sysroot=/usr/i686-linux-gnu -idirafter/usr/include" \
     PKG_CONFIG_PATH=/usr/lib/i386-linux-gnu/pkgconfig/ \
     PKG_CONFIG_ALLOW_CROSS=1
