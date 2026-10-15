@@ -280,6 +280,12 @@ not the one a target was measured on is the normal case, not the edge case.
       so it is not something that should be switchable off. The toggle and the
       saved setting are gone; older settings files carrying the old key still
       load, pinned by a test.
+- [x] The manager draws at all. It is a `Panel::bottom` shown after the
+      `CentralPanel`, and a central panel uses up the rect it was given: the
+      bottom panel was measured against a rect with no height left and clamped
+      to zero, so it rendered nothing and the space under the graph stayed
+      empty. Side, top and bottom panels are now all laid out before the central
+      one, and the manager sits ahead of the library so it spans the full width.
 - [ ] Captured at every viewport in both themes. Same blocker as the rest of
       this file: no display here.
 

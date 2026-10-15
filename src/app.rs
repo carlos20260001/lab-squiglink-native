@@ -3271,16 +3271,23 @@ impl eframe::App for CrinGraphApp {
         self.tutorial_window(&ctx);
         // The reference tool has two viewports: below ~1024px content width the
         // graph stacks above the tab column, and above it the tabs sit beside the
-        // graph. Branch on available width rather than tracking window size.
-        let compact = ui.available_width() < COMPACT_LAYOUT_WIDTH;
-        if compact {
-            self.central_panel(ui);
-            self.selector_panel(ui);
-        } else {
-            self.selector_panel(ui);
-            self.central_panel(ui);
-        }
+        // graph. `selector_panel` branches on available width to pick between
+        // them, which is still the full width here because nothing laid out
+        // above this point narrows it.
+        //
+        // Every side, top and bottom panel is laid out before the central one,
+        // and that order is not cosmetic. A `CentralPanel` uses up the rect it
+        // was given, so a bottom panel shown after it is measured against a rect
+        // with no height left and is clamped to zero: it would draw nothing at
+        // all, with the space below the graph left empty.
+        //
+        // The manager goes ahead of the library, not merely ahead of the graph,
+        // so that it spans the full width and the library sits beside the graph
+        // above it. The other way round, the library would own the full height
+        // and the manager would be squeezed into the column beside it.
         self.manager_panel(ui);
+        self.selector_panel(ui);
+        self.central_panel(ui);
         if self.loaded && self.load_error.is_none() {
             self.persist_preferences_if_changed();
         }
