@@ -54,6 +54,38 @@ const _: () = assert!(MANAGER_STACKED_ROW_HEIGHT > MANAGER_ROW_HEIGHT);
 /// control clusters measure ~800px together at the app's type scale, and a
 /// single line narrower than that clips the right-hand controls off the edge.
 const MANAGER_ROW_STACK_WIDTH: f32 = 800.0;
+/// The most the manager will ever take from the graph.
+const MANAGER_MAX_HEIGHT: f32 = 460.0;
+
+/// How tall the manager wants to be for a selection, and the smallest it is
+/// allowed to be, at a given viewport width and delta-bar height.
+///
+/// The minimum is the load-bearing half. A resizable egui panel keeps whatever
+/// height it was last given: `default_size` only seeds it, once, on the frame
+/// the panel id is first seen, and every frame after that reads the stored
+/// height instead. A height stored before the delta bar existed is therefore
+/// still in force after the bar lands, and against a fixed floor it is smaller
+/// than the bar plus one row, which leaves the rows nothing to draw into.
+/// Sizing the minimum from the content is what makes egui lift that stale
+/// height back up on the very next frame.
+///
+/// Past `MANAGER_MAX_HEIGHT` the content stops fitting and the minimum falls
+/// back to the bar and a single row, which is what leaves the manager
+/// shrinkable so the overflow can be scrolled to.
+fn manager_heights(width: f32, curve_count: usize, bar_height: f32) -> (f32, f32) {
+    let row_height = if width < MANAGER_ROW_STACK_WIDTH {
+        MANAGER_STACKED_ROW_HEIGHT
+    } else {
+        MANAGER_ROW_HEIGHT
+    };
+    let content = MANAGER_HEIGHT_BASE + bar_height + curve_count as f32 * row_height;
+    let min_height = if content <= MANAGER_MAX_HEIGHT {
+        content
+    } else {
+        MANAGER_HEIGHT_BASE + bar_height + row_height
+    };
+    (content.clamp(min_height, MANAGER_MAX_HEIGHT), min_height)
+}
 /// Content width below which the layout stacks instead of running the tab column
 /// beside the graph. Matches the reference tool's transition, which sits between
 /// 900 and 1100px.
@@ -2685,8 +2717,8 @@ impl CrinGraphApp {
         };
         // The graph no longer fills the window, so the manager can reclaim the
         // space it freed: one row per active curve, no scrolling, and stop
-        // growing once every curve is visible. The panel stays resizable, and a
-        // hand-resized height is remembered over this default.
+        // growing once every curve is visible. The panel stays resizable, but
+        // never below what its contents need; see the minimum below.
         // A selected rig correction occupies a row here like any other curve:
         // it is something the graph is currently being corrected by, and it has
         // to be visible and removable in the same place as everything else it
@@ -2695,14 +2727,8 @@ impl CrinGraphApp {
         // Size the panel from the row height this viewport will actually use,
         // so every selected curve is visible without scrolling inside a panel
         // that is too short to hold it.
-        let stacked = ui.available_width() < MANAGER_ROW_STACK_WIDTH;
-        let row_height = if stacked {
-            MANAGER_STACKED_ROW_HEIGHT
-        } else {
-            MANAGER_ROW_HEIGHT
-        };
-        let default_height =
-            (MANAGER_HEIGHT_BASE + bar_height + curve_count as f32 * row_height).clamp(76.0, 460.0);
+        let (default_height, min_height) =
+            manager_heights(ui.available_width(), curve_count, bar_height);
         // The manager sits under the graph and spans the full width, matching
         // the reference tool. A row has the whole width to work with, so curve
         // identity sits on the left and every control for that curve lines up on
@@ -2710,7 +2736,7 @@ impl CrinGraphApp {
         egui::Panel::bottom("curve_manager")
             .resizable(true)
             .default_size(default_height)
-            .size_range(76.0..=460.0)
+            .size_range(min_height..=MANAGER_MAX_HEIGHT)
             .show(ui, |ui| {
                 let count =
                     self.active.len() + self.active_targets.len() + self.active_deltas.len();
@@ -3942,11 +3968,11 @@ fn prepare_curve(
 mod tests {
     use super::{
         apply_baseline, build_groups, decode_share_uri, encode_share_uri, group_has_imbalance,
-        initialize_app_config_from, matches_search, prepare_channels, read_app_config_from,
-        read_preferences_from, resolve_measurement_dir, target_category, validate_app_config,
-        write_preferences_to, AppConfig, ChannelMode, CrinGraphApp, CurveSource, DisplayCurve,
-        MeasurementGroup, MeasurementVariant, Preferences, SavedGroup, MAX_EQ_ROWS,
-        MAX_SHARE_URI_LENGTH, MAX_SMOOTH_LEVEL, TUTORIAL_SEGMENTS,
+        initialize_app_config_from, manager_heights, matches_search, prepare_channels,
+        read_app_config_from, read_preferences_from, resolve_measurement_dir, target_category,
+        validate_app_config, write_preferences_to, AppConfig, ChannelMode, CrinGraphApp,
+        CurveSource, DisplayCurve, MeasurementGroup, MeasurementVariant, Preferences, SavedGroup,
+        MAX_EQ_ROWS, MAX_SHARE_URI_LENGTH, MAX_SMOOTH_LEVEL, TUTORIAL_SEGMENTS,
     };
     use squiglab::data::{CurveInfo, FRPoint};
     use squiglab::delta::DeltaTarget;
@@ -4898,42 +4924,68 @@ smoothing_octaves = 3
         });
     }
 
-    /// The manager's default height for a viewport of a given width, derived the
-    /// same way the panel derives it. Kept as a function so the test below pins
-    /// the same arithmetic the panel uses rather than restating it.
-    fn manager_height_for(width: f32, curve_count: usize) -> f32 {
-        let row_height = if width < super::MANAGER_ROW_STACK_WIDTH {
-            super::MANAGER_STACKED_ROW_HEIGHT
-        } else {
-            super::MANAGER_ROW_HEIGHT
-        };
-        (super::MANAGER_HEIGHT_BASE + curve_count as f32 * row_height).clamp(76.0, 340.0)
-    }
-
     #[test]
     fn the_manager_is_tall_enough_to_show_every_selected_curve() {
         // A manager shorter than its own rows pushes the last ones out of sight
         // and makes the user scroll a sliver, which reads as "my selection is
         // not showing". A wide viewport fits eight curves without scrolling.
         for count in 1..=8 {
-            let height = manager_height_for(1440.0, count);
+            let (default, min) = manager_heights(1440.0, count, 0.0);
             let needed = super::MANAGER_HEIGHT_BASE + count as f32 * super::MANAGER_ROW_HEIGHT;
             assert!(
-                height >= needed,
-                "{count} curves need {needed}px but the manager defaults to {height}px"
+                default >= needed,
+                "{count} curves need {needed}px but the manager defaults to {default}px"
             );
+            assert!(min >= needed, "{count} curves, but the minimum is {min}px");
         }
         // A narrow viewport stacks the controls onto a second line, so the
         // panel has to budget for that too.
         for count in 1..=4 {
-            let height = manager_height_for(430.0, count);
+            let (default, min) = manager_heights(430.0, count, 0.0);
             let needed =
                 super::MANAGER_HEIGHT_BASE + count as f32 * super::MANAGER_STACKED_ROW_HEIGHT;
             assert!(
-                height >= needed,
-                "{count} stacked curves need {needed}px but the manager defaults to {height}px"
+                default >= needed && min >= needed,
+                "{count} stacked curves need {needed}px, got {default}px / {min}px"
             );
         }
+    }
+
+    #[test]
+    fn the_delta_bar_cannot_be_taken_out_of_the_managers_rows() {
+        // egui remembers a resizable panel's height and only consults
+        // `default_size` on the first frame the panel id is ever seen, so a
+        // height stored before the bar existed is still in force. It is lifted
+        // by the range minimum, so that minimum has to account for the bar as
+        // well as the rows: without that, the bar eats the panel and no row is
+        // left to see.
+        let bar = squiglab::graph::DeltaBar::HEIGHT;
+        for count in 1..=8 {
+            let (_, min) = manager_heights(1440.0, count, bar);
+            let one_row = super::MANAGER_HEIGHT_BASE + bar + super::MANAGER_ROW_HEIGHT;
+            assert!(
+                min >= one_row,
+                "with the bar and {count} curves the manager may be {min}px, which cannot hold \
+                 the header, the bar and one row ({one_row}px)"
+            );
+        }
+        // With no rows at all the bar still leaves room for its own caption.
+        let (_, min) = manager_heights(1440.0, 0, bar);
+        assert!(min >= bar);
+    }
+
+    #[test]
+    fn a_manager_that_cannot_fit_its_rows_can_still_be_shrunk_to_scroll() {
+        // Eight stacked rows plus the bar exceed the maximum, so the minimum
+        // has to fall back to the bar and one row. If it did not, the panel
+        // would be pinned at its maximum with the overflow unreachable.
+        let (default, min) = manager_heights(430.0, 8, squiglab::graph::DeltaBar::HEIGHT);
+        assert_eq!(default, super::MANAGER_MAX_HEIGHT);
+        assert!(
+            min < default,
+            "the manager must be shrinkable to reach rows past its maximum"
+        );
+        assert!(min >= squiglab::graph::DeltaBar::HEIGHT);
     }
 
     #[test]
