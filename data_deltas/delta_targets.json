@@ -1,0 +1,11 @@
+{
+  "deltas": [
+    {
+      "name": "Δ Placeholder clone rig",
+      "clone": "Placeholder clone calibration.txt",
+      "original": "Placeholder reference calibration.txt",
+      "synthetic": true,
+      "note": "PLACEHOLDER. Both calibrations are analytic, not measured, so this delta target corrects nothing. It exists to exercise the wiring: the app loads the two calibrations, subtracts them, and labels the result a placeholder. Replace both curves with real measurements and set \"synthetic\" to false to make it a genuine rig correction."
+    }
+  ]
+}

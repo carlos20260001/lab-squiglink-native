@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 700 500" aria-label="SquigLab Spectral Logo" role="img" preserveAspectRatio="xMidYMid meet">
+  <title>SquigLab — Spectral Graph</title>
+  <desc>A spectral line graph showing frequency peaks across a range of values, ported from graph.png.</desc>
+  <rect width="700" height="500" style=""/>
+  <rect x="58" y="109.034" width="584" height="281.932" rx="8" opacity="0.6" style="fill: rgb(39, 37, 30); stroke: rgb(218, 191, 8);"/>
+  <g stroke="#1a2a40" stroke-width="1.5" transform="matrix(0.96, 0, 0, 0.73421, -34.000016, 81.131701)">
+    <line x1="100" y1="40" x2="100" y2="420" style="stroke: rgba(218, 191, 8, 0.208);"/>
+    <line x1="200" y1="40" x2="200" y2="420" style="stroke: rgba(218, 191, 8, 0.208);"/>
+    <line x1="300" y1="40" x2="300" y2="420" style="stroke: rgba(218, 191, 8, 0.208);"/>
+    <line x1="400" y1="40" x2="400" y2="420" style="stroke: rgba(218, 191, 8, 0.208);"/>
+    <line x1="500" y1="40" x2="500" y2="420" style="stroke: rgba(218, 191, 8, 0.208);"/>
+    <line x1="600" y1="40" x2="600" y2="420" style="stroke: rgba(218, 191, 8, 0.208);"/>
+    <line x1="700" y1="40" x2="700" y2="420" style="stroke: rgba(218, 191, 8, 0.208);"/>
+  </g>
+  <path d="M 62 293.642 C 179.2 129.642 200 174.642 247.5 215.642 C 276.8 240.642 315.826 322.745 345.113 322.745 C 374.412 322.745 370 210.642 442.7 210.642 C 472 210.642 511.08 303.221 540.371 303.221 C 569.666 303.221 551 239.642 638 232.642" fill="none" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" style="stroke: rgb(166, 147, 56);"/>
+  <text x="350" y="471.634" text-anchor="middle" fill="#E9EBEE" font-family="Open Sans, sans-serif" font-weight="700" font-size="36" letter-spacing="3" style="white-space: pre; font-size: 74.5px; stroke-width: 1;">LAB</text>
+  <text x="350" y="76.589" text-anchor="middle" fill="#E9EBEE" font-family="Open Sans, sans-serif" font-weight="700" font-size="36" letter-spacing="3" style="white-space: pre; font-size: 74.5px; stroke-width: 1;">SQUIG</text>
+</svg>

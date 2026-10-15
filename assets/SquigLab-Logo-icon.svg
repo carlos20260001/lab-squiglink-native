@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" aria-label="SquigLab Spectral App Icon" role="img" preserveAspectRatio="xMidYMid meet">
+  <title>SquigLab — Spectral App Icon</title>
+  <desc>Rounded square app icon with spectral graph and SQUIG / LAB text.</desc>
+  <rect x="24" y="24" width="464" height="464" rx="48" stroke-width="3" opacity="0.95" style=""/>
+  <g stroke="#dab70c" stroke-width="1" opacity="0.25" transform="matrix(1.09375, 0, 0, 0.843478, -6.5, 32.478326)">
+    <line x1="80" y1="150" x2="80" y2="380" style="stroke: rgb(255, 214, 14);"/>
+    <line x1="160" y1="150" x2="160" y2="380" style="stroke: rgb(255, 214, 14);"/>
+    <line x1="240" y1="150" x2="240" y2="380" style="stroke: rgb(255, 214, 14);"/>
+    <line x1="320" y1="150" x2="320" y2="380" style="stroke: rgb(255, 214, 14);"/>
+    <line x1="400" y1="150" x2="400" y2="380" style="stroke: rgb(255, 214, 14);"/>
+  </g>
+  <rect x="56" y="159.448" width="400" height="193.104" rx="8" opacity="0.6" style="fill: rgb(39, 37, 30); stroke: rgb(218, 191, 8); stroke-width: 1;"/>
+  <g transform="matrix(0.62931, 0, 0, 0.62931, 35.741498, 168.309377)">
+    <path d="M 60 140 C 170 30 190 70 240 110 C 270 135 310 210 340 210 C 370 210 365 100 440 100 C 470 100 510 190 540 190 C 570 190 550 130 640 120" fill="none" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" stroke="#a69338"/>
+  </g>
+  <text x="256" y="110" text-anchor="middle" fill="#E9EBEE" font-family="Open Sans, sans-serif" font-weight="700" font-size="48" letter-spacing="5" style="white-space: pre;">SQUIG</text>
+  <text x="256" y="420" text-anchor="middle" fill="#E9EBEE" font-family="Open Sans, sans-serif" font-weight="700" font-size="48" letter-spacing="5" style="white-space: pre;">LAB</text>
+</svg>

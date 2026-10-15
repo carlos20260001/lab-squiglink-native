@@ -427,6 +427,30 @@ mod tests {
     }
 
     #[test]
+    fn the_shipped_delta_directory_loads_and_flags_its_placeholder() {
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("data_deltas");
+        let targets = load_delta_targets(&dir, &grid()).unwrap();
+        assert!(
+            !targets.is_empty(),
+            "the shipped delta directory should hold at least the placeholder"
+        );
+        for target in &targets {
+            // Nothing in the shipped set may claim to be a real rig unless it
+            // was explicitly flagged as measured.
+            assert!(
+                target.is_placeholder(),
+                "{} ships without being marked as a placeholder",
+                target.name
+            );
+            assert!(
+                target.note.is_some(),
+                "{} ships without a note",
+                target.name
+            );
+        }
+    }
+
+    #[test]
     fn applying_an_empty_compensation_is_refused() {
         let mut curve = flat(80.0, 8);
         assert_eq!(apply(&[], &mut curve), Err(DeltaError::Unsampleable));

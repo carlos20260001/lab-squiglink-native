@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use squiglab::audio::Player;
 use squiglab::color::target_color;
 use squiglab::data::{self, CurveInfo, FRPoint, PhoneBook};
+use squiglab::delta::{self, DeltaTarget};
 use squiglab::equalizer;
 use squiglab::graph::{export_svg as render_svg, GraphCanvas, PlotCurve, ZoomRegion};
 use squiglab::processing::{self, NormParams, SmoothingParams};
@@ -85,6 +86,10 @@ struct AppConfig {
 struct MeasurementConfig {
     database_dir: Option<PathBuf>,
     headphone_database_dir: Option<PathBuf>,
+    /// Where rig-compensation delta targets live. Kept out of `database_dir`
+    /// on purpose: the calibration curves are not headphones, and the database
+    /// loader would list them as phantom measurements.
+    delta_dir: Option<PathBuf>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
@@ -263,6 +268,10 @@ struct Preferences {
     /// the curve, so it survives the curve being switched off and comes back
     /// with it, as `p.eq` does in the reference tool.
     eq_filters: BTreeMap<String, Vec<EqRow>>,
+    /// Selected delta targets, by name. A delta target is a rig correction
+    /// rather than a curve to compare, so it carries none of the per-curve
+    /// state a `SavedGroup` does.
+    active_deltas: Vec<String>,
 }
 
 impl Default for Preferences {
@@ -287,6 +296,7 @@ impl Default for Preferences {
             y_scale: 1.0,
             curve_color_offsets: BTreeMap::new(),
             eq_filters: BTreeMap::new(),
+            active_deltas: Vec::new(),
         }
     }
 }
@@ -383,6 +393,15 @@ pub struct CrinGraphApp {
     channel_modes: BTreeMap<usize, ChannelMode>,
     variant_choices: BTreeMap<usize, usize>,
     display_curves: Vec<DisplayCurve>,
+    /// Rig-compensation curves, loaded from the delta directory. Empty when
+    /// there is none, which is the normal case: they are optional.
+    delta_targets: Vec<DeltaTarget>,
+    /// Which delta targets are correcting the readings. Kept separate from
+    /// `active` because a delta target is not a curve on the graph.
+    active_deltas: BTreeSet<usize>,
+    /// Why the delta directory could not be read, if it could not. Optional
+    /// data failing to load must not take the measurements down with it.
+    delta_error: Option<String>,
     search: String,
     zoom: ZoomRegion,
     phon_normalization: bool,
@@ -482,6 +501,9 @@ impl Default for CrinGraphApp {
             channel_modes: BTreeMap::new(),
             variant_choices: BTreeMap::new(),
             display_curves: Vec::new(),
+            delta_targets: Vec::new(),
+            active_deltas: BTreeSet::new(),
+            delta_error: None,
             search: String::new(),
             zoom: ZoomRegion::Full,
             phon_normalization: true,
@@ -593,6 +615,32 @@ impl CrinGraphApp {
         });
         self.groups = build_groups(&phone_books, &curves);
 
+        // Delta targets are optional, so a failure to read them is reported in
+        // their own section rather than failing the whole load: losing a rig
+        // correction should not cost you the measurements as well.
+        self.delta_error = None;
+        let delta_dir = resolve_measurement_dir(
+            config.measurements.delta_dir.as_deref(),
+            Path::new("data_deltas"),
+            &config_path,
+        );
+        self.delta_targets = if delta_dir.is_dir() {
+            match delta::load_delta_targets(&delta_dir, &self.upload_grid) {
+                Ok(targets) => targets,
+                Err(error) => {
+                    self.delta_error = Some(format!("{error}"));
+                    Vec::new()
+                }
+            }
+        } else {
+            Vec::new()
+        };
+        // A delta target that was selected in an earlier session but is no
+        // longer in the directory cannot be honoured, and must not leave a
+        // dangling index behind for the rest of the session.
+        self.active_deltas
+            .retain(|index| *index < self.delta_targets.len());
+
         if self.debug_hooks {
             eprintln!(
                 "SquigLab loaded {} curves across {} measurement groups.",
@@ -688,6 +736,16 @@ impl CrinGraphApp {
         }
         self.active.clear();
         self.active_targets.clear();
+        self.active_deltas.clear();
+        for name in &preferences.active_deltas {
+            if let Some(index) = self
+                .delta_targets
+                .iter()
+                .position(|target| &target.name == name)
+            {
+                self.active_deltas.insert(index);
+            }
+        }
         self.hidden.clear();
         self.pinned.clear();
         self.offsets.clear();
@@ -795,6 +853,11 @@ impl CrinGraphApp {
                 .eq_filters
                 .iter()
                 .map(|(&index, rows)| (group_key(&self.groups[index]), rows.clone()))
+                .collect(),
+            active_deltas: self
+                .active_deltas
+                .iter()
+                .map(|&index| self.delta_targets[index].name.clone())
                 .collect(),
         }
     }
@@ -3238,12 +3301,14 @@ fn initialize_app_config_from(path: &Path) -> anyhow::Result<AppConfig> {
 fn default_app_config() -> anyhow::Result<AppConfig> {
     let working_directory = std::env::current_dir()?;
     let headphone_database_dir = working_directory.join("data_hp");
+    let delta_dir = working_directory.join("data_deltas");
     Ok(AppConfig {
         measurements: MeasurementConfig {
             database_dir: Some(working_directory.join("data")),
             headphone_database_dir: headphone_database_dir
                 .is_dir()
                 .then_some(headphone_database_dir),
+            delta_dir: delta_dir.is_dir().then_some(delta_dir),
         },
         defaults: DefaultConfig::default(),
         rig_description: None,
@@ -4949,6 +5014,7 @@ smoothing_octaves = 3
             y_scale: 1.75,
             curve_color_offsets: [("Brand\u{1f}Model".into(), 2)].into_iter().collect(),
             eq_filters: BTreeMap::new(),
+            active_deltas: vec!["Δ Placeholder clone rig".into()],
         };
         write_preferences_to(&path, &preferences).unwrap();
         assert_eq!(read_preferences_from(&path).unwrap(), Some(preferences));
