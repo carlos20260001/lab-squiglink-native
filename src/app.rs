@@ -72,17 +72,17 @@ const MANAGER_MAX_HEIGHT: f32 = 460.0;
 /// Past `MANAGER_MAX_HEIGHT` the content stops fitting and the minimum falls
 /// back to the bar and a single row, which is what leaves the manager
 /// shrinkable so the overflow can be scrolled to.
-fn manager_heights(width: f32, curve_count: usize, bar_height: f32) -> (f32, f32) {
+fn manager_heights(width: f32, curve_count: usize) -> (f32, f32) {
     let row_height = if width < MANAGER_ROW_STACK_WIDTH {
         MANAGER_STACKED_ROW_HEIGHT
     } else {
         MANAGER_ROW_HEIGHT
     };
-    let content = MANAGER_HEIGHT_BASE + bar_height + curve_count as f32 * row_height;
+    let content = MANAGER_HEIGHT_BASE + curve_count as f32 * row_height;
     let min_height = if content <= MANAGER_MAX_HEIGHT {
         content
     } else {
-        MANAGER_HEIGHT_BASE + bar_height + row_height
+        MANAGER_HEIGHT_BASE + row_height
     };
     (content.clamp(min_height, MANAGER_MAX_HEIGHT), min_height)
 }
@@ -298,6 +298,10 @@ struct Preferences {
     dark_mode: bool,
     color_offset: usize,
     show_measurements: bool,
+    /// Whether the deviation window is open. The deviation is a second reading
+    /// of the same selection rather than a view of it, so it lives in its own
+    /// window and is off by default.
+    show_delta: bool,
     label_positions: BTreeMap<String, [f32; 2]>,
     label_layout: squiglab::graph::LabelLayout,
     tutorial_segment: Option<usize>,
@@ -328,6 +332,7 @@ impl Default for Preferences {
             dark_mode: true,
             color_offset: 0,
             show_measurements: true,
+            show_delta: false,
             label_positions: BTreeMap::new(),
             label_layout: squiglab::graph::LabelLayout::default(),
             tutorial_segment: None,
@@ -451,6 +456,10 @@ pub struct CrinGraphApp {
     dark_mode: bool,
     color_offset: usize,
     show_measurements: bool,
+    /// Whether the deviation window is open. The deviation is a second reading
+    /// of the same selection rather than a view of it, so it lives in its own
+    /// window and is off by default.
+    show_delta: bool,
     label_positions: BTreeMap<String, [f32; 2]>,
     label_layout: squiglab::graph::LabelLayout,
     tutorial_segment: Option<usize>,
@@ -552,6 +561,7 @@ impl Default for CrinGraphApp {
             dark_mode: true,
             color_offset: 0,
             show_measurements: true,
+            show_delta: false,
             label_positions: BTreeMap::new(),
             label_layout: squiglab::graph::LabelLayout::default(),
             tutorial_segment: None,
@@ -782,6 +792,7 @@ impl CrinGraphApp {
                 self.active_deltas.insert(index);
             }
         }
+        self.show_delta = preferences.show_delta;
         self.hidden.clear();
         self.pinned.clear();
         self.offsets.clear();
@@ -893,6 +904,7 @@ impl CrinGraphApp {
                 .iter()
                 .map(|&index| self.delta_targets[index].name.clone())
                 .collect(),
+            show_delta: self.show_delta,
         }
     }
 
@@ -1306,6 +1318,16 @@ impl CrinGraphApp {
                     .clicked()
                 {
                     self.show_measurements = !self.show_measurements;
+                }
+                // The deviation is a second reading of the same selection, so
+                // it is a window rather than a place in the layout: the layout
+                // is the curves themselves, and this is a question about them.
+                if ui
+                    .selectable_label(self.show_delta, "\u{394} Deviation")
+                    .on_hover_text("Show how far each headphone sits from the target.")
+                    .clicked()
+                {
+                    self.show_delta = !self.show_delta;
                 }
             });
         });
@@ -2694,16 +2716,6 @@ impl CrinGraphApp {
         // corrections are in force. It is also what fills the space the graph
         // leaves below its plot, so hiding it left that space dead grey with
         // nothing in it, which read as the app having failed to draw.
-        // Worked out before the panel is sized: the strip is row one of the
-        // manager, so a manager sized without it would push the last rows out
-        // of sight. Computed once and used for both the height and the draw.
-        let caption = self.delta_bar_caption();
-        let deviations = self.delta_bar_deviations();
-        let bar_height = if deviations.is_empty() {
-            0.0
-        } else {
-            DeltaBar::HEIGHT + cgui::Spacing::TIGHT
-        };
         // The graph no longer fills the window, so the manager can reclaim the
         // space it freed: one row per active curve, no scrolling, and stop
         // growing once every curve is visible. The panel stays resizable, but
@@ -2716,8 +2728,7 @@ impl CrinGraphApp {
         // Size the panel from the row height this viewport will actually use,
         // so every selected curve is visible without scrolling inside a panel
         // that is too short to hold it.
-        let (default_height, min_height) =
-            manager_heights(ui.available_width(), curve_count, bar_height);
+        let (default_height, min_height) = manager_heights(ui.available_width(), curve_count);
         // The manager sits under the graph and spans the full width, matching
         // the reference tool. A row has the whole width to work with, so curve
         // identity sits on the left and every control for that curve lines up on
@@ -2729,28 +2740,6 @@ impl CrinGraphApp {
             .show(ui, |ui| {
                 let count =
                     self.active.len() + self.active_targets.len() + self.active_deltas.len();
-                // Row one. It summarises the whole selection rather than
-                // belonging to any one curve, so it sits above the section
-                // header instead of among the rows it is summarising.
-                let bar_curves: Vec<PlotCurve<'_>> = deviations
-                    .iter()
-                    .map(|deviation| PlotCurve {
-                        label: &deviation.label,
-                        label_key: &deviation.label,
-                        points: &deviation.points,
-                        color: deviation.color,
-                        dashed: deviation.dashed,
-                        target: true,
-                    })
-                    .collect();
-                if !bar_curves.is_empty() {
-                    DeltaBar {
-                        zoom: self.zoom,
-                        caption,
-                    }
-                    .show(ui, &bar_curves);
-                    ui.add_space(cgui::Spacing::TIGHT);
-                }
                 squiglab::ui::section_header(
                     ui,
                     "Active curves",
@@ -3160,6 +3149,64 @@ impl CrinGraphApp {
         caption
     }
 
+    /// The deviation window.
+    ///
+    /// A window rather than a panel, because this is not a view of the selection
+    /// so much as a question about it. The manager's job is to say what is in
+    /// play; this asks how far it is from the target, which is a different act
+    /// with a different centre of attention. It also wants its own proportions:
+    /// a strip squeezed under the graph shares the window with the curves it is
+    /// about, and a window can be moved aside and looked at next to them.
+    ///
+    /// With nothing selected it says so instead of opening an empty plot, so
+    /// the window is never an explanation-free void.
+    fn delta_window(&mut self, ctx: &Context) {
+        if !self.show_delta {
+            return;
+        }
+        let mut open = self.show_delta;
+        let caption = self.delta_bar_caption();
+        let deviations = self.delta_bar_deviations();
+        let bar_curves: Vec<PlotCurve<'_>> = deviations
+            .iter()
+            .map(|deviation| PlotCurve {
+                label: &deviation.label,
+                label_key: &deviation.label,
+                points: &deviation.points,
+                color: deviation.color,
+                dashed: deviation.dashed,
+                target: true,
+            })
+            .collect();
+        let (productive, notice) = if bar_curves.is_empty() {
+            (false, self.delta_bar_caption().is_empty())
+        } else {
+            (true, false)
+        };
+        egui::Window::new("Deviation from target")
+            .open(&mut open)
+            .default_size(egui::vec2(760.0, DeltaBar::HEIGHT + 96.0))
+            .show(ctx, |ui| {
+                if productive {
+                    DeltaBar {
+                        zoom: self.zoom,
+                        caption,
+                    }
+                    .show(ui, &bar_curves);
+                    return;
+                }
+                // Nothing to plot, so explain what is missing rather than
+                // showing an empty plot the user has to interpret.
+                let message = if notice {
+                    "Select a target to measure against."
+                } else {
+                    "Select a target and at least one measurement."
+                };
+                ui.label(RichText::new(message).size(squiglab::theme::TypeStep::Body.size()));
+            });
+        self.show_delta = open;
+    }
+
     fn central_panel(&mut self, ui: &mut Ui) {
         egui::CentralPanel::default().show(ui, |ui| {
             if let Some(error) = &self.processing_error {
@@ -3264,6 +3311,7 @@ impl eframe::App for CrinGraphApp {
             self.rebuild_display_curves();
         }
         self.toolbar(ui);
+        self.delta_window(&ctx);
         self.share_window(&ctx);
         self.equalizer_import_window(&ctx);
         self.upload_window(&ctx);
@@ -4926,7 +4974,7 @@ smoothing_octaves = 3
         // and makes the user scroll a sliver, which reads as "my selection is
         // not showing". A wide viewport fits eight curves without scrolling.
         for count in 1..=8 {
-            let (default, min) = manager_heights(1440.0, count, 0.0);
+            let (default, min) = manager_heights(1440.0, count);
             let needed = super::MANAGER_HEIGHT_BASE + count as f32 * super::MANAGER_ROW_HEIGHT;
             assert!(
                 default >= needed,
@@ -4937,7 +4985,7 @@ smoothing_octaves = 3
         // A narrow viewport stacks the controls onto a second line, so the
         // panel has to budget for that too.
         for count in 1..=4 {
-            let (default, min) = manager_heights(430.0, count, 0.0);
+            let (default, min) = manager_heights(430.0, count);
             let needed =
                 super::MANAGER_HEIGHT_BASE + count as f32 * super::MANAGER_STACKED_ROW_HEIGHT;
             assert!(
@@ -4948,40 +4996,18 @@ smoothing_octaves = 3
     }
 
     #[test]
-    fn the_delta_bar_cannot_be_taken_out_of_the_managers_rows() {
-        // egui remembers a resizable panel's height and only consults
-        // `default_size` on the first frame the panel id is ever seen, so a
-        // height stored before the bar existed is still in force. It is lifted
-        // by the range minimum, so that minimum has to account for the bar as
-        // well as the rows: without that, the bar eats the panel and no row is
-        // left to see.
-        let bar = squiglab::graph::DeltaBar::HEIGHT;
-        for count in 1..=8 {
-            let (_, min) = manager_heights(1440.0, count, bar);
-            let one_row = super::MANAGER_HEIGHT_BASE + bar + super::MANAGER_ROW_HEIGHT;
-            assert!(
-                min >= one_row,
-                "with the bar and {count} curves the manager may be {min}px, which cannot hold \
-                 the header, the bar and one row ({one_row}px)"
-            );
-        }
-        // With no rows at all the bar still leaves room for its own caption.
-        let (_, min) = manager_heights(1440.0, 0, bar);
-        assert!(min >= bar);
-    }
-
-    #[test]
     fn a_manager_that_cannot_fit_its_rows_can_still_be_shrunk_to_scroll() {
-        // Eight stacked rows plus the bar exceed the maximum, so the minimum
-        // has to fall back to the bar and one row. If it did not, the panel
-        // would be pinned at its maximum with the overflow unreachable.
-        let (default, min) = manager_heights(430.0, 8, squiglab::graph::DeltaBar::HEIGHT);
+        // A selection big enough to exceed the maximum — measurements, targets
+        // and corrections together — has to fall back to the header and a single
+        // row. If it did not, the panel would be pinned at its maximum with the
+        // overflow unreachable.
+        let (default, min) = manager_heights(430.0, 10);
         assert_eq!(default, super::MANAGER_MAX_HEIGHT);
         assert!(
             min < default,
             "the manager must be shrinkable to reach rows past its maximum"
         );
-        assert!(min >= squiglab::graph::DeltaBar::HEIGHT);
+        assert!(min >= super::MANAGER_HEIGHT_BASE + super::MANAGER_STACKED_ROW_HEIGHT);
     }
 
     #[test]
@@ -5526,6 +5552,7 @@ smoothing_octaves = 3
             dark_mode: false,
             color_offset: 7,
             show_measurements: false,
+            show_delta: true,
             label_positions: [("Brand · Model".to_owned(), [0.4, 0.6])]
                 .into_iter()
                 .collect(),
