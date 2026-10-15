@@ -3714,12 +3714,26 @@ impl CrinGraphApp {
                             .color(glyph_color),
                     );
 
+                    // Rig corrections. Capped, because the reference targets
+                    // need the rest of the strip: a long list of corrections
+                    // that took everything would leave the targets — the thing
+                    // the readings are measured against — with nowhere to be.
                     if !self.delta_targets.is_empty() {
-                        for chip in self.delta_chips() {
-                            if cgui::pill(ui, &chip.label, chip.selected, chip.tooltip).clicked() {
-                                self.toggle_delta(chip.index);
-                            }
-                        }
+                        let cap = ui.available_width() * 0.45;
+                        egui::ScrollArea::horizontal()
+                            .id_salt("delta_chips")
+                            .auto_shrink([true, false])
+                            .max_width(cap)
+                            .show(ui, |ui| {
+                                ui.spacing_mut().item_spacing.x = cgui::Spacing::COMPACT;
+                                for chip in self.delta_chips() {
+                                    if cgui::pill(ui, &chip.label, chip.selected, chip.tooltip)
+                                        .clicked()
+                                    {
+                                        self.toggle_delta(chip.index);
+                                    }
+                                }
+                            });
                     }
                     if let Some(error) = &self.delta_error {
                         ui.colored_label(Color32::LIGHT_RED, error);
@@ -3731,11 +3745,24 @@ impl CrinGraphApp {
                     // says so rather than sharing a heading with the
                     // corrections.
                     cgui::cluster_label(ui, "Reference targets");
-                    for chip in self.target_chips() {
-                        if cgui::pill(ui, &chip.label, chip.selected, chip.tooltip).clicked() {
-                            self.toggle_curve(chip.index);
-                        }
-                    }
+                    // Scrolled sideways, never wrapped. There are more targets
+                    // than any window is wide, and a target that ran off the
+                    // edge would be one the user cannot select — which reads as
+                    // the target not existing.
+                    egui::ScrollArea::horizontal()
+                        .id_salt("target_chips")
+                        .auto_shrink([true, false])
+                        .max_width(ui.available_width())
+                        .show(ui, |ui| {
+                            ui.spacing_mut().item_spacing.x = cgui::Spacing::COMPACT;
+                            for chip in self.target_chips() {
+                                if cgui::pill(ui, &chip.label, chip.selected, chip.tooltip)
+                                    .clicked()
+                                {
+                                    self.toggle_curve(chip.index);
+                                }
+                            }
+                        });
                 });
             });
     }
