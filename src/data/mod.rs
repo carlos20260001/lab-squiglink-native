@@ -5,6 +5,19 @@ use serde_json::Value;
 use std::path::Path;
 use walkdir::WalkDir;
 
+/// Parse one line of a curve file as a frequency and dB pair.
+///
+/// Columns may be separated by whitespace or by commas. The database ships
+/// tab-separated files, but an export that comes back as CSV — or a
+/// comma-separated dump from another tool — has to load the same, or the app
+/// would refuse its own exports.
+pub fn parse_point(line: &str) -> Option<FRPoint> {
+    let mut columns = line.split(|c: char| c.is_whitespace() || c == ',');
+    let hz = columns.next()?.parse::<f32>().ok()?;
+    let db = columns.next()?.parse::<f32>().ok()?;
+    (hz.is_finite() && hz > 0.0 && db.is_finite()).then_some(FRPoint { hz, db })
+}
+
 /// A single frequency response point
 #[derive(Clone, Debug)]
 pub struct FRPoint {
@@ -202,15 +215,7 @@ pub fn load_data(data_dir: &Path) -> anyhow::Result<(Vec<CurveInfo>, Vec<f32>)> 
 
         if path.extension().and_then(|e| e.to_str()) == Some("txt") {
             let content = std::fs::read_to_string(path)?;
-            let points: Vec<FRPoint> = content
-                .lines()
-                .filter_map(|line| {
-                    let mut columns = line.split_whitespace();
-                    let hz = columns.next()?.parse::<f32>().ok()?;
-                    let db = columns.next()?.parse::<f32>().ok()?;
-                    (hz.is_finite() && hz > 0.0 && db.is_finite()).then_some(FRPoint { hz, db })
-                })
-                .collect();
+            let points: Vec<FRPoint> = content.lines().filter_map(parse_point).collect();
 
             if !points.is_empty() {
                 let stem = path

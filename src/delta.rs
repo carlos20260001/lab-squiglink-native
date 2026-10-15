@@ -231,12 +231,7 @@ pub fn load_delta_targets(dir: &Path, grid: &[f32]) -> Result<Vec<DeltaTarget>, 
 fn parse_calibration(content: &str) -> Vec<FRPoint> {
     content
         .lines()
-        .filter_map(|line| {
-            let mut columns = line.split_whitespace();
-            let hz = columns.next()?.parse::<f32>().ok()?;
-            let db = columns.next()?.parse::<f32>().ok()?;
-            (hz.is_finite() && hz > 0.0 && db.is_finite()).then_some(FRPoint { hz, db })
-        })
+        .filter_map(crate::data::parse_point)
         .collect()
 }
 

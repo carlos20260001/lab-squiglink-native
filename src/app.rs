@@ -77,17 +77,20 @@ enum RowControl {
     Pin,
     /// Subtract this curve from the others.
     Baseline,
+    /// Write this curve's raw measurement out as a file.
+    Download,
     Remove,
 }
 
 impl RowControl {
     /// The marks a row carries, in the order the row lays them out.
-    const ORDER: [Self; 6] = [
+    const ORDER: [Self; 7] = [
         Self::Offset,
         Self::Smoothing,
         Self::Hide,
         Self::Pin,
         Self::Baseline,
+        Self::Download,
         Self::Remove,
     ];
 
@@ -99,6 +102,7 @@ impl RowControl {
             Self::Hide => "Show or hide this curve in the graph.",
             Self::Pin => "Keep this curve in the graph.",
             Self::Baseline => "Subtract this curve from every other curve.",
+            Self::Download => "Save this curve's raw measurement as a .txt file.",
             Self::Remove => "Remove this curve from the graph.",
         }
     }
@@ -349,6 +353,32 @@ enum ChannelMode {
     Average,
 }
 
+impl ChannelMode {
+    /// How the mode reads in a sentence and in a file name.
+    fn label(self) -> &'static str {
+        match self {
+            Self::Left => "Left",
+            Self::Right => "Right",
+            Self::Both => "Both",
+            Self::Average => "Average",
+        }
+    }
+
+    /// Whether a prepared channel belongs to this mode.
+    ///
+    /// `Both` and `Average` are the only modes whose prepared channel carries
+    /// their own name; `Left` and `Right` match the raw channel of the same
+    /// name, so a mode does not need a channel named after it to be exported.
+    fn accepts(self, channel: &str) -> bool {
+        match self {
+            Self::Left => channel.starts_with('L'),
+            Self::Right => channel.starts_with('R'),
+            Self::Both => channel.is_empty() || channel.starts_with('L'),
+            Self::Average => channel.starts_with('A') || channel == "avg",
+        }
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(default)]
 struct Preferences {
@@ -544,6 +574,9 @@ pub struct CrinGraphApp {
     screenshot_message: Option<String>,
     svg_error: Option<String>,
     svg_message: Option<String>,
+    /// Where the last curve export went, or why it did not.
+    curve_export_message: Option<String>,
+    curve_export_error: Option<String>,
     shared_state: Option<String>,
     share_window_open: bool,
     share_input: String,
@@ -646,6 +679,8 @@ impl Default for CrinGraphApp {
             screenshot_message: None,
             svg_error: None,
             svg_message: None,
+            curve_export_message: None,
+            curve_export_error: None,
             shared_state: None,
             share_window_open: false,
             share_input: String::new(),
@@ -3186,6 +3221,13 @@ impl CrinGraphApp {
                         self.dirty = true;
                     }
                 }
+                RowControl::Download => {
+                    if cgui::icon_button(ui, cgui::Icon::Download, RowControl::Download.tooltip())
+                        .clicked()
+                    {
+                        self.export_curve_text(index);
+                    }
+                }
                 RowControl::Remove => {
                     // A pin keeps a curve put, so the mark that removes it goes
                     // dead rather than removing the one the pin was protecting.
@@ -3248,6 +3290,66 @@ impl CrinGraphApp {
                 ui.colored_label(palette.warning, "!").on_hover_text(
                     "Left and right channels differ beyond the imbalance threshold.",
                 );
+            }
+        }
+    }
+
+    /// Write one curve's raw measurement out as a `.txt` file.
+    ///
+    /// The raw measurement, not the processed one. Smoothing, normalisation,
+    /// the manual offset and any equaliser are all views of the data, and a
+    /// view exported as a measurement is indistinguishable from the
+    /// measurement if it ever comes back through this app or another one.
+    ///
+    /// The channel the row is showing is the one written, because that is the
+    /// curve the mark was pressed on, and the file says which it is.
+    fn export_curve_text(&mut self, group_index: usize) {
+        let group = &self.groups[group_index];
+        let variant_index = self
+            .variant_choices
+            .get(&group_index)
+            .copied()
+            .unwrap_or(0)
+            .min(group.variants.len().saturating_sub(1));
+        let variant = &group.variants[variant_index];
+        let channel_mode = self
+            .channel_modes
+            .get(&group_index)
+            .copied()
+            .unwrap_or_default();
+        // A smoothing level of zero: no smoothing, nothing derived.
+        let channels = match prepare_channels(&self.curves, &variant.curve_indices, channel_mode, 0)
+        {
+            Ok(channels) => channels,
+            Err(error) => {
+                self.curve_export_message = None;
+                self.curve_export_error = Some(format!("Unable to export {}: {error}", group.name));
+                return;
+            }
+        };
+        let Some((_, points)) = channels
+            .into_iter()
+            .find(|(name, _)| channel_mode.accepts(name.as_str()))
+        else {
+            self.curve_export_message = None;
+            self.curve_export_error = Some(format!(
+                "{} has no {} data to export.",
+                group.name,
+                channel_mode.label()
+            ));
+            return;
+        };
+        let path = download_dir().join(curve_file_name(group, variant, channel_mode));
+        let body = curve_text(&points);
+        match std::fs::write(&path, body) {
+            Ok(()) => {
+                self.curve_export_error = None;
+                self.curve_export_message =
+                    Some(format!("{} exported to {}", group.name, path.display()));
+            }
+            Err(error) => {
+                self.curve_export_message = None;
+                self.curve_export_error = Some(format!("Unable to export {path:?}: {error}"));
             }
         }
     }
@@ -3621,6 +3723,12 @@ impl eframe::App for CrinGraphApp {
                 ui.colored_label(Color32::LIGHT_RED, error);
             }
             if let Some(message) = &self.svg_message {
+                ui.label(message);
+            }
+            if let Some(error) = &self.curve_export_error {
+                ui.colored_label(Color32::LIGHT_RED, error);
+            }
+            if let Some(message) = &self.curve_export_message {
                 ui.label(message);
             }
         });
@@ -4105,6 +4213,60 @@ fn target_category(target: &str) -> &'static str {
         }
         _ => "Other targets",
     }
+}
+
+/// Where an exported curve goes: the download directory, because it is data the
+/// user asked for rather than something the app produced on its own.
+fn download_dir() -> PathBuf {
+    dirs::download_dir().unwrap_or_else(std::env::temp_dir)
+}
+
+/// One curve's raw points as text.
+///
+/// Comma-separated, so a spreadsheet opens it directly. A header line would
+/// break every naive parser that reads it, so there is none.
+fn curve_text(points: &[FRPoint]) -> String {
+    points
+        .iter()
+        .map(|point| format!("{:.6},{:.6}\n", point.hz, point.db))
+        .collect()
+}
+
+/// What to call an exported curve: the curve, the variant, and the channel,
+/// because two rows can differ on any of the three.
+fn curve_file_name(
+    group: &MeasurementGroup,
+    variant: &MeasurementVariant,
+    mode: ChannelMode,
+) -> String {
+    let safe = |text: &str| {
+        text.chars()
+            .map(|c| match c {
+                'a'..='z' | 'A'..='Z' | '0'..='9' | '-' | '_' | '.' => c,
+                _ => '_',
+            })
+            .collect::<String>()
+    };
+    // A target is the reference the measurements are read against, so it says
+    // so: an exported target sitting in a downloads folder with no marker is
+    // easy to mistake for a measurement of something.
+    let kind = if group.target {
+        "target"
+    } else {
+        "measurement"
+    };
+    let mut name = format!(
+        "{}-{}-{}-{}",
+        safe(&group.name),
+        kind,
+        safe(&variant.name),
+        mode.label()
+    );
+    // A name that is nothing but separators would collide with every other.
+    if name.chars().all(|c| c == '-') {
+        name = format!("curve-{kind}-{}", mode.label());
+    }
+    format!("{name}.txt")
 }
 
 fn prepare_channels(
@@ -5752,6 +5914,137 @@ smoothing_octaves = 3
         app.rebuild_display_curves();
         assert_eq!(app.display_curves.len(), 1);
         assert!(app.display_curves[0].target);
+    }
+
+    /// A curve, a variant and a mode, to name and format.
+    fn export_group(target: bool) -> (MeasurementGroup, MeasurementVariant) {
+        (
+            MeasurementGroup {
+                brand: "Neutral targets".to_owned(),
+                brand_suffix: None,
+                name: "Harman".to_owned(),
+                variants: Vec::new(),
+                target,
+            },
+            MeasurementVariant {
+                name: "L".to_owned(),
+                curve_indices: Vec::new(),
+            },
+        )
+    }
+
+    #[test]
+    fn an_exported_curve_says_what_it_is_and_which_channel() {
+        let (group, variant) = export_group(false);
+        assert_eq!(
+            super::curve_file_name(&group, &variant, ChannelMode::Left),
+            "Harman-measurement-L-Left.txt"
+        );
+        let (target, variant) = export_group(true);
+        assert_eq!(
+            super::curve_file_name(&target, &variant, ChannelMode::Average),
+            "Harman-target-L-Average.txt"
+        );
+    }
+
+    #[test]
+    fn a_name_a_filesystem_cannot_hold_is_folded_to_something_it_can() {
+        // Slashes and colons are legal in a label and illegal in a file name,
+        // and a name that reduced to nothing but separators would collide.
+        let (group, variant) = export_group(false);
+        let group = MeasurementGroup {
+            name: "A/B:C*D".to_owned(),
+            ..group
+        };
+        let named = super::curve_file_name(&group, &variant, ChannelMode::Both);
+        assert!(
+            !named.contains('/') && !named.contains(':'),
+            "{named} is not a file name"
+        );
+        assert!(named.ends_with(".txt"));
+    }
+
+    #[test]
+    fn an_exported_curve_is_its_own_digits_and_nothing_else() {
+        let text = super::curve_text(&[
+            FRPoint { hz: 20.0, db: 0.0 },
+            FRPoint {
+                hz: 1000.5,
+                db: -3.25,
+            },
+        ]);
+        // No header: a header is a line every naive parser has to reject.
+        assert_eq!(text.lines().count(), 2);
+        assert_eq!(text.lines().next().unwrap(), "20.000000,0.000000");
+        assert_eq!(text.lines().nth(1).unwrap(), "1000.500000,-3.250000");
+    }
+
+    #[test]
+    fn an_exported_curve_comes_back_identical() {
+        // The whole point of the export: read it back and get what was written.
+        let points = [
+            FRPoint { hz: 20.0, db: 1.5 },
+            FRPoint {
+                hz: 500.0,
+                db: -2.25,
+            },
+            FRPoint {
+                hz: 10000.0,
+                db: 0.125,
+            },
+        ];
+        let text = super::curve_text(&points);
+        let reparsed: Vec<FRPoint> = text
+            .lines()
+            .filter_map(squiglab::data::parse_point)
+            .collect();
+        assert_eq!(reparsed.len(), points.len());
+        for (written, read) in points.iter().zip(&reparsed) {
+            assert!(
+                (written.hz - read.hz).abs() < 1e-6,
+                "{} vs {}",
+                written.hz,
+                read.hz
+            );
+            assert!(
+                (written.db - read.db).abs() < 1e-6,
+                "{} vs {}",
+                written.db,
+                read.db
+            );
+        }
+    }
+
+    #[test]
+    fn smoothing_is_cycled_through_the_levels_worth_stopping_at() {
+        // The row's smoothing mark cycles rather than slides, so the cycle has
+        // to cover the levels worth stopping at and come back where it started.
+        let mut level = 0;
+        let mut visited = Vec::new();
+        loop {
+            level = super::next_smoothing_level(level);
+            assert!(level <= super::MAX_SMOOTH_LEVEL, "{level} is off the end");
+            visited.push(level);
+            if level == 0 {
+                break;
+            }
+        }
+        // Round values, plus 0, which is the measurement as it was taken.
+        assert_eq!(visited, vec![1, 2, 5, 10, super::MAX_SMOOTH_LEVEL, 0]);
+    }
+
+    #[test]
+    fn a_channel_mode_knows_which_prepared_channel_is_its_own() {
+        // `Both` and `Average` are the only modes whose channel carries the
+        // mode's name, so a mode has to match by prefix rather than by name.
+        assert!(ChannelMode::Left.accepts("L"));
+        assert!(ChannelMode::Right.accepts("R"));
+        // A curve with one unlabelled channel is both channels, and its average.
+        assert!(ChannelMode::Both.accepts(""));
+        assert!(ChannelMode::Both.accepts("L"));
+        assert!(ChannelMode::Average.accepts("Average"));
+        assert!(ChannelMode::Average.accepts("avg"));
+        assert!(!ChannelMode::Average.accepts("L"));
     }
 
     #[test]
