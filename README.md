@@ -219,7 +219,8 @@ application configuration directory:
 On first launch, the app creates `config.toml` if it is missing; it does not
 replace an existing config. The generated `database_dir` points to the `data/`
 folder in the launch working directory, and `headphone_database_dir` is added
-when a `data_hp/` folder is present there. Keep the included measurement folders
+when a `data_hp/` folder is present there. `delta_dir` is added the same way
+when a `data_deltas/` folder is present. Keep the included measurement folders
 with the project, or edit the generated file to use their new location.
 
 Platform-specific starter schemas with example paths to the included sample
@@ -239,6 +240,7 @@ The config supports default smoothing as well:
 # Paths may be absolute or relative to the directory containing config.toml.
 database_dir = "/path/to/data"
 headphone_database_dir = "/path/to/data_hp"
+delta_dir = "/path/to/data_deltas"
 
 [defaults]
 # Fractional-octave smoothing level accepted by the UI: 0 through 12.
@@ -248,6 +250,9 @@ smoothing_octaves = 5
 `database_dir` must contain the primary measurement files and its
 `phone_book.json`. `headphone_database_dir` is optional; when set, it points to
 the additional headphone database (and may contain its own `phone_book.json`).
+`delta_dir` is optional and points at the rig-compensation directory described
+in [`data_deltas/README.md`](data_deltas/README.md); it defaults to
+`data_deltas/` and is skipped when that folder is absent.
 If either path is omitted, the app keeps its development defaults of `data/`
 and `data_hp/` relative to the working directory; the additional database is
 skipped if `data_hp/` is absent. With no config file, the default smoothing is

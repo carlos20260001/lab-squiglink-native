@@ -235,6 +235,46 @@ Both formats are specified from live captures; implement against these exactly.
 
 ---
 
+## P7 — Rig compensation and the delta bar
+
+Previously excluded here as a measurement feature rather than layout. Reversed
+by decision: the delta bar earns its place, because a measurement rig that is
+not the one a target was measured on is the normal case, not the edge case.
+
+- [x] The model, in `src/delta.rs`. A delta target is a clone rig's calibration
+      minus the original rig's, defined by naming both curves rather than
+      stored as a ready-made difference, so what it claims stays traceable to
+      the measurements behind it. Carries a flag for placeholder data.
+- [x] Loading from `data_deltas/`, a directory of its own. The calibration
+      curves are not headphones, and the database loader would list them as
+      phantom models. `delta_dir` in the config; absent directory is normal.
+- [x] Optional in the interface throughout. A target can be read without one,
+      they never spend one of the eight measurement slots, and a failure to
+      read the directory is reported in place rather than failing the load.
+- [x] Selection and persistence, held apart from the curve selection because a
+      delta target is a correction applied to readings, not a curve compared
+      against them. Persisted by name, which survives a reordered directory.
+- [x] Manager row, like any other. It carries the pair of rigs it stands
+      between and none of the per-curve controls, which have no meaning for it.
+- [x] The delta bar under the graph: deviation from the selected target on a
+      scale symmetric about zero, laid out against the graph's own plot so a
+      frequency sits at the same x in both. With a correction selected the
+      measurement is corrected first and the uncorrected deviation is kept
+      alongside it, dimmed; the gap is what the correction bought.
+- [ ] **The reference-target list still does not match the live site.** The site
+      offers names this database does not carry — `Super 22`, `Harman IE 2019`
+      among them — and only 15 targets ship here. Deferred by decision rather
+      than overlooked; see "Carried over".
+- [ ] **The shipped delta target corrects nothing.** Both its calibrations are
+      analytic curves, not measurements. It is flagged `synthetic`, labelled
+      `placeholder` wherever it appears, and a test refuses to let the shipped
+      set contain anything unflagged. Drop real calibrations into
+      `data_deltas/` and it becomes a genuine correction with no code change.
+- [ ] Captured at every viewport in both themes. Same blocker as the rest of
+      this file: no display here.
+
+---
+
 ## Explicitly out of scope
 
 Do not implement. These are site features, not interface layout, and porting them
@@ -244,7 +284,6 @@ would make the desktop app worse.
 |---|---|
 | Site nav (`Headphones`, `Insights`, `Merch`, `Discord`, `HiFiGo`) | Website navigation; no desktop equivalent |
 | Sponsorship slots, welcome and onboarding *ads* | Monetization. The EQ onboarding modal is in scope; ad slots are not |
-| `DELTA` bar and reference-target chips | A measurement feature (delta curves), not layout |
 | Footer database-link pills | Website chrome |
 | `+Create Squiglink`, database dropdown | Website account and multi-database features |
 | Embed mode, `expandableOnly`, `headerHeight` | iframe embedding for third-party sites |
@@ -258,6 +297,9 @@ would make the desktop app worse.
 
 Still open, unchanged, and untouched by this roadmap:
 
+- [ ] The reference targets the live site offers and this database does not:
+      `Super 22`, `Harman IE 2019`, and the rest. Adding them needs real curve
+      data, not a rename, so the mappings were left alone rather than guessed.
 - [ ] Labels follow curve ends rather than grouping in a corner — now a design
       choice, not a defect. SquigLab groups by default and can switch to
       curve-end, so this is resolved unless you decide otherwise.
@@ -305,3 +347,6 @@ order it was worked:
 8. **P5 sound tools** — `a4d9d01`, once the EQ it auditions worked.
 9. **P6 upload** — `76b09d7`, into the tab column that already existed.
 10. **P3 onboarding** — `bbc78b3`, last, because it explains the above.
+11. **P7 delta bar** — `75a4d92`, `93a6885`, `e31e480`, `0f93f3e`, after the
+    layout work, since it layers a panel under a graph that was already
+    responsive.
