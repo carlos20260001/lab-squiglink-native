@@ -57,6 +57,72 @@ const MANAGER_ROW_STACK_WIDTH: f32 = 800.0;
 /// The most the manager will ever take from the graph.
 const MANAGER_MAX_HEIGHT: f32 = 460.0;
 
+/// How wide a curve's preview is in its row.
+const PREVIEW_WIDTH: f32 = 78.0;
+/// How tall a curve's preview is in its row.
+const PREVIEW_HEIGHT: f32 = 18.0;
+
+/// One of the marks that runs down a manager row.
+///
+/// Split out from the row so the order the reference tool draws them in lives
+/// in one place, and so adding a mark is a case here rather than an argument
+/// threaded through the drawing code.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum RowControl {
+    /// The offset box, in dB.
+    Offset,
+    /// Smoothing, applied to every curve.
+    Smoothing,
+    Hide,
+    Pin,
+    /// Subtract this curve from the others.
+    Baseline,
+    Remove,
+}
+
+impl RowControl {
+    /// The marks a row carries, in the order the row lays them out.
+    const ORDER: [Self; 6] = [
+        Self::Offset,
+        Self::Smoothing,
+        Self::Hide,
+        Self::Pin,
+        Self::Baseline,
+        Self::Remove,
+    ];
+
+    /// What clicking it does.
+    fn tooltip(self) -> &'static str {
+        match self {
+            Self::Offset => "Offset this curve by however many dB.",
+            Self::Smoothing => "Cycle the fractional-octave smoothing.",
+            Self::Hide => "Show or hide this curve in the graph.",
+            Self::Pin => "Keep this curve in the graph.",
+            Self::Baseline => "Subtract this curve from every other curve.",
+            Self::Remove => "Remove this curve from the graph.",
+        }
+    }
+}
+
+/// The next smoothing level in the cycle.
+///
+/// A cycle rather than a slider, because the reference tool keeps a smoothing
+/// control in every row and there is no room for a slider there. The levels are
+/// the ones worth stopping at: 0 is the measurement as it was taken, and the
+/// rest are the round values people actually read at.
+fn next_smoothing_level(current: usize) -> usize {
+    match current {
+        0 => 1,
+        1 => 2,
+        2 => 5,
+        5 => 10,
+        10 => MAX_SMOOTH_LEVEL,
+        _ => 0,
+    }
+}
+
+const _: () = assert!(MAX_SMOOTH_LEVEL == 12);
+
 /// How tall the manager wants to be for a selection, and the smallest it is
 /// allowed to be, at a given viewport width and delta-bar height.
 ///
@@ -2879,9 +2945,14 @@ impl CrinGraphApp {
         use squiglab::ui as cgui;
         let palette = squiglab::theme::Palette::resolve(ui.visuals().dark_mode);
         let color = self.curve_color(index);
-        let (swatch, _) = ui.allocate_exact_size(egui::vec2(10.0, 10.0), egui::Sense::hover());
-        ui.painter().circle_filled(swatch.center(), 5.0, color);
+        // A filled disc rather than a square: the reference tool marks a curve
+        // with one, and a disc reads as a swatch of ink rather than a chip of UI.
+        let (swatch, _) = ui.allocate_exact_size(egui::vec2(11.0, 11.0), egui::Sense::hover());
+        ui.painter().circle_filled(swatch.center(), 5.5, color);
         if group.target {
+            // A target says so, because the row is the reference the other rows
+            // are read against rather than a curve in its own right, and
+            // colouring it like one invites the opposite reading.
             ui.label(
                 egui::RichText::new(format!("Target: {}", group.name))
                     .strong()
@@ -2904,7 +2975,9 @@ impl CrinGraphApp {
             );
         }
 
-        // Variant chooser, when the model has more than one.
+        // Variant chooser, when the model has more than one. A leading-plus mark
+        // rather than a combo box, so it reads as adding to the row rather than
+        // as a form control sitting in one.
         if group.variants.len() > 1 {
             let mut selected_variant = self
                 .variant_choices
@@ -2912,28 +2985,115 @@ impl CrinGraphApp {
                 .copied()
                 .unwrap_or(0)
                 .min(group.variants.len() - 1);
-            egui::ComboBox::from_id_salt(("variant", index))
-                .selected_text(&group.variants[selected_variant].name)
-                .show_ui(ui, |ui| {
-                    for (variant_index, variant) in group.variants.iter().enumerate() {
-                        ui.selectable_value(&mut selected_variant, variant_index, &variant.name);
-                    }
-                });
-            if self.variant_choices.get(&index).copied().unwrap_or(0) != selected_variant {
-                self.variant_choices.insert(index, selected_variant);
-                self.dirty = true;
+            if cgui::icon_button_tinted(
+                ui,
+                cgui::Icon::Plus,
+                &format!(
+                    "Using {} of {} variants. Click for the others.",
+                    group.variants[selected_variant].name,
+                    group.variants.len(),
+                ),
+                Some(palette.text_tertiary),
+            )
+            .clicked()
+            {
+                egui::ComboBox::from_id_salt(("variant", index))
+                    .selected_text(&group.variants[selected_variant].name)
+                    .show_ui(ui, |ui| {
+                        for (variant_index, variant) in group.variants.iter().enumerate() {
+                            ui.selectable_value(
+                                &mut selected_variant,
+                                variant_index,
+                                &variant.name,
+                            );
+                        }
+                    });
+                if self.variant_choices.get(&index).copied().unwrap_or(0) != selected_variant {
+                    self.variant_choices.insert(index, selected_variant);
+                    self.dirty = true;
+                }
             }
-        }
-        if !group.target && cgui::action_button(ui, "Recolor", "Cycle this curve's color") {
-            let offset = self
-                .curve_color_offsets
-                .entry(group_key(group))
-                .or_default();
-            *offset = offset.wrapping_add(1);
         }
     }
 
-    /// A row's controls: remove, hide, pin, baseline, offset, and channel mode.
+    /// A row's preview: the curve itself, drawn small.
+    ///
+    /// The fastest way to tell which headphone a row is when the name is not
+    /// familiar, and the reason the reference tool puts one beside each row. A
+    /// target is drawn as a reference line instead, because a target is the
+    /// thing the others are read against and has no shape of its own to show.
+    fn curve_preview(
+        &self,
+        ui: &mut Ui,
+        group_index: usize,
+        color: egui::Color32,
+    ) -> egui::Response {
+        let palette = squiglab::theme::Palette::resolve(ui.visuals().dark_mode);
+        let is_target = self.groups[group_index].target;
+        let (rect, response) = ui.allocate_exact_size(
+            egui::vec2(PREVIEW_WIDTH, PREVIEW_HEIGHT),
+            egui::Sense::hover(),
+        );
+        if is_target {
+            let midpoint = rect.center().y;
+            ui.painter().hline(
+                rect.left()..=rect.right(),
+                midpoint,
+                egui::Stroke::new(1.0, palette.text_tertiary),
+            );
+            return response.on_hover_text(format!(
+                "{}: the reference the others are read against.",
+                self.groups[group_index].name
+            ));
+        }
+        let Some(curve) = self
+            .display_curves
+            .iter()
+            .find(|curve| curve.group_index == group_index)
+        else {
+            return response;
+        };
+        let (hz_min, hz_max) = self.zoom.x_range();
+        let visible: Vec<&FRPoint> = curve
+            .points
+            .iter()
+            .filter(|point| point.hz >= hz_min && point.hz <= hz_max)
+            .collect();
+        if visible.len() < 2 {
+            return response;
+        }
+        let (min_db, max_db) = visible
+            .iter()
+            .map(|point| point.db)
+            .fold((f32::INFINITY, f32::NEG_INFINITY), |(min, max), db| {
+                (min.min(db), max.max(db))
+            });
+        // A curve exactly flat would otherwise collapse its own scale to zero.
+        let span = (max_db - min_db).max(1e-3);
+        let map = |point: &FRPoint| {
+            let phase = (point.hz.ln() - hz_min.ln()) / (hz_max.ln() - hz_min.ln());
+            let height = (point.db - min_db) / span;
+            // Drawn in the top four fifths, so the curve does not sit on the
+            // row's baseline and look like an underline.
+            let y = rect.top() + 0.09 * rect.height() + (1.0 - height) * 0.82 * rect.height();
+            egui::pos2(rect.left() + phase * rect.width(), y)
+        };
+        for pair in visible.windows(2) {
+            ui.painter()
+                .line_segment([map(pair[0]), map(pair[1])], egui::Stroke::new(1.2, color));
+        }
+        response.on_hover_text(format!(
+            "{} shown from {} Hz to {} Hz",
+            curve.label, hz_min as u32, hz_max as u32
+        ))
+    }
+
+    /// A row's controls: the offset box, and one mark per command.
+    ///
+    /// Drawn in the order the reference tool draws them, so a row of these reads
+    /// the same way wherever it appears. A right-aligned cluster is laid out
+    /// right-to-left, which reverses them, and the caller knows which it asked
+    /// for.
     fn manager_row_controls(
         &mut self,
         ui: &mut Ui,
@@ -2942,72 +3102,142 @@ impl CrinGraphApp {
         right_to_left: bool,
         removals: &mut Vec<usize>,
     ) {
+        use squiglab::ui as cgui;
         let palette = squiglab::theme::Palette::resolve(ui.visuals().dark_mode);
         let pinned = self.pinned.contains(&index);
         let hidden = self.hidden.contains(&index);
         let baseline = self.baseline == Some(index);
-        let remove = ui.add_enabled(!pinned, egui::Button::new("Remove"));
-        let remove = if pinned {
-            remove.on_hover_text("Unpin this curve before removing it.")
-        } else {
-            remove
-        };
-        if remove.clicked() {
-            removals.push(index);
+        let mut order = RowControl::ORDER.to_vec();
+        if right_to_left {
+            order.reverse();
         }
-        let mut hidden = hidden;
-        if ui.checkbox(&mut hidden, "Hide").changed() {
-            if hidden {
-                self.hidden.insert(index);
-            } else {
-                self.hidden.remove(&index);
+        for control in order {
+            match control {
+                RowControl::Offset => {
+                    let offset = self.offsets.entry(index).or_default();
+                    if ui
+                        .add(egui::DragValue::new(offset).speed(0.1).suffix(" dB"))
+                        .changed()
+                    {
+                        self.dirty = true;
+                    }
+                }
+                RowControl::Smoothing => {
+                    if cgui::icon_button_enabled(
+                        ui,
+                        cgui::Icon::Wave,
+                        RowControl::Smoothing.tooltip(),
+                        None,
+                        !group.target,
+                    )
+                    .clicked()
+                    {
+                        self.smooth_level = next_smoothing_level(self.smooth_level);
+                        self.dirty = true;
+                    }
+                }
+                RowControl::Hide => {
+                    if cgui::icon_button_tinted(
+                        ui,
+                        if hidden {
+                            cgui::Icon::EyeHidden
+                        } else {
+                            cgui::Icon::Eye
+                        },
+                        RowControl::Hide.tooltip(),
+                        hidden.then_some(palette.accent),
+                    )
+                    .clicked()
+                    {
+                        if hidden {
+                            self.hidden.remove(&index);
+                        } else {
+                            self.hidden.insert(index);
+                        }
+                        self.dirty = true;
+                    }
+                }
+                RowControl::Pin => {
+                    if cgui::icon_button_tinted(
+                        ui,
+                        cgui::Icon::Pin,
+                        RowControl::Pin.tooltip(),
+                        pinned.then_some(palette.accent),
+                    )
+                    .clicked()
+                    {
+                        if pinned {
+                            self.pinned.remove(&index);
+                        } else {
+                            self.pinned.insert(index);
+                        }
+                    }
+                }
+                RowControl::Baseline => {
+                    if cgui::icon_button_tinted(
+                        ui,
+                        cgui::Icon::Baseline,
+                        RowControl::Baseline.tooltip(),
+                        baseline.then_some(palette.accent),
+                    )
+                    .clicked()
+                    {
+                        self.baseline = if baseline { None } else { Some(index) };
+                        self.dirty = true;
+                    }
+                }
+                RowControl::Remove => {
+                    // A pin keeps a curve put, so the mark that removes it goes
+                    // dead rather than removing the one the pin was protecting.
+                    if cgui::icon_button_enabled(
+                        ui,
+                        cgui::Icon::Close,
+                        if pinned {
+                            "Unpin this curve before removing it."
+                        } else {
+                            RowControl::Remove.tooltip()
+                        },
+                        None,
+                        !pinned,
+                    )
+                    .clicked()
+                    {
+                        removals.push(index);
+                    }
+                }
             }
-            self.dirty = true;
         }
-        let mut pinned = pinned;
-        if ui.checkbox(&mut pinned, "Pin").changed() {
-            if pinned {
-                self.pinned.insert(index);
-            } else {
-                self.pinned.remove(&index);
-            }
-        }
-        let mut baseline = baseline;
-        if ui.checkbox(&mut baseline, "Baseline").changed() {
-            self.baseline = baseline.then_some(index);
-            self.dirty = true;
-        }
-        let offset = self.offsets.entry(index).or_default();
-        if ui
-            .add(egui::DragValue::new(offset).speed(0.1).suffix(" dB"))
-            .changed()
-        {
-            self.dirty = true;
-        }
+
+        // The channel switch, then the curve it is switching. Together, because
+        // reading which channel is showing without seeing its shape is how you
+        // end up comparing a left ear to a right one.
         if !group.target {
-            // Listed in reading order; a right-aligned cluster reverses them,
-            // because that layout lays items out right-to-left.
-            let mut channel_modes = [
+            let mut channel_mode = self.channel_modes.get(&index).copied().unwrap_or_default();
+            let mut modes = [
                 (ChannelMode::Left, "L"),
                 (ChannelMode::Right, "R"),
                 (ChannelMode::Both, "Both"),
                 (ChannelMode::Average, "Avg"),
             ];
             if right_to_left {
-                channel_modes.reverse();
+                modes.reverse();
             }
-            for (mode, label) in channel_modes {
+            for (mode, label) in modes {
                 if ui
                     .selectable_label(
-                        self.channel_modes.get(&index).copied().unwrap_or_default() == mode,
-                        label,
+                        channel_mode == mode,
+                        egui::RichText::new(label).size(squiglab::theme::TypeStep::Micro.size()),
                     )
+                    .on_hover_text("Which channel of this curve to show.")
                     .clicked()
+                    && channel_mode != mode
                 {
+                    channel_mode = mode;
                     self.channel_modes.insert(index, mode);
                     self.dirty = true;
                 }
             }
+            self.curve_preview(ui, index, self.curve_color(index));
             let variant_index = self
                 .variant_choices
                 .get(&index)

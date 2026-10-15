@@ -398,13 +398,35 @@ pub fn icon_button_tinted(
     tooltip: &str,
     tint: Option<Color32>,
 ) -> egui::Response {
+    icon_button_enabled(ui, icon, tooltip, tint, true)
+}
+
+/// An icon-only button that can refuse to be pressed.
+///
+/// A disabled mark still has to be drawn: a control that vanished would leave a
+/// gap in the row, and one that stayed bright would invite the click it will not
+/// take.
+pub fn icon_button_enabled(
+    ui: &mut Ui,
+    icon: Icon,
+    tooltip: &str,
+    tint: Option<Color32>,
+    enabled: bool,
+) -> egui::Response {
     let palette = Palette::resolve(ui.visuals().dark_mode);
-    let (rect, response) = ui.allocate_exact_size(egui::vec2(22.0, 22.0), egui::Sense::click());
+    let (rect, response) = ui.allocate_exact_size(
+        egui::vec2(22.0, 22.0),
+        if enabled {
+            egui::Sense::click()
+        } else {
+            egui::Sense::hover()
+        },
+    );
     if response.hovered() {
         ui.painter()
             .rect_filled(rect, theme::RADIUS_CONTROL, palette.hover_fill);
     }
-    let color = tint.unwrap_or(if response.enabled() {
+    let color = tint.unwrap_or(if enabled {
         palette.text_secondary
     } else {
         palette.text_disabled
@@ -414,7 +436,10 @@ pub fn icon_button_tinted(
         Rect::from_center_size(rect.center(), Vec2::splat(ICON_SIZE)),
         color,
     );
-    response.on_hover_text(tooltip)
+    // A dead control needs why it is dead, not what it would do.
+    response
+        .on_hover_text(tooltip)
+        .on_disabled_hover_text(tooltip)
 }
 
 #[cfg(test)]
