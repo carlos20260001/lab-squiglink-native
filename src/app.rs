@@ -298,7 +298,6 @@ struct Preferences {
     dark_mode: bool,
     color_offset: usize,
     show_measurements: bool,
-    show_manager: bool,
     label_positions: BTreeMap<String, [f32; 2]>,
     label_layout: squiglab::graph::LabelLayout,
     tutorial_segment: Option<usize>,
@@ -329,7 +328,6 @@ impl Default for Preferences {
             dark_mode: true,
             color_offset: 0,
             show_measurements: true,
-            show_manager: true,
             label_positions: BTreeMap::new(),
             label_layout: squiglab::graph::LabelLayout::default(),
             tutorial_segment: None,
@@ -453,7 +451,6 @@ pub struct CrinGraphApp {
     dark_mode: bool,
     color_offset: usize,
     show_measurements: bool,
-    show_manager: bool,
     label_positions: BTreeMap<String, [f32; 2]>,
     label_layout: squiglab::graph::LabelLayout,
     tutorial_segment: Option<usize>,
@@ -555,7 +552,6 @@ impl Default for CrinGraphApp {
             dark_mode: true,
             color_offset: 0,
             show_measurements: true,
-            show_manager: true,
             label_positions: BTreeMap::new(),
             label_layout: squiglab::graph::LabelLayout::default(),
             tutorial_segment: None,
@@ -848,7 +844,6 @@ impl CrinGraphApp {
         self.dark_mode = preferences.dark_mode;
         self.color_offset = preferences.color_offset;
         self.show_measurements = preferences.show_measurements;
-        self.show_manager = preferences.show_manager;
         true
     }
 
@@ -883,7 +878,6 @@ impl CrinGraphApp {
             dark_mode: self.dark_mode,
             color_offset: self.color_offset,
             show_measurements: self.show_measurements,
-            show_manager: self.show_manager,
             label_positions: self.label_positions.clone(),
             label_layout: self.label_layout,
             tutorial_segment: self.tutorial_segment,
@@ -1312,13 +1306,6 @@ impl CrinGraphApp {
                     .clicked()
                 {
                     self.show_measurements = !self.show_measurements;
-                }
-                if ui
-                    .selectable_label(self.show_manager, "Curves")
-                    .on_hover_text("Show or hide the active curve controls.")
-                    .clicked()
-                {
-                    self.show_manager = !self.show_manager;
                 }
             });
         });
@@ -2702,9 +2689,11 @@ impl CrinGraphApp {
 
     fn manager_panel(&mut self, ui: &mut Ui) {
         use squiglab::ui as cgui;
-        if !self.show_manager {
-            return;
-        }
+        // Unconditional. The manager is the only place the selection is
+        // accounted for: which headphones, which targets, and which rig
+        // corrections are in force. It is also what fills the space the graph
+        // leaves below its plot, so hiding it left that space dead grey with
+        // nothing in it, which read as the app having failed to draw.
         // Worked out before the panel is sized: the strip is row one of the
         // manager, so a manager sized without it would push the last rows out
         // of sight. Computed once and used for both the height and the draw.
@@ -5530,7 +5519,6 @@ smoothing_octaves = 3
             dark_mode: false,
             color_offset: 7,
             show_measurements: false,
-            show_manager: false,
             label_positions: [("Brand · Model".to_owned(), [0.4, 0.6])]
                 .into_iter()
                 .collect(),
@@ -5546,6 +5534,28 @@ smoothing_octaves = 3
 
         std::fs::write(&path, b"{not valid json").unwrap();
         assert!(read_preferences_from(&path).is_err());
+        std::fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn preferences_written_before_the_manager_toggle_was_removed_still_load() {
+        // The manager is no longer toggleable, so `show_manager` is gone from
+        // the saved settings. Every install that ran before this still has it
+        // written to disk, and `Preferences` deliberately does not deny unknown
+        // fields: adding that would turn a removed setting into a startup
+        // failure for anyone who had ever run the app.
+        let directory =
+            std::env::temp_dir().join(format!("squiglab-legacy-{}", std::process::id()));
+        let path = directory.join("preferences.toml");
+        let _ = std::fs::remove_dir_all(&directory);
+        std::fs::create_dir_all(&directory).unwrap();
+        std::fs::write(
+            &path,
+            r#"{"show_manager": false, "show_measurements": true}"#,
+        )
+        .unwrap();
+        let preferences = read_preferences_from(&path).unwrap().unwrap();
+        assert!(preferences.show_measurements);
         std::fs::remove_dir_all(directory).unwrap();
     }
 
@@ -5656,7 +5666,6 @@ smoothing_octaves = 3
             }],
             target_hz: 1000.0,
             show_measurements: false,
-            show_manager: true,
             tutorial_segment: Some(2),
             y_scale: 1.5,
             label_positions: [("Model · Default · R".to_owned(), [0.25, 0.75])]
@@ -5675,7 +5684,6 @@ smoothing_octaves = 3
         assert_eq!(app.active, [1].into_iter().collect());
         assert_eq!(app.target_hz, 1000.0);
         assert!(!app.show_measurements);
-        assert!(app.show_manager);
         assert_eq!(app.tutorial_segment, Some(2));
         assert_eq!(app.y_scale, 1.5);
         assert_eq!(

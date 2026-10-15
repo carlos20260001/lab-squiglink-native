@@ -273,6 +273,13 @@ not the one a target was measured on is the normal case, not the edge case.
       `placeholder` wherever it appears, and a test refuses to let the shipped
       set contain anything unflagged. Drop real calibrations into
       `data_deltas/` and it becomes a genuine correction with no code change.
+- [x] The manager is unconditional. It was toggleable, and with it hidden the
+      space the graph leaves below its plot stayed dead grey with nothing in
+      it, which read as the app having failed to draw. It is also the only place
+      the selection is accounted for — headphones, targets, and rig corrections —
+      so it is not something that should be switchable off. The toggle and the
+      saved setting are gone; older settings files carrying the old key still
+      load, pinned by a test.
 - [ ] Captured at every viewport in both themes. Same blocker as the rest of
       this file: no display here.
 
