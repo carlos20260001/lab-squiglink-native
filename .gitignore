@@ -11,6 +11,10 @@ ARCHITECTURE.md
 data_deltas/*
 !data_deltas/README.md
 !data_deltas/delta_targets.example.json
+
+# Real targets and measurements are the user's own database. The repository
+# ships data/ and data_hp/; anything added under data/real/ is the user's.
+/data/real/
 /.venv/
 .impeccable/*
 /devicePEQ/

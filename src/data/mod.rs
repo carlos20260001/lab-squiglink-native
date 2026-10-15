@@ -576,4 +576,44 @@ mod tests {
         assert_eq!(uploaded.curve.points.len(), 490);
         assert!(uploaded.curve.points.iter().all(|point| point.db == 65.0));
     }
+
+    #[test]
+    fn the_repository_tracks_nothing_under_data_real() {
+        // `data/real/` is the user's own database: the target curves and
+        // measurements they actually use, which are neither the sample data the
+        // repository ships nor anything it has any claim to. It is ignored, and
+        // this pins the other half, because an ignore rule only protects a file
+        // that has not already been added.
+        //
+        // It asks git rather than listing the directory, because the curves are
+        // legitimately present on disk — they are what the app loads — and
+        // ignoring them is what a working tree is for.
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let Ok(output) = std::process::Command::new("git")
+            .args(["ls-files", "-z", "--", "data/real/"])
+            .current_dir(root)
+            .output()
+        else {
+            // No git in the test environment, so there is nothing to check.
+            return;
+        };
+        if !output.status.success() {
+            return;
+        }
+        let tracked: Vec<String> = std::str::from_utf8(&output.stdout)
+            .unwrap()
+            .split('\0')
+            .filter(|path| !path.is_empty())
+            .map(|path| {
+                Path::new(path)
+                    .file_name()
+                    .map(|name| name.to_string_lossy().into_owned())
+                    .unwrap_or_default()
+            })
+            .collect();
+        assert!(
+            tracked.is_empty(),
+            "data/real/ is the user's own database, but these are committed: {tracked:?}"
+        );
+    }
 }
