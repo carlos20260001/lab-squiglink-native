@@ -3,6 +3,14 @@ data_mrs/*
 ARCHITECTURE.md
 /target/
 /dist/
+
+# Rig calibration curves, and the manifest naming them, are measurement data:
+# a calibration measured on a clone rig belongs to whoever measured it, not to
+# this repository. Everything here is ignored except the documented example, so
+# a stray `git add -A` cannot publish someone's calibration curves.
+data_deltas/*
+!data_deltas/README.md
+!data_deltas/delta_targets.example.json
 /.venv/
 .impeccable/*
 /devicePEQ/

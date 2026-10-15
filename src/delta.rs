@@ -422,27 +422,57 @@ mod tests {
     }
 
     #[test]
-    fn the_shipped_delta_directory_loads_and_flags_its_placeholder() {
-        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("data_deltas");
-        let targets = load_delta_targets(&dir, &grid()).unwrap();
-        assert!(
-            !targets.is_empty(),
-            "the shipped delta directory should hold at least the placeholder"
-        );
-        for target in &targets {
-            // Nothing in the shipped set may claim to be a real rig unless it
-            // was explicitly flagged as measured.
+    fn the_repository_tracks_no_calibration_curves() {
+        // The delta directory holds the user's own measurement data, and it is
+        // ignored so a stray `git add -A` cannot publish it. This pins the other
+        // half of that bargain: nothing calibration-shaped may be *tracked*, so a
+        // new rig in here is a leak rather than a feature. Without it the only
+        // thing standing between a new rig's measurements and the repository is
+        // someone remembering to check .gitignore.
+        //
+        // It asks git rather than looking at the directory, because the
+        // calibrations are legitimately still present on disk — an installed
+        // copy uses them — and ignoring them is what the working tree is for.
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let dir = root.join("data_deltas");
+        let _ = &dir;
+        let Ok(output) = std::process::Command::new("git")
+            .args(["ls-files", "-z", "--", dir.to_str().unwrap()])
+            .current_dir(root)
+            .output()
+        else {
+            // No git in the test environment, so there is nothing to check.
+            return;
+        };
+        if !output.status.success() {
+            return;
+        }
+        // Paths come back as git printed them — relative to the repository root
+        // — so the name is taken rather than a prefix that may not have matched.
+        let tracked: Vec<String> = std::str::from_utf8(&output.stdout)
+            .unwrap()
+            .split('\0')
+            .filter(|path| !path.is_empty())
+            .filter_map(|path| {
+                Path::new(path)
+                    .file_name()
+                    .map(|name| name.to_string_lossy().into_owned())
+            })
+            .collect();
+        // Only documentation and the manifest template. A calibration curve or a
+        // manifest in here is data that should never have been committed.
+        for name in &tracked {
             assert!(
-                target.is_placeholder(),
-                "{} ships without being marked as a placeholder",
-                target.name
-            );
-            assert!(
-                target.note.is_some(),
-                "{} ships without a note",
-                target.name
+                name == "README.md" || name == "delta_targets.example.json",
+                "{name} is committed in data_deltas/, which holds the user's own rig data"
             );
         }
+        assert!(
+            tracked
+                .iter()
+                .any(|name| name == "delta_targets.example.json"),
+            "the delta directory should still ship a manifest to start from"
+        );
     }
 
     #[test]
