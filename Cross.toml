@@ -4,20 +4,29 @@
 # the libraries the linker resolves — plus clang and libclang, which bindgen
 # uses on the container's native architecture. pkg-config is already in the
 # image; it is named here so the list below stays self-explanatory.
+#
+# `image = ":main"` asks for the current image of each target rather than the
+# one tagged to the installed cross. That default is Ubuntu 16.04, which has no
+# PipeWire at all, while the current images are Ubuntu 24.04 and carry the
+# 1.0 headers the bindings need. Each one already points pkg-config at the
+# target's own pkgconfig directory and allows it to cross.
 
 [target.i686-unknown-linux-gnu]
+image = ":main"
 pre-build = [
     "dpkg --add-architecture $CROSS_DEB_ARCH",
     "apt-get update && apt-get install --assume-yes --no-install-recommends libpipewire-0.3-dev:$CROSS_DEB_ARCH libspa-0.2-dev:$CROSS_DEB_ARCH clang libclang-dev pkg-config",
 ]
 
 [target.armv7-unknown-linux-gnueabihf]
+image = ":main"
 pre-build = [
     "dpkg --add-architecture $CROSS_DEB_ARCH",
     "apt-get update && apt-get install --assume-yes --no-install-recommends libpipewire-0.3-dev:$CROSS_DEB_ARCH libspa-0.2-dev:$CROSS_DEB_ARCH clang libclang-dev pkg-config",
 ]
 
 [target.aarch64-unknown-linux-gnu]
+image = ":main"
 pre-build = [
     "dpkg --add-architecture $CROSS_DEB_ARCH",
     "apt-get update && apt-get install --assume-yes --no-install-recommends libpipewire-0.3-dev:$CROSS_DEB_ARCH libspa-0.2-dev:$CROSS_DEB_ARCH clang libclang-dev pkg-config",
