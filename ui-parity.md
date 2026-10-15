@@ -256,11 +256,14 @@ not the one a target was measured on is the normal case, not the edge case.
       against them. Persisted by name, which survives a reordered directory.
 - [x] Manager row, like any other. It carries the pair of rigs it stands
       between and none of the per-curve controls, which have no meaning for it.
-- [x] The delta bar under the graph: deviation from the selected target on a
-      scale symmetric about zero, laid out against the graph's own plot so a
-      frequency sits at the same x in both. With a correction selected the
-      measurement is corrected first and the uncorrected deviation is kept
-      alongside it, dimmed; the gap is what the correction bought.
+- [x] The delta bar, as row one of the curve manager: deviation from the
+      selected target on a scale symmetric about zero. With a correction
+      selected the measurement is corrected first and the uncorrected
+      deviation is kept alongside it, dimmed; the gap is what the correction
+      bought. It sits in the manager rather than under the graph because it
+      describes the whole selection, not one curve, and the manager is where
+      the selection is already accounted for. The manager's height accounts for
+      it, so the strip never costs the last row its place.
 - [ ] **The reference-target list still does not match the live site.** The site
       offers names this database does not carry — `Super 22`, `Harman IE 2019`
       among them — and only 15 targets ship here. Deferred by decision rather

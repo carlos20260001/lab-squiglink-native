@@ -41,31 +41,15 @@ pub struct PlotCurve<'a> {
     pub target: bool,
 }
 
+#[derive(Default)]
 pub struct GraphInteraction {
     pub hover_hz: Option<f32>,
     pub label_positions: BTreeMap<String, [f32; 2]>,
     pub y_scale: Option<f32>,
-    /// The plot itself, without the axis gutters. The delta bar is laid out
-    /// against this rather than against the panel, so that a frequency sits at
-    /// the same x in the graph and in the bar below it. If the two were sized
-    /// independently the bar would read as though it described a different
-    /// range, which is the one thing it must never do.
-    pub plot_rect: Rect,
 }
 
-impl Default for GraphInteraction {
-    fn default() -> Self {
-        Self {
-            hover_hz: None,
-            label_positions: BTreeMap::new(),
-            y_scale: None,
-            plot_rect: Rect::NOTHING,
-        }
-    }
-}
-
-/// The narrow strip under the graph that shows how far each measurement sits
-/// from the target.
+/// The strip at the top of the curve manager showing how far each measurement
+/// sits from the target.
 ///
 /// The graph answers "what does this headphone do". This answers "how far is
 /// that from the target", which is a different question and one the graph
@@ -83,29 +67,31 @@ pub struct DeltaBar {
 
 impl DeltaBar {
     /// How tall the strip is, caption and axis included.
-    const HEIGHT: f32 = 104.0;
+    pub const HEIGHT: f32 = 88.0;
     const CAPTION_HEIGHT: f32 = 18.0;
     const AXIS_HEIGHT: f32 = 16.0;
-    /// The graph's own gutters, so a frequency lands at the same x in both.
     const INSET_LEFT: f32 = 64.0;
     const INSET_RIGHT: f32 = 18.0;
 
-    /// Draw the bar under `plot_rect`, returning the frequency under the
-    /// pointer so a caller can read a deviation off it.
+    /// Draw the strip, returning the frequency under the pointer so a caller
+    /// can read a deviation off it.
+    ///
+    /// Takes the width the panel offers rather than any other plot's, because
+    /// it is drawn inside the manager and the manager spans the full window:
+    /// pinning it to the graph's width would either leave a gap or overflow it.
+    /// The frequency mapping is unchanged, so it still describes the same range
+    /// the graph is showing at the current zoom.
     ///
     /// Returns `None` without drawing anything when there is nothing to say:
     /// a bar with no curves is a bar of nothing, and it would only take room
-    /// from the graph.
-    pub fn show(&self, ui: &mut Ui, plot_rect: Rect, curves: &[PlotCurve<'_>]) -> Option<f32> {
+    /// from the rows below it.
+    pub fn show(&self, ui: &mut Ui, curves: &[PlotCurve<'_>]) -> Option<f32> {
         if curves.is_empty() {
             return None;
         }
         let palette = Palette::resolve(ui.visuals().dark_mode);
         let axis_font = theme::font(TypeStep::Caption);
-        let size = egui::vec2(
-            plot_rect.width() + Self::INSET_LEFT + Self::INSET_RIGHT,
-            Self::HEIGHT,
-        );
+        let size = egui::vec2(ui.available_width(), Self::HEIGHT);
         let (rect, response) = ui.allocate_exact_size(size, Sense::hover());
         let painter = ui.painter();
         painter.rect_filled(rect, 0.0, palette.surface_base);
@@ -887,7 +873,6 @@ impl GraphCanvas<'_> {
             hover_hz,
             label_positions: updated_label_positions,
             y_scale: updated_y_scale,
-            plot_rect,
         }
     }
 

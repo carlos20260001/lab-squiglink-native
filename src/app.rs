@@ -2673,6 +2673,16 @@ impl CrinGraphApp {
         if !self.show_manager {
             return;
         }
+        // Worked out before the panel is sized: the strip is row one of the
+        // manager, so a manager sized without it would push the last rows out
+        // of sight. Computed once and used for both the height and the draw.
+        let caption = self.delta_bar_caption();
+        let deviations = self.delta_bar_deviations();
+        let bar_height = if deviations.is_empty() {
+            0.0
+        } else {
+            DeltaBar::HEIGHT + cgui::Spacing::TIGHT
+        };
         // The graph no longer fills the window, so the manager can reclaim the
         // space it freed: one row per active curve, no scrolling, and stop
         // growing once every curve is visible. The panel stays resizable, and a
@@ -2692,7 +2702,7 @@ impl CrinGraphApp {
             MANAGER_ROW_HEIGHT
         };
         let default_height =
-            (MANAGER_HEIGHT_BASE + curve_count as f32 * row_height).clamp(76.0, 340.0);
+            (MANAGER_HEIGHT_BASE + bar_height + curve_count as f32 * row_height).clamp(76.0, 460.0);
         // The manager sits under the graph and spans the full width, matching
         // the reference tool. A row has the whole width to work with, so curve
         // identity sits on the left and every control for that curve lines up on
@@ -2700,10 +2710,32 @@ impl CrinGraphApp {
         egui::Panel::bottom("curve_manager")
             .resizable(true)
             .default_size(default_height)
-            .size_range(76.0..=340.0)
+            .size_range(76.0..=460.0)
             .show(ui, |ui| {
                 let count =
                     self.active.len() + self.active_targets.len() + self.active_deltas.len();
+                // Row one. It summarises the whole selection rather than
+                // belonging to any one curve, so it sits above the section
+                // header instead of among the rows it is summarising.
+                let bar_curves: Vec<PlotCurve<'_>> = deviations
+                    .iter()
+                    .map(|deviation| PlotCurve {
+                        label: &deviation.label,
+                        label_key: &deviation.label,
+                        points: &deviation.points,
+                        color: deviation.color,
+                        dashed: deviation.dashed,
+                        target: true,
+                    })
+                    .collect();
+                if !bar_curves.is_empty() {
+                    DeltaBar {
+                        zoom: self.zoom,
+                        caption,
+                    }
+                    .show(ui, &bar_curves);
+                    ui.add_space(cgui::Spacing::TIGHT);
+                }
                 squiglab::ui::section_header(
                     ui,
                     "Active curves",
@@ -3159,28 +3191,6 @@ impl CrinGraphApp {
             self.label_positions.extend(interaction.label_positions);
             if let Some(y_scale) = interaction.y_scale {
                 self.y_scale = y_scale;
-            }
-            // The bar is laid out against the graph's own plot, not against
-            // the panel, so that a frequency sits at the same x in both.
-            let caption = self.delta_bar_caption();
-            let deviations = self.delta_bar_deviations();
-            let bar_curves: Vec<PlotCurve<'_>> = deviations
-                .iter()
-                .map(|deviation| PlotCurve {
-                    label: &deviation.label,
-                    label_key: &deviation.label,
-                    points: &deviation.points,
-                    color: deviation.color,
-                    dashed: deviation.dashed,
-                    target: true,
-                })
-                .collect();
-            if !bar_curves.is_empty() {
-                DeltaBar {
-                    zoom: self.zoom,
-                    caption,
-                }
-                .show(ui, interaction.plot_rect, &bar_curves);
             }
         });
     }
@@ -5112,9 +5122,7 @@ smoothing_octaves = 3
     /// An app with one target at 60 dB, one measurement at 65 dB, and a
     /// three-point shared grid.
     fn bar_app() -> CrinGraphApp {
-        let mut app = CrinGraphApp::default();
-        app.upload_grid = vec![100.0, 1000.0];
-        app.groups = vec![
+        let groups = vec![
             MeasurementGroup {
                 brand: "Neutral targets".to_owned(),
                 brand_suffix: None,
@@ -5136,9 +5144,7 @@ smoothing_octaves = 3
                 target: false,
             },
         ];
-        app.active_targets.insert(0);
-        app.active.insert(1);
-        app.display_curves = vec![
+        let display_curves = vec![
             DisplayCurve {
                 source: CurveSource::Measurement,
                 group_index: 0,
@@ -5154,7 +5160,14 @@ smoothing_octaves = 3
                 target: false,
             },
         ];
-        app
+        CrinGraphApp {
+            upload_grid: vec![100.0, 1000.0],
+            groups,
+            active_targets: [0].into_iter().collect(),
+            active: [1].into_iter().collect(),
+            display_curves,
+            ..Default::default()
+        }
     }
 
     fn delta_target(name: &str, db: f32) -> DeltaTarget {
