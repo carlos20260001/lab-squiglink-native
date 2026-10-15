@@ -397,6 +397,12 @@ pub struct Player {
     /// disappeared, say — where the ordinary stop would otherwise wait for a
     /// callback that will never come.
     force_quit: Option<Box<dyn Fn() + Send + Sync>>,
+    /// The cpal stream, kept on the thread that opened it. cpal's streams are
+    /// not `Send`: WASAPI and CoreAudio drive them from the thread that created
+    /// them, so the sink cannot be moved onto the generator thread. It is
+    /// dropped once the player stops, which is what silences the device.
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    sink: Option<cpal::Stream>,
 }
 
 impl Player {
@@ -459,6 +465,13 @@ impl Player {
             let _ = thread.join();
         }
         self.force_quit = None;
+        // The sink goes last: the device has to keep draining the ring until the
+        // generator thread has returned, or a `push` waiting for room would
+        // never be released.
+        #[cfg(any(target_os = "macos", target_os = "windows"))]
+        {
+            self.sink = None;
+        }
     }
 }
 

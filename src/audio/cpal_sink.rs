@@ -10,14 +10,15 @@
 //! the ring is short is the right response in a real-time callback, not
 //! waiting.
 //!
-//! **Not compiled or run on the machine this was written on**, which is Linux.
-//! Everything here is gated to macOS and Windows, so treat the first run on
-//! either as the test it has not had. The logic it shares with the PipeWire
-//! backend — the ring, the generators, the command loop — is tested.
+//! **Not run on the machine this was written on**, which is Linux. It is
+//! compiled only on macOS and Windows, and has never been near a real device,
+//! so treat the first run on either as the test it has not had. The logic it
+//! shares with the PipeWire backend — the ring, the generators, the command
+//! loop — is tested.
 
-use super::{Command, Generator, Player, SampleRing, Settings, TryRecvError, BUFFER_FRAMES};
+use super::{Command, Generator, Player, SampleRing, Settings, BUFFER_FRAMES};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-use std::sync::mpsc;
+use std::sync::mpsc::{self, TryRecvError};
 use std::sync::Arc;
 
 /// Frames of slack between the generator and the device. The generator waits
@@ -31,11 +32,14 @@ pub fn start(settings: Settings) -> Result<Player, String> {
     let device = host
         .default_output_device()
         .ok_or_else(|| "No audio output device is available.".to_owned())?;
-    let config = device
+    let supported = device
         .default_output_config()
         .map_err(|error| format!("Unable to read the output configuration: {error}"))?;
-    let channels = config.channels().max(1) as usize;
-    let sample_rate = config.sample_rate().0;
+    let channels = supported.channels().max(1) as usize;
+    let sample_rate = supported.sample_rate().0;
+    // A stream is built from a plain configuration, so the supported one is
+    // narrowed to the rate and channel count the host reported.
+    let config = supported.config();
 
     let ring = Arc::new(SampleRing::new(RING_FRAMES));
     let callback_ring = Arc::clone(&ring);
@@ -76,25 +80,31 @@ pub fn start(settings: Settings) -> Result<Player, String> {
         let mut generator = Generator::new(sample_rate);
         let mut settings = settings;
         let mut buffer = vec![0.0_f32; BUFFER_FRAMES * 2];
-        'play: loop {
+        loop {
             loop {
                 match receiver.try_recv() {
                     Ok(Command::Settings(next)) => settings = next,
-                    Ok(Command::Stop) | Err(TryRecvError::Disconnected) => break 'play,
+                    Ok(Command::Stop) | Err(TryRecvError::Disconnected) => return,
                     Err(TryRecvError::Empty) => break,
                 }
             }
             generator.render(&mut buffer, &settings);
             ring.push(&buffer);
         }
-        // Pausing here, on the generator thread, is what stops the device: the
-        // callback stops being called and the stream is dropped with the thread.
-        let _ = stream.pause();
     });
 
     Ok(Player {
         commands: Some(commands_out),
         reports,
         thread: Some(handle),
+        // cpal stops on its own once the stream is dropped, so there is no
+        // completion signal to wait on and nothing to force.
+        done: None,
+        force_quit: None,
+        // The stream stays here rather than travelling to the generator
+        // thread: cpal's streams are not `Send`, because the platform audio
+        // APIs drive them from the thread that opened them. The player drops
+        // it, which is what ends the sound.
+        sink: Some(stream),
     })
 }
