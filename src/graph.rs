@@ -41,11 +41,191 @@ pub struct PlotCurve<'a> {
     pub target: bool,
 }
 
-#[derive(Default)]
 pub struct GraphInteraction {
     pub hover_hz: Option<f32>,
     pub label_positions: BTreeMap<String, [f32; 2]>,
     pub y_scale: Option<f32>,
+    /// The plot itself, without the axis gutters. The delta bar is laid out
+    /// against this rather than against the panel, so that a frequency sits at
+    /// the same x in the graph and in the bar below it. If the two were sized
+    /// independently the bar would read as though it described a different
+    /// range, which is the one thing it must never do.
+    pub plot_rect: Rect,
+}
+
+impl Default for GraphInteraction {
+    fn default() -> Self {
+        Self {
+            hover_hz: None,
+            label_positions: BTreeMap::new(),
+            y_scale: None,
+            plot_rect: Rect::NOTHING,
+        }
+    }
+}
+
+/// The narrow strip under the graph that shows how far each measurement sits
+/// from the target.
+///
+/// The graph answers "what does this headphone do". This answers "how far is
+/// that from the target", which is a different question and one the graph
+/// cannot show, because on the graph the two curves sit at their absolute
+/// levels and their distance depends on the axis.
+///
+/// Everything here is a deviation, so the scale is symmetric about zero: a
+/// curve above the target is as wrong as one the same distance below it, and
+/// an asymmetric axis would say otherwise.
+pub struct DeltaBar {
+    pub zoom: ZoomRegion,
+    /// What the deviations are measured against, drawn in the caption.
+    pub caption: String,
+}
+
+impl DeltaBar {
+    /// How tall the strip is, caption and axis included.
+    const HEIGHT: f32 = 104.0;
+    const CAPTION_HEIGHT: f32 = 18.0;
+    const AXIS_HEIGHT: f32 = 16.0;
+    /// The graph's own gutters, so a frequency lands at the same x in both.
+    const INSET_LEFT: f32 = 64.0;
+    const INSET_RIGHT: f32 = 18.0;
+
+    /// Draw the bar under `plot_rect`, returning the frequency under the
+    /// pointer so a caller can read a deviation off it.
+    ///
+    /// Returns `None` without drawing anything when there is nothing to say:
+    /// a bar with no curves is a bar of nothing, and it would only take room
+    /// from the graph.
+    pub fn show(&self, ui: &mut Ui, plot_rect: Rect, curves: &[PlotCurve<'_>]) -> Option<f32> {
+        if curves.is_empty() {
+            return None;
+        }
+        let palette = Palette::resolve(ui.visuals().dark_mode);
+        let axis_font = theme::font(TypeStep::Caption);
+        let size = egui::vec2(
+            plot_rect.width() + Self::INSET_LEFT + Self::INSET_RIGHT,
+            Self::HEIGHT,
+        );
+        let (rect, response) = ui.allocate_exact_size(size, Sense::hover());
+        let painter = ui.painter();
+        painter.rect_filled(rect, 0.0, palette.surface_base);
+
+        let area = Rect::from_min_max(
+            Pos2::new(
+                rect.left() + Self::INSET_LEFT,
+                rect.top() + Self::CAPTION_HEIGHT,
+            ),
+            Pos2::new(
+                rect.right() - Self::INSET_RIGHT,
+                rect.bottom() - Self::AXIS_HEIGHT,
+            ),
+        );
+        // Symmetric about zero, because a deviation has no preferred sign:
+        // being 6 dB above the target is no closer to correct than 6 dB below.
+        let limit = Self::nice_limit(
+            curves
+                .iter()
+                .flat_map(|curve| curve.points.iter().map(|point| point.db.abs()))
+                .filter(|value| value.is_finite())
+                .fold(0.0_f32, f32::max),
+        );
+        let transform = Transform::new(area, self.zoom.x_range(), (-limit, limit));
+        let plot_painter = painter.with_clip_rect(area);
+
+        for tick in [-limit, limit] {
+            let y = transform.db_to_y(tick);
+            plot_painter.line_segment(
+                [Pos2::new(area.left(), y), Pos2::new(area.right(), y)],
+                Stroke::new(theme::graph::GRID_WIDTH, palette.border),
+            );
+            painter.text(
+                Pos2::new(rect.left() + Self::INSET_LEFT - 6.0, y),
+                Align2::LEFT_CENTER,
+                Self::tick_db(tick),
+                axis_font.clone(),
+                palette.text_tertiary,
+            );
+        }
+        // Zero is the line the whole bar is read against, so it is drawn as
+        // the axis rather than as another gridline.
+        let zero = transform.db_to_y(0.0);
+        plot_painter.line_segment(
+            [Pos2::new(area.left(), zero), Pos2::new(area.right(), zero)],
+            Stroke::new(1.2, palette.text_secondary),
+        );
+        painter.text(
+            Pos2::new(rect.left() + Self::INSET_LEFT - 6.0, zero),
+            Align2::LEFT_CENTER,
+            "0",
+            axis_font.clone(),
+            palette.text_secondary,
+        );
+        for hz in X_TICKS {
+            let x = transform.hz_to_x(hz);
+            if x < area.left() || x > area.right() {
+                continue;
+            }
+            plot_painter.line_segment(
+                [Pos2::new(x, area.top()), Pos2::new(x, area.bottom())],
+                Stroke::new(theme::graph::GRID_WIDTH, palette.border),
+            );
+        }
+
+        for curve in curves {
+            let points: Vec<Pos2> = curve
+                .points
+                .iter()
+                .map(|point| Pos2::new(transform.hz_to_x(point.hz), transform.db_to_y(point.db)))
+                .collect();
+            GraphCanvas::draw_curve(
+                &plot_painter,
+                &points,
+                curve.color,
+                curve.dashed,
+                false,
+                theme::graph::CURVE_WIDTH,
+            );
+        }
+
+        // Caption: what the deviations are against, and in what.
+        painter.text(
+            Pos2::new(rect.left() + Self::INSET_LEFT, rect.top() + 10.0),
+            Align2::LEFT_CENTER,
+            self.caption.clone(),
+            theme::font(TypeStep::Micro),
+            palette.text_tertiary,
+        );
+        painter.text(
+            Pos2::new(rect.right() - Self::INSET_RIGHT, rect.top() + 10.0),
+            Align2::RIGHT_CENTER,
+            format!("\u{b1}{limit:.1} dB"),
+            theme::font(TypeStep::Micro),
+            palette.text_tertiary,
+        );
+
+        response.hover_pos().map(|pos| transform.x_at(pos.x))
+    }
+
+    /// Round a peak deviation up to a value a person would choose, so the
+    /// scale reads as \u{00b1}5 rather than as \u{00b1}4.37.
+    fn nice_limit(peak: f32) -> f32 {
+        for step in [0.5_f32, 1.0, 2.0, 5.0, 10.0, 20.0, 50.0] {
+            if peak <= step {
+                return step;
+            }
+        }
+        (peak / 50.0).ceil() * 50.0
+    }
+
+    fn tick_db(db: f32) -> String {
+        let magnitude = db.abs();
+        let sign = if db < 0.0 { "\u{2212}" } else { "+" };
+        if magnitude >= 10.0 {
+            format!("{sign}{magnitude:.0}")
+        } else {
+            format!("{sign}{magnitude:.1}")
+        }
+    }
 }
 
 /// How curve labels are arranged when the user has not dragged them.
@@ -707,6 +887,7 @@ impl GraphCanvas<'_> {
             hover_hz,
             label_positions: updated_label_positions,
             y_scale: updated_y_scale,
+            plot_rect,
         }
     }
 

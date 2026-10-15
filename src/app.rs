@@ -5,7 +5,7 @@ use squiglab::color::target_color;
 use squiglab::data::{self, CurveInfo, FRPoint, PhoneBook};
 use squiglab::delta::{self, DeltaTarget};
 use squiglab::equalizer;
-use squiglab::graph::{export_svg as render_svg, GraphCanvas, PlotCurve, ZoomRegion};
+use squiglab::graph::{export_svg as render_svg, DeltaBar, GraphCanvas, PlotCurve, ZoomRegion};
 use squiglab::processing::{self, NormParams, SmoothingParams};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
@@ -197,6 +197,14 @@ enum CurveSource {
     Measurement,
     /// An equalizer applied to a measurement group's curve.
     Equalizer,
+}
+
+/// One row of the delta bar, before it becomes a plot curve.
+struct DeviationCurve {
+    label: String,
+    points: Vec<FRPoint>,
+    color: Color32,
+    dashed: bool,
 }
 
 struct DisplayCurve {
@@ -2978,6 +2986,133 @@ impl CrinGraphApp {
         }
     }
 
+    /// The deviations the delta bar draws.
+    ///
+    /// Each measurement is measured against the selected target, which is the
+    /// comparison the graph cannot show: on the graph the two sit at absolute
+    /// levels and the distance between them depends on the axis. When a rig
+    /// correction is selected the measurement is corrected first, and the
+    /// uncorrected deviation is kept alongside it, dimmed, so the distance
+    /// between the two lines is what the correction actually bought.
+    ///
+    /// Returns nothing without a target: a deviation from nothing is not a
+    /// deviation, and a bar with no curves would only take room from the graph.
+    fn delta_bar_deviations(&self) -> Vec<DeviationCurve> {
+        let Some(target_group) = self.active_targets.iter().copied().next() else {
+            return Vec::new();
+        };
+        let Some(target) = self
+            .display_curves
+            .iter()
+            .find(|curve| curve.target && curve.group_index == target_group)
+        else {
+            return Vec::new();
+        };
+        // Selected corrections compose: each removes its own rig's error, so
+        // two of them remove two rigs' errors. A rig with no calibration is
+        // not corrected at all, which is what leaving one out means.
+        let corrections: Vec<&[FRPoint]> = self
+            .active_deltas
+            .iter()
+            .map(|&index| self.delta_targets[index].points.as_slice())
+            .collect();
+        let correction_at = |hz: f32| -> f32 {
+            corrections
+                .iter()
+                .filter_map(|curve| processing::interpolate_db(curve, hz))
+                .sum()
+        };
+        let sample = |curve: &[FRPoint]| -> Vec<FRPoint> {
+            self.upload_grid
+                .iter()
+                .map(|&hz| FRPoint {
+                    hz,
+                    // The grid is shared with the database, so a curve that
+                    // starts or ends outside it is held at its edge rather
+                    // than dropped, which would notch the bar at both ends.
+                    db: processing::interpolate_db(curve, hz).unwrap_or(0.0),
+                })
+                .collect()
+        };
+        let target_points = sample(&target.points);
+
+        let mut deviations = Vec::new();
+        for curve in &self.display_curves {
+            if curve.target || curve.source != CurveSource::Measurement {
+                continue;
+            }
+            let measured = sample(&curve.points);
+            let corrected: Vec<FRPoint> = measured
+                .iter()
+                .zip(&target_points)
+                .map(|(measured, target)| FRPoint {
+                    hz: measured.hz,
+                    db: measured.db - target.db - correction_at(measured.hz),
+                })
+                .collect();
+            let color = self.display_curve_color(curve);
+            if corrections.is_empty() {
+                deviations.push(DeviationCurve {
+                    label: curve.label.clone(),
+                    points: corrected,
+                    color,
+                    dashed: false,
+                });
+            } else {
+                deviations.push(DeviationCurve {
+                    label: format!("{} (rig-corrected)", curve.label),
+                    points: corrected,
+                    color,
+                    dashed: false,
+                });
+                deviations.push(DeviationCurve {
+                    label: format!("{} (uncorrected)", curve.label),
+                    points: measured
+                        .iter()
+                        .zip(&target_points)
+                        .map(|(measured, target)| FRPoint {
+                            hz: measured.hz,
+                            db: measured.db - target.db,
+                        })
+                        .collect(),
+                    color: Color32::from_rgba_unmultiplied(color.r(), color.g(), color.b(), 90),
+                    dashed: false,
+                });
+            }
+        }
+
+        // The corrections themselves, dashed: the bar shows what they are doing
+        // to the measurements, and this is the curve doing it.
+        for &index in &self.active_deltas {
+            let correction = &self.delta_targets[index];
+            deviations.push(DeviationCurve {
+                label: correction.name.clone(),
+                points: correction.points.clone(),
+                color: squiglab::theme::Palette::resolve(true).text_secondary,
+                dashed: true,
+            });
+        }
+        deviations
+    }
+
+    /// What the delta bar's deviations are measured against.
+    fn delta_bar_caption(&self) -> String {
+        let mut caption = String::new();
+        if let Some(index) = self.active_targets.iter().copied().next() {
+            caption = format!("deviation from {}", self.groups[index].name);
+        }
+        let selected: Vec<&str> = self
+            .active_deltas
+            .iter()
+            .map(|&index| self.delta_targets[index].name.as_str())
+            .collect();
+        if !selected.is_empty() {
+            caption.push_str(" \u{b7} rig-corrected by ");
+            caption.push_str(&selected.join(", "));
+        }
+        caption
+    }
+
     fn central_panel(&mut self, ui: &mut Ui) {
         egui::CentralPanel::default().show(ui, |ui| {
             if let Some(error) = &self.processing_error {
@@ -3024,6 +3159,28 @@ impl CrinGraphApp {
             self.label_positions.extend(interaction.label_positions);
             if let Some(y_scale) = interaction.y_scale {
                 self.y_scale = y_scale;
+            }
+            // The bar is laid out against the graph's own plot, not against
+            // the panel, so that a frequency sits at the same x in both.
+            let caption = self.delta_bar_caption();
+            let deviations = self.delta_bar_deviations();
+            let bar_curves: Vec<PlotCurve<'_>> = deviations
+                .iter()
+                .map(|deviation| PlotCurve {
+                    label: &deviation.label,
+                    label_key: &deviation.label,
+                    points: &deviation.points,
+                    color: deviation.color,
+                    dashed: deviation.dashed,
+                    target: true,
+                })
+                .collect();
+            if !bar_curves.is_empty() {
+                DeltaBar {
+                    zoom: self.zoom,
+                    caption,
+                }
+                .show(ui, interaction.plot_rect, &bar_curves);
             }
         });
     }
@@ -3778,10 +3935,11 @@ mod tests {
         initialize_app_config_from, matches_search, prepare_channels, read_app_config_from,
         read_preferences_from, resolve_measurement_dir, target_category, validate_app_config,
         write_preferences_to, AppConfig, ChannelMode, CrinGraphApp, CurveSource, DisplayCurve,
-        Preferences, SavedGroup, MAX_EQ_ROWS, MAX_SHARE_URI_LENGTH, MAX_SMOOTH_LEVEL,
-        TUTORIAL_SEGMENTS,
+        MeasurementGroup, MeasurementVariant, Preferences, SavedGroup, MAX_EQ_ROWS,
+        MAX_SHARE_URI_LENGTH, MAX_SMOOTH_LEVEL, TUTORIAL_SEGMENTS,
     };
     use squiglab::data::{CurveInfo, FRPoint};
+    use squiglab::delta::DeltaTarget;
     use std::collections::BTreeMap;
     use std::path::PathBuf;
 
@@ -4941,6 +5099,161 @@ smoothing_octaves = 3
         assert_eq!(curves[0].points[1].db, 0.0);
         assert_eq!(curves[1].points[0].db, 5.0);
         assert_eq!(curves[1].points[1].db, -5.0);
+    }
+
+    /// A flat pair of points at the frequencies the delta bar samples on.
+    fn flat_pair(db: f32) -> Vec<FRPoint> {
+        [100.0, 1000.0]
+            .into_iter()
+            .map(|hz| FRPoint { hz, db })
+            .collect()
+    }
+
+    /// An app with one target at 60 dB, one measurement at 65 dB, and a
+    /// three-point shared grid.
+    fn bar_app() -> CrinGraphApp {
+        let mut app = CrinGraphApp::default();
+        app.upload_grid = vec![100.0, 1000.0];
+        app.groups = vec![
+            MeasurementGroup {
+                brand: "Neutral targets".to_owned(),
+                brand_suffix: None,
+                name: "Harman".to_owned(),
+                variants: vec![MeasurementVariant {
+                    name: "Target".to_owned(),
+                    curve_indices: vec![],
+                }],
+                target: true,
+            },
+            MeasurementGroup {
+                brand: "Brand".to_owned(),
+                brand_suffix: None,
+                name: "Headphone".to_owned(),
+                variants: vec![MeasurementVariant {
+                    name: "Avg".to_owned(),
+                    curve_indices: vec![],
+                }],
+                target: false,
+            },
+        ];
+        app.active_targets.insert(0);
+        app.active.insert(1);
+        app.display_curves = vec![
+            DisplayCurve {
+                source: CurveSource::Measurement,
+                group_index: 0,
+                label: "Harman".to_owned(),
+                points: flat_pair(60.0),
+                target: true,
+            },
+            DisplayCurve {
+                source: CurveSource::Measurement,
+                group_index: 1,
+                label: "Headphone".to_owned(),
+                points: flat_pair(65.0),
+                target: false,
+            },
+        ];
+        app
+    }
+
+    fn delta_target(name: &str, db: f32) -> DeltaTarget {
+        DeltaTarget {
+            name: name.to_owned(),
+            clone_rig: "clone".to_owned(),
+            original_rig: "original".to_owned(),
+            synthetic: true,
+            note: None,
+            points: flat_pair(db),
+        }
+    }
+
+    #[test]
+    fn the_delta_bar_measures_a_headphone_against_the_target() {
+        let app = bar_app();
+        let deviations = app.delta_bar_deviations();
+        // One measurement, no corrections, so one line and nothing else.
+        assert_eq!(deviations.len(), 1);
+        assert_eq!(deviations[0].label, "Headphone");
+        // 65 dB measured against a 60 dB target is 5 dB above it.
+        assert!(deviations[0]
+            .points
+            .iter()
+            .all(|point| (point.db - 5.0).abs() < 1e-4));
+    }
+
+    #[test]
+    fn the_delta_bar_draws_nothing_without_a_target() {
+        let mut app = bar_app();
+        // A deviation from nothing is not a deviation.
+        app.active_targets.clear();
+        assert!(app.delta_bar_deviations().is_empty());
+    }
+
+    #[test]
+    fn a_selected_correction_removes_its_rig_error_from_the_deviation() {
+        let mut app = bar_app();
+        // A rig that reads 2 dB high makes a 65 dB headphone look like 65 dB
+        // when the true figure, on the target's rig, would be 63 dB: 3 dB
+        // above target rather than 5.
+        app.delta_targets = vec![delta_target("\u{394} Clone", 2.0)];
+        app.active_deltas.insert(0);
+        let deviations = app.delta_bar_deviations();
+        let corrected = deviations
+            .iter()
+            .find(|curve| curve.label.contains("rig-corrected"))
+            .expect("the corrected line");
+        let uncorrected = deviations
+            .iter()
+            .find(|curve| curve.label.contains("uncorrected"))
+            .expect("the uncorrected line");
+        assert!(corrected.points.iter().all(|p| (p.db - 3.0).abs() < 1e-4));
+        assert!(uncorrected.points.iter().all(|p| (p.db - 5.0).abs() < 1e-4));
+        // The gap between the two lines is exactly the rig correction, which is
+        // the whole reason both are drawn.
+        for (corrected, uncorrected) in corrected.points.iter().zip(&uncorrected.points) {
+            assert!(((corrected.db - uncorrected.db) + 2.0).abs() < 1e-4);
+        }
+    }
+
+    #[test]
+    fn a_selected_correction_is_drawn_on_the_bar_as_well() {
+        let mut app = bar_app();
+        app.delta_targets = vec![delta_target("\u{394} Clone", 2.0)];
+        app.active_deltas.insert(0);
+        let deviations = app.delta_bar_deviations();
+        let correction = deviations
+            .iter()
+            .find(|curve| curve.label == "\u{394} Clone")
+            .expect("the correction is drawn so its own shape is visible");
+        assert!(correction.dashed);
+        assert!(correction.points.iter().all(|p| (p.db - 2.0).abs() < 1e-4));
+    }
+
+    #[test]
+    fn two_selected_corrections_compose() {
+        let mut app = bar_app();
+        app.delta_targets = vec![delta_target("A", 2.0), delta_target("B", 1.0)];
+        app.active_deltas = [0, 1].into_iter().collect();
+        let deviations = app.delta_bar_deviations();
+        let corrected = deviations
+            .iter()
+            .find(|curve| curve.label.contains("rig-corrected"))
+            .expect("the corrected line");
+        // 65 - 60 - 2 - 1
+        assert!(corrected.points.iter().all(|p| (p.db - 2.0).abs() < 1e-4));
+    }
+
+    #[test]
+    fn the_delta_bar_caption_names_the_target_and_the_corrections() {
+        let mut app = bar_app();
+        assert_eq!(app.delta_bar_caption(), "deviation from Harman");
+        app.delta_targets = vec![delta_target("\u{394} Clone", 2.0)];
+        app.active_deltas.insert(0);
+        assert_eq!(
+            app.delta_bar_caption(),
+            "deviation from Harman \u{b7} rig-corrected by \u{394} Clone"
+        );
     }
 
     #[test]
