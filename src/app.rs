@@ -641,6 +641,8 @@ pub struct CrinGraphApp {
     /// Set while the selected curve still needs scrolling into view in the
     /// library. Session-only: it is an action to take once, not a preference.
     library_reveal_pending: bool,
+    /// Whether the navigation drawer (opened from the hamburger) is visible.
+    menu_open: bool,
 }
 
 impl Default for CrinGraphApp {
@@ -722,6 +724,7 @@ impl Default for CrinGraphApp {
             upload_error: None,
             upload_message: None,
             library_reveal_pending: false,
+            menu_open: false,
         }
     }
 }
@@ -1367,6 +1370,26 @@ impl CrinGraphApp {
             )
             .show(ui, |ui| {
                 ui.horizontal(|ui| {
+                    // Hamburger: opens the navigation drawer.
+                    if ui
+                        .add(
+                            egui::Button::new(
+                                egui::RichText::new("≡")
+                                    .font(squiglab::theme::font_bold(
+                                        squiglab::theme::TypeStep::Subtitle,
+                                    ))
+                                    .color(palette.text_primary),
+                            )
+                            .frame(false)
+                            .stroke(egui::Stroke::NONE)
+                            .min_size(egui::vec2(0.0, 0.0)),
+                        )
+                        .on_hover_text("Menu")
+                        .clicked()
+                    {
+                        self.menu_open = true;
+                    }
+                    ui.add_space(8.0);
                     cgui::wordmark(ui);
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         cgui::segmented(
@@ -1381,6 +1404,79 @@ impl CrinGraphApp {
                         );
                     });
                 });
+            });
+    }
+
+    /// The navigation drawer, mirroring the web tool's hamburger overlay.
+    ///
+    /// A dimmed backdrop dims everything behind it and closes the drawer when
+    /// clicked; the drawer itself is a left column of "invisible rows" — plain
+    /// clickable text with no pill or button chrome. Picking a category sets it
+    /// and closes the drawer; Settings is a placeholder for now.
+    fn menu_drawer(&mut self, ctx: &egui::Context) {
+        if !self.menu_open {
+            return;
+        }
+        let palette = squiglab::theme::Palette::resolve(self.dark_mode);
+
+        // Dimmed backdrop: closes the drawer when clicked.
+        egui::Area::new(egui::Id::new("menu_backdrop"))
+            .fixed_pos(egui::pos2(0.0, 0.0))
+            .show(ctx, |ui| {
+                let screen_rect = ui.available_rect_before_wrap();
+                ui.painter()
+                    .rect_filled(screen_rect, 0.0, egui::Color32::from_black_alpha(120));
+                if ui
+                    .allocate_rect(screen_rect, egui::Sense::click())
+                    .clicked()
+                {
+                    self.menu_open = false;
+                }
+            });
+
+        // Drawer rows: invisible rows, left column, full height.
+        egui::Area::new(egui::Id::new("menu_drawer"))
+            .fixed_pos(egui::pos2(0.0, 0.0))
+            .show(ctx, |ui| {
+                ui.spacing_mut().item_spacing.y = squiglab::ui::Spacing::TIGHT;
+                ui.add_space(squiglab::ui::Spacing::SECTION);
+
+                let rows = [
+                    (Category::Iems, "IEMS"),
+                    (Category::Headphones, "HEADPHONES"),
+                    (Category::Earbuds, "EARBUDS"),
+                ];
+                for (category, label) in rows {
+                    let selected = self.category == category;
+                    let mut text = egui::RichText::new(label).color(palette.text_primary);
+                    if selected {
+                        text = text.strong().color(palette.on_accent);
+                    }
+                    let response = ui.add(
+                        egui::Button::new(text)
+                            .frame(false)
+                            .stroke(egui::Stroke::NONE)
+                            .min_size(egui::vec2(0.0, 0.0)),
+                    );
+                    if response.clicked() {
+                        self.category = category;
+                        self.menu_open = false;
+                    }
+                }
+                ui.add_space(squiglab::ui::Spacing::SECTION);
+                ui.separator();
+                if ui
+                    .add(
+                        egui::Button::new("SETTINGS")
+                            .frame(false)
+                            .stroke(egui::Stroke::NONE)
+                            .min_size(egui::vec2(0.0, 0.0)),
+                    )
+                    .clicked()
+                {
+                    // Placeholder: settings are not wired up yet.
+                    self.menu_open = false;
+                }
             });
     }
 
@@ -3905,6 +4001,8 @@ impl eframe::App for CrinGraphApp {
             self.lower_strip(ui, false);
             self.central_panel(ui);
         }
+        // The navigation drawer is an overlay on top of everything else.
+        self.menu_drawer(&ctx);
         if self.loaded && self.load_error.is_none() {
             self.persist_preferences_if_changed();
         }
