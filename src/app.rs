@@ -643,6 +643,9 @@ pub struct CrinGraphApp {
     library_reveal_pending: bool,
     /// Whether the navigation drawer (opened from the hamburger) is visible.
     menu_open: bool,
+    /// Mobile only: whether the library drawer is slid up covering the surface
+    /// (true) or slid down uncovering the manager + target strip (false).
+    library_drawer_open: bool,
 }
 
 impl Default for CrinGraphApp {
@@ -725,6 +728,7 @@ impl Default for CrinGraphApp {
             upload_message: None,
             library_reveal_pending: false,
             menu_open: false,
+            library_drawer_open: false,
         }
     }
 }
@@ -1358,7 +1362,7 @@ impl CrinGraphApp {
     /// and category pills (IEMS | HEADPHONES | EARBUDS) flowing to the right. The
     /// wordmark no longer lives in the toolbar, so the toolbar keeps processing /
     // actions only.
-    fn header_panel(&mut self, ui: &mut Ui) {
+    fn header_panel(&mut self, ui: &mut Ui, desktop: bool) {
         use squiglab::ui as cgui;
         let palette = squiglab::theme::Palette::resolve(ui.visuals().dark_mode);
         egui::Panel::top("header")
@@ -1370,27 +1374,35 @@ impl CrinGraphApp {
             )
             .show(ui, |ui| {
                 ui.horizontal(|ui| {
-                    // Hamburger: opens the navigation drawer.
-                    if ui
-                        .add(
-                            egui::Button::new(
-                                egui::RichText::new("≡")
-                                    .font(squiglab::theme::font_bold(
-                                        squiglab::theme::TypeStep::Subtitle,
-                                    ))
-                                    .color(palette.text_primary),
+                    // Hamburger only on mobile; desktop uses the left library
+                    // column instead.
+                    if !desktop {
+                        if ui
+                            .add(
+                                egui::Button::new(
+                                    egui::RichText::new("≡")
+                                        .font(squiglab::theme::font_bold(
+                                            squiglab::theme::TypeStep::Subtitle,
+                                        ))
+                                        .color(palette.text_primary),
+                                )
+                                .frame(false)
+                                .stroke(egui::Stroke::NONE)
+                                .min_size(egui::vec2(0.0, 0.0)),
                             )
-                            .frame(false)
-                            .stroke(egui::Stroke::NONE)
-                            .min_size(egui::vec2(0.0, 0.0)),
-                        )
-                        .on_hover_text("Menu")
-                        .clicked()
-                    {
-                        self.menu_open = true;
+                            .on_hover_text("Menu")
+                            .clicked()
+                        {
+                            self.menu_open = true;
+                        }
+                        ui.add_space(8.0);
+                        cgui::wordmark(ui);
                     }
-                    ui.add_space(8.0);
-                    cgui::wordmark(ui);
+                    // Wordmark: centered on mobile, left-aligned on desktop.
+                    if desktop {
+                        cgui::wordmark(ui);
+                        ui.add_space(16.0);
+                    }
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         cgui::segmented(
                             ui,
@@ -3838,9 +3850,12 @@ impl CrinGraphApp {
     /// The combined lower strip beneath the graph.
     /// Desktop: manager rows + reference-target pills (library lives beside the
     /// graph as a left column).
-    /// Mobile: just the library column (tabs + active-tab content), mirroring
-    /// the reference tool's stacked order: graph first, then tabs/content below.
+    /// Mobile: an always-visible slide handle above the content area. Sliding
+    /// up (drawer open) covers the surface with the library drawer (tabs +
+    /// models + equalizer columns); sliding down (drawer closed) uncovers the
+    /// surface showing the deltabar target stripbar and manager rows.
     fn lower_strip(&mut self, ui: &mut Ui, desktop: bool) {
+        let palette = squiglab::theme::Palette::resolve(ui.visuals().dark_mode);
         if desktop {
             let curve_count = self.active.len() + self.active_targets.len() + self.active_deltas.len();
             let (default_height, min_height) = manager_heights(ui.available_width(), curve_count);
@@ -3854,20 +3869,55 @@ impl CrinGraphApp {
                     self.target_strip_content(ui);
                 });
         } else {
-            // On narrow/tall viewports the library column stacks below the
-            // graph, mirroring the reference tool's mobile order. Cap the strip
-            // so the graph above keeps room on tall viewports.
+            // Mobile: always-visible thin pill handle below the graph. Clicking
+            // it slides the library drawer up (covering the surface) or down
+            // (uncovers the manager + target strip).
             let available_height = ui.available_rect_before_wrap().height();
-            let max_height = f32::max(
+            let content_max = f32::max(
                 MOBILE_STRIP_MIN_HEIGHT,
                 (available_height * 0.70).min(MOBILE_STRIP_MAX_HEIGHT),
             );
             egui::Panel::bottom("lower_strip")
                 .resizable(true)
-                .default_size(MOBILE_STRIP_DEFAULT_HEIGHT.min(max_height).max(MOBILE_STRIP_MIN_HEIGHT))
-                .size_range(MOBILE_STRIP_MIN_HEIGHT..=max_height)
+                .default_size(MOBILE_STRIP_DEFAULT_HEIGHT.min(content_max).max(MOBILE_STRIP_MIN_HEIGHT))
+                .size_range(MOBILE_STRIP_MIN_HEIGHT..=content_max)
                 .show(ui, |ui| {
-                    self.library_column(ui);
+                    // Slide handle: thin pill, always visible.
+                    ui.add_space(4.0);
+                    let handle_frame = egui::Frame::new()
+                        .inner_margin(egui::Margin::same(2))
+                        .corner_radius(egui::CornerRadius::same(255))
+                        .fill(palette.surface_raised)
+                        .stroke(palette.control_stroke());
+                    let handle_response = handle_frame.show(ui, |ui| {
+                        ui.add(
+                            egui::Button::new(
+                                egui::RichText::new("▾")
+                                    .font(squiglab::theme::font(
+                                        squiglab::theme::TypeStep::Caption,
+                                    ))
+                                    .color(palette.text_secondary),
+                            )
+                            .frame(false)
+                            .stroke(egui::Stroke::NONE)
+                            .min_size(egui::vec2(36.0, 8.0)),
+                        )
+                    }).inner;
+                    ui.add_space(4.0);
+                    if handle_response.clicked() {
+                        self.library_drawer_open = !self.library_drawer_open;
+                    }
+                    ui.separator();
+                    if self.library_drawer_open {
+                        // Cover surface: library drawer (tabs + models +
+                        // equalizer columns).
+                        self.library_column(ui);
+                    } else {
+                        // Uncover surface: manager rows + target stripbar.
+                        self.manager_content(ui);
+                        ui.separator();
+                        self.target_strip_content(ui);
+                    }
                 });
         }
     }
@@ -3975,7 +4025,9 @@ impl eframe::App for CrinGraphApp {
         if self.dirty {
             self.rebuild_display_curves();
         }
-        self.header_panel(ui);
+        let size = ui.available_size();
+        let desktop = size.x >= 1024.0 && size.x > size.y;
+        self.header_panel(ui, desktop);
         self.toolbar(ui);
         self.delta_window(&ctx);
         self.share_window(&ctx);
@@ -3990,8 +4042,6 @@ impl eframe::App for CrinGraphApp {
         //   Mobile (narrow or tall): graph on top, then the library column
         //   (tabs + active-tab content) stacked below — no separate manager or
         //   target strip, matching the reference tool's mobile order.
-        let size = ui.available_size();
-        let desktop = size.x >= 1024.0 && size.x > size.y;
         if desktop {
             self.selector_panel(ui, true);
             self.status_panel(ui);
