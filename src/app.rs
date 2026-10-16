@@ -2615,16 +2615,14 @@ impl CrinGraphApp {
         if let std::collections::btree_map::Entry::Vacant(slot) = self.eq_filters.entry(phone) {
             slot.insert(
                 (0..5)
-                    .map(|_| {
-                        EqRow {
-                            filter: equalizer::Filter::new(
-                                equalizer::FilterType::Peaking,
-                                0.0,
-                                1.0,
-                                0.0,
-                            ),
-                            enabled: true,
-                        }
+                    .map(|_| EqRow {
+                        filter: equalizer::Filter::new(
+                            equalizer::FilterType::Peaking,
+                            0.0,
+                            1.0,
+                            0.0,
+                        ),
+                        enabled: true,
                     })
                     .collect(),
             );
@@ -2955,7 +2953,8 @@ impl CrinGraphApp {
                     )
                     .inner;
                 (brand_change, toggles)
-            }).inner
+            })
+            .inner
         } else {
             let brand_change = self.brand_column(ui, counts.as_slice());
             let effective = brand_change
@@ -2993,9 +2992,7 @@ impl CrinGraphApp {
     fn brand_column(&self, ui: &mut Ui, counts: &[(String, usize)]) -> Option<Option<String>> {
         use squiglab::ui as cgui;
         ui.spacing_mut().item_spacing.y = cgui::Spacing::TIGHT;
-        if self.brand_filter.is_some()
-            && ui.selectable_label(false, "All brands").clicked()
-        {
+        if self.brand_filter.is_some() && ui.selectable_label(false, "All brands").clicked() {
             return Some(None);
         }
         for (brand, count) in counts {
@@ -3028,10 +3025,7 @@ impl CrinGraphApp {
         for (index, model_name) in models {
             let selected = self.active.contains(index);
             let response = ui.horizontal(|ui| {
-                ui.label(
-                    RichText::new(model_name)
-                        .size(squiglab::theme::TypeStep::Body.size()),
-                );
+                ui.label(RichText::new(model_name).size(squiglab::theme::TypeStep::Body.size()));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if ui.button("+").clicked() {
                         toggles.push(*index);
@@ -3072,8 +3066,7 @@ impl CrinGraphApp {
     /// strip never spans under the library column.
     fn manager_content(&mut self, ui: &mut Ui) {
         use squiglab::ui as cgui;
-        let count =
-            self.active.len() + self.active_targets.len() + self.active_deltas.len();
+        let count = self.active.len() + self.active_targets.len() + self.active_deltas.len();
         squiglab::ui::section_header(
             ui,
             "Active curves",
@@ -3927,9 +3920,7 @@ impl CrinGraphApp {
                     .show(ui, |ui| {
                         ui.spacing_mut().item_spacing.x = cgui::Spacing::COMPACT;
                         for chip in self.delta_chips() {
-                            if cgui::pill(ui, &chip.label, chip.selected, chip.tooltip)
-                                .clicked()
-                            {
+                            if cgui::pill(ui, &chip.label, chip.selected, chip.tooltip).clicked() {
                                 self.toggle_delta(chip.index);
                             }
                         }
@@ -3956,9 +3947,7 @@ impl CrinGraphApp {
                 .show(ui, |ui| {
                     ui.spacing_mut().item_spacing.x = cgui::Spacing::COMPACT;
                     for chip in self.target_chips() {
-                        if cgui::pill(ui, &chip.label, chip.selected, chip.tooltip)
-                            .clicked()
-                        {
+                        if cgui::pill(ui, &chip.label, chip.selected, chip.tooltip).clicked() {
                             self.toggle_curve(chip.index);
                         }
                     }
@@ -4526,7 +4515,9 @@ fn decode_share_uri(uri: &str) -> anyhow::Result<Preferences> {
     }
     let bytes = payload
         .as_bytes()
-        .chunks_exact(2)
+        .as_chunks::<2>()
+        .0
+        .iter()
         .map(|pair| {
             let high = (pair[0] as char)
                 .to_digit(16)
@@ -5356,15 +5347,18 @@ smoothing_octaves = 3
             app.active = [phone].into_iter().collect();
             // Give the curve a band the panel would have installed so the
             // export names it and writes its filter lines.
-            app.eq_filters.insert(phone, vec![super::EqRow {
-                filter: super::equalizer::Filter::new(
-                    super::equalizer::FilterType::LowShelf,
-                    100.0,
-                    0.7,
-                    6.0,
-                ),
-                enabled: true,
-            }]);
+            app.eq_filters.insert(
+                phone,
+                vec![super::EqRow {
+                    filter: super::equalizer::Filter::new(
+                        super::equalizer::FilterType::LowShelf,
+                        100.0,
+                        0.7,
+                        6.0,
+                    ),
+                    enabled: true,
+                }],
+            );
 
             let (name, parametric) = app.parametric_export().expect("a curve is being edited");
             assert_eq!(name, "HTH67 Filters.txt");
@@ -5463,16 +5457,14 @@ smoothing_octaves = 3
         // visit would see.
         assert!(app.eq_filters.is_empty());
         let defaults: Vec<super::EqRow> = (0..5)
-            .map(|_| {
-                super::EqRow {
-                    filter: super::equalizer::Filter::new(
-                        super::equalizer::FilterType::Peaking,
-                        0.0,
-                        1.0,
-                        0.0,
-                    ),
-                    enabled: true,
-                }
+            .map(|_| super::EqRow {
+                filter: super::equalizer::Filter::new(
+                    super::equalizer::FilterType::Peaking,
+                    0.0,
+                    1.0,
+                    0.0,
+                ),
+                enabled: true,
             })
             .collect();
         assert_eq!(defaults.len(), 5, "the reference shows five default bands");

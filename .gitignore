@@ -17,6 +17,7 @@ data_deltas/*
 /data/real/
 /.venv/
 .impeccable/*
+.opencode/skills/egui-audit/
 /devicePEQ/
 /.playwright-cli/
 /docs/design-reference/native-current.png

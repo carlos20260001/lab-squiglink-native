@@ -1357,7 +1357,7 @@ mod tests {
     fn target_curves_do_not_stretch_the_plotted_db_range() {
         // A target reaching 14.7 dB at 20 kHz must not drag the domain down to
         // 10 dB and compress the measurements it is being compared against.
-        let measurement = PlotCurve {
+        let _measurement = PlotCurve {
             label: "M",
             label_key: "m",
             points: &[
@@ -1400,7 +1400,7 @@ mod tests {
             dashed: false,
             target: false,
         };
-        let without_target = super::y_range(&[measurement.clone()]);
+        let without_target = super::y_range(&[measurement]);
         let with_target = super::y_range(&[measurement, target]);
         assert_eq!(with_target, without_target);
         assert!(
