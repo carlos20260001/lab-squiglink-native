@@ -118,10 +118,10 @@ macro_rules! palette {
 
 palette! {
     // Surfaces, ordered from deepest to nearest the viewer.
-    surface_sunken => Color32::from_rgb(0x10, 0x12, 0x16), Color32::from_rgb(0xE4, 0xE8, 0xEE);
-    surface_base    => Color32::from_rgb(0x16, 0x18, 0x1D), Color32::from_rgb(0xF6, 0xF7, 0xF9);
-    surface_panel   => Color32::from_rgb(0x1E, 0x21, 0x27), Color32::from_rgb(0xEE, 0xF0, 0xF4);
-    surface_raised  => Color32::from_rgb(0x26, 0x2A, 0x32), Color32::from_rgb(0xFF, 0xFF, 0xFF);
+    surface_sunken => Color32::from_rgb(0x0F, 0x0F, 0x0F), Color32::from_rgb(0xE4, 0xE8, 0xEE);
+    surface_base    => Color32::from_rgb(0x12, 0x12, 0x12), Color32::from_rgb(0xF6, 0xF7, 0xF9);
+    surface_panel   => Color32::from_rgb(0x1E, 0x1E, 0x1E), Color32::from_rgb(0xEE, 0xF0, 0xF4);
+    surface_raised  => Color32::from_rgb(0x2A, 0x2A, 0x2A), Color32::from_rgb(0xFF, 0xFF, 0xFF);
 
     // Text. Every step clears 4.5:1 on its own surface except tertiary, which is
     // reserved for labels that never carry information alone.

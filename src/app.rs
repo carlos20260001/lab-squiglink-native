@@ -23,23 +23,6 @@ const EQ_CURVE_COLOR_SPREAD: usize = 4;
 /// The reference tool's panel shows five bands; the budget is ours, since the
 /// live page does not expose one.
 const DEFAULT_EQ_MAX_FILTERS: usize = 10;
-/// The five bands a curve starts with, a Harman-shaped starting point. The
-/// reference shows five default bands; the values on the live page could not
-/// be read, so these are this tool's own defaults rather than a port.
-fn default_eq_filters() -> Vec<EqRow> {
-    [
-        (equalizer::FilterType::LowShelf, 105.0, 0.7, 6.0),
-        (equalizer::FilterType::Peaking, 280.0, 1.0, -4.0),
-        (equalizer::FilterType::Peaking, 1000.0, 1.0, -3.0),
-        (equalizer::FilterType::Peaking, 3500.0, 1.0, 3.0),
-        (equalizer::FilterType::HighShelf, 9000.0, 0.7, -4.0),
-    ]
-    .map(|(filter_type, freq, q, gain)| EqRow {
-        filter: equalizer::Filter::new(filter_type, freq, q, gain),
-        enabled: true,
-    })
-    .into()
-}
 /// Height of the manager panel's header and padding before any curve rows.
 const MANAGER_HEIGHT_BASE: f32 = 46.0;
 /// Vertical room one curve row occupies when identity and controls share a line.
@@ -54,11 +37,12 @@ const _: () = assert!(MANAGER_STACKED_ROW_HEIGHT > MANAGER_ROW_HEIGHT);
 /// control clusters measure ~800px together at the app's type scale, and a
 /// single line narrower than that clips the right-hand controls off the edge.
 const MANAGER_ROW_STACK_WIDTH: f32 = 800.0;
-/// The most the manager will ever take from the graph.
-/// How tall the target strip is, and the only height it can be: it is a single
-/// row of chips, and letting it grow would take the room from the manager and
-/// the graph rather than from anything a user chose to give it.
-const TARGET_STRIP_HEIGHT: f32 = 44.0;
+
+/// Below this library-panel width the Models tab stacks its brand and model
+/// lists; above it they sit side by side, mirroring the reference tool's
+/// Models tab. The panel defaults to 250px, so the stacked path is the common
+/// one and the split only appears when the user widens the column.
+const MODEL_SPLIT_WIDTH: f32 = 280.0;
 
 const MANAGER_MAX_HEIGHT: f32 = 460.0;
 
@@ -161,13 +145,6 @@ fn manager_heights(width: f32, curve_count: usize) -> (f32, f32) {
     };
     (content.clamp(min_height, MANAGER_MAX_HEIGHT), min_height)
 }
-/// Content width below which the layout stacks instead of running the tab column
-/// beside the graph. Matches the reference tool's transition, which sits between
-/// 900 and 1100px.
-const COMPACT_LAYOUT_WIDTH: f32 = 1024.0;
-/// The brand uploaded measurements are listed under. A synthetic brand keeps a
-/// user's own measurements out of the reference database's brands, and marks
-/// them so they are left out of shared links.
 const UPLOADED_BRAND: &str = "Uploaded";
 const CONFIG_DIRECTORY_NAME: &str = "squiglab";
 const SHARE_URI_PREFIX: &str = "squiglab://state/v1/";
@@ -351,6 +328,22 @@ enum LibraryTab {
     Equalizer,
 }
 
+/// The top-of-window category pills the reference tool shows beside its
+/// wordmark. SquigLab carries the three ear-device categories; picking one is
+/// state only for now (the database is not split by category), so the pills
+/// read as chrome matching the reference rather than a filter that changes what
+/// is shown.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+enum Category {
+    /// In-ear monitors — the default for this tool.
+    #[default]
+    Iems,
+    /// Full-size headphones.
+    Headphones,
+    /// Earbuds.
+    Earbuds,
+}
+
 /// One row of a curve's equalizer: a filter and whether the row is switched
 /// on. The reference tool keeps a disabled row in place rather than deleting
 /// it, so a filter can be toggled back on without re-entering it.
@@ -519,12 +512,6 @@ impl ToolbarDensity {
         }
     }
 
-    /// Whether the wordmark is drawn beside the controls. The window title
-    /// already names the application, so it is the first thing to go.
-    fn shows_wordmark(self) -> bool {
-        matches!(self, Self::Full)
-    }
-
     /// Whether the processing and view-toggle controls stay inline instead of
     /// moving into the overflow menu.
     fn shows_processing(self) -> bool {
@@ -604,6 +591,8 @@ pub struct CrinGraphApp {
     library_tab: LibraryTab,
     /// The brand the model list is narrowed to, chosen in the brands tab.
     brand_filter: Option<String>,
+    /// The top category pill currently selected (IEMS / HEADPHONES / EARBUDS).
+    category: Category,
     /// The measurement whose equalizer the panel is editing. Session state:
     /// the panel re-derives a sensible curve rather than restoring a choice.
     eq_phone: Option<usize>,
@@ -705,6 +694,7 @@ impl Default for CrinGraphApp {
             debug_hooks: false,
             library_tab: LibraryTab::Models,
             brand_filter: None,
+            category: Category::default(),
             eq_phone: None,
             eq_target: None,
             eq_max_filters: DEFAULT_EQ_MAX_FILTERS,
@@ -1356,6 +1346,39 @@ impl CrinGraphApp {
         }
     }
 
+    /// The top chrome bar, mirroring the reference tool's header: wordmark top-left
+    /// and category pills (IEMS | HEADPHONES | EARBUDS) flowing to the right. The
+    /// wordmark no longer lives in the toolbar, so the toolbar keeps processing /
+    // actions only.
+    fn header_panel(&mut self, ui: &mut Ui) {
+        use squiglab::ui as cgui;
+        let palette = squiglab::theme::Palette::resolve(ui.visuals().dark_mode);
+        egui::Panel::top("header")
+            .exact_size(48.0)
+            .frame(
+                egui::Frame::new()
+                    .inner_margin(egui::Margin::symmetric(12, 0))
+                    .fill(palette.surface_sunken),
+            )
+            .show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    cgui::wordmark(ui);
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        cgui::segmented(
+                            ui,
+                            &[
+                                (Category::Earbuds, "EARBUDS"),
+                                (Category::Headphones, "HEADPHONES"),
+                                (Category::Iems, "IEMS"),
+                            ],
+                            &mut self.category,
+                            None,
+                        );
+                    });
+                });
+            });
+    }
+
     fn toolbar(&mut self, ui: &mut Ui) {
         use squiglab::ui as cgui;
         let previous_processing_settings = (
@@ -1374,11 +1397,6 @@ impl CrinGraphApp {
             let density = ToolbarDensity::for_width(ui.available_width());
             ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing.x = cgui::Spacing::COMPACT;
-
-                if density.shows_wordmark() {
-                    cgui::wordmark(ui);
-                    cgui::cluster_rule(ui);
-                }
 
                 // ---- View range ----
                 cgui::zoom_segmented(ui, &mut self.zoom);
@@ -1559,23 +1577,26 @@ impl CrinGraphApp {
         Ok(())
     }
 
-    fn selector_panel(&mut self, ui: &mut Ui) {
+    /// The library column: brands, the model list, and the equalizer share one
+    /// slot, matching the reference tool's column. `left` places it beside the
+    /// graph (desktop); `false` stacks it below the graph (mobile).
+    fn selector_panel(&mut self, ui: &mut Ui, left: bool) {
         if !self.show_measurements {
             return;
         }
-        if ui.available_width() < COMPACT_LAYOUT_WIDTH {
+        if left {
+            egui::Panel::left("selector")
+                .resizable(true)
+                .default_size(250.0)
+                .size_range(190.0..=420.0)
+                .show(ui, |ui| self.library_column(ui));
+        } else {
             // Compact viewport: the library sits below the graph, matching the
             // reference tool's stacked order, and takes the width it needs.
             egui::Panel::bottom("selector")
                 .resizable(true)
                 .default_size(280.0)
                 .size_range(120.0..=620.0)
-                .show(ui, |ui| self.library_column(ui));
-        } else {
-            egui::Panel::left("selector")
-                .resizable(true)
-                .default_size(250.0)
-                .size_range(190.0..=420.0)
                 .show(ui, |ui| self.library_column(ui));
         }
     }
@@ -1642,6 +1663,29 @@ impl CrinGraphApp {
             *counts.get_mut(&brand_name(group)).expect("just inserted") += 1;
         }
         counts.into_iter().collect()
+    }
+
+    /// The models that match the current search and brand filter, as
+    /// `(group index, model name)` pairs. `brand_filter` overrides
+    /// `self.brand_filter` so a brand picked this frame narrows the list
+    /// within the same frame instead of the next.
+    fn matching_models(
+        &self,
+        _counts: &[(String, usize)],
+        brand_filter: Option<&str>,
+    ) -> Vec<(usize, String)> {
+        let mut models: Vec<(usize, String)> = Vec::new();
+        for (index, group) in self.groups.iter().enumerate() {
+            if group.target {
+                continue; // Reference targets live in the target strip, not here.
+            }
+            let brand = brand_name(group);
+            let narrowed = brand_filter.is_none_or(|chosen| chosen == brand);
+            if narrowed && matches_search(&format!("{brand} {}", group.name), &self.search) {
+                models.push((index, group.name.clone()));
+            }
+        }
+        models
     }
 
     /// The measurement whose equalizer the panel is editing: the one chosen in
@@ -2333,11 +2377,25 @@ impl CrinGraphApp {
             ui.label("Select a measurement to give it an equalizer.");
             return;
         };
-        // A curve that has never been edited starts with the default bands. A
-        // curve whose rows were emptied keeps them empty: the empty list is the
-        // record that the user cleared it.
+        // A curve that has never been edited starts with empty bands, mirroring
+        // the reference tool. A curve whose rows were emptied keeps them empty:
+        // the empty list is the record that the user cleared it.
         if let std::collections::btree_map::Entry::Vacant(slot) = self.eq_filters.entry(phone) {
-            slot.insert(default_eq_filters());
+            slot.insert(
+                (0..5)
+                    .map(|_| {
+                        EqRow {
+                            filter: equalizer::Filter::new(
+                                equalizer::FilterType::Peaking,
+                                0.0,
+                                1.0,
+                                0.0,
+                            ),
+                            enabled: true,
+                        }
+                    })
+                    .collect(),
+            );
             self.dirty = true;
         }
 
@@ -2348,45 +2406,50 @@ impl CrinGraphApp {
             .iter()
             .map(|&index| self.groups[index].name.clone())
             .collect();
-        let mut selected_phone = Some(phone);
-        egui::ComboBox::from_id_salt("eq_phone")
-            .selected_text(
-                measurements
-                    .iter()
-                    .position(|&index| Some(index) == selected_phone)
-                    .map(|position| names[position].as_str())
-                    .unwrap_or("Measurement"),
-            )
-            .show_ui(ui, |ui| {
-                for (index, name) in measurements.iter().zip(&names) {
-                    ui.selectable_value(&mut selected_phone, Some(*index), name);
-                }
-            });
-        if selected_phone != Some(phone) {
-            self.eq_phone = selected_phone;
-        }
         let targets: Vec<usize> = self.active_targets.iter().copied().collect();
-        let mut selected_target = self.eq_target();
-        let target_label = selected_target
+        let target_label = self
+            .eq_target()
             .map(|index| self.groups[index].name.clone())
             .unwrap_or_else(|| "None".to_owned());
-        egui::ComboBox::from_id_salt("eq_target")
-            .selected_text(target_label.as_str())
-            .show_ui(ui, |ui| {
-                for index in &targets {
-                    ui.selectable_value(
-                        &mut selected_target,
-                        Some(*index),
-                        &self.groups[*index].name,
-                    );
-                }
-            });
-        if selected_target != self.eq_target() {
-            self.eq_target = selected_target;
-        }
-        if ui.button("Auto EQ").clicked() {
-            self.run_auto_eq();
-        }
+        ui.horizontal(|ui| {
+            let mut selected_phone = Some(phone);
+            egui::ComboBox::from_id_salt("eq_phone")
+                .selected_text(
+                    measurements
+                        .iter()
+                        .position(|&index| Some(index) == selected_phone)
+                        .map(|position| names[position].as_str())
+                        .unwrap_or("Measurement"),
+                )
+                .show_ui(ui, |ui| {
+                    for (index, name) in measurements.iter().zip(&names) {
+                        ui.selectable_value(&mut selected_phone, Some(*index), name);
+                    }
+                });
+            if selected_phone != Some(phone) {
+                self.eq_phone = selected_phone;
+            }
+            ui.add_space(cgui::Spacing::COMPACT);
+            let mut selected_target = self.eq_target();
+            egui::ComboBox::from_id_salt("eq_target")
+                .selected_text(target_label.as_str())
+                .show_ui(ui, |ui| {
+                    for index in &targets {
+                        ui.selectable_value(
+                            &mut selected_target,
+                            Some(*index),
+                            &self.groups[*index].name,
+                        );
+                    }
+                });
+            if selected_target != self.eq_target() {
+                self.eq_target = selected_target;
+            }
+            ui.add_space(cgui::Spacing::COMPACT);
+            if ui.button("Auto EQ").clicked() {
+                self.run_auto_eq();
+            }
+        });
 
         // --- the filter table ---
         ui.add_space(cgui::Spacing::COMPACT);
@@ -2405,12 +2468,10 @@ impl CrinGraphApp {
                 header(ui, "Frequency");
                 header(ui, "Gain");
                 header(ui, "Q");
-                ui.allocate_space(egui::vec2(20.0, 0.0));
                 ui.end_row();
             });
 
         let mut rows = self.eq_filters.get(&phone).cloned().unwrap_or_default();
-        let mut removals = Vec::new();
         let mut changed = false;
         let mut sort_requested = false;
         egui::Grid::new("eq_rows")
@@ -2448,7 +2509,7 @@ impl CrinGraphApp {
                     if ui
                         .add(
                             egui::DragValue::new(&mut frequency)
-                                .range(20.0..=20_000.0)
+                                .range(0.0..=20_000.0)
                                 .speed(10.0)
                                 .suffix(" Hz"),
                         )
@@ -2470,26 +2531,15 @@ impl CrinGraphApp {
                         changed = true;
                     }
                     if ui
-                        .add(egui::DragValue::new(&mut q).range(0.1..=20.0).speed(0.1))
+                        .add(egui::DragValue::new(&mut q).range(0.0..=20.0).speed(0.1))
                         .changed()
                     {
                         row.filter.q = q;
                         changed = true;
                     }
-                    if ui
-                        .button("\u{2715}")
-                        .on_hover_text("Remove this band")
-                        .clicked()
-                    {
-                        removals.push(row_index);
-                    }
                     ui.end_row();
                 }
             });
-        for row_index in removals.into_iter().rev() {
-            rows.remove(row_index);
-            changed = true;
-        }
         if changed {
             self.eq_filters.insert(phone, rows);
             self.dirty = true;
@@ -2515,6 +2565,17 @@ impl CrinGraphApp {
                 });
                 self.eq_filters.insert(phone, rows);
                 self.dirty = true;
+            }
+            if ui
+                .button("−")
+                .on_hover_text("Remove the last band")
+                .clicked()
+            {
+                if let Some(mut rows) = self.eq_filters.get(&phone).cloned() {
+                    rows.pop();
+                    self.eq_filters.insert(phone, rows);
+                    self.dirty = true;
+                }
             }
             if ui
                 .button("Sort")
@@ -2614,7 +2675,7 @@ impl CrinGraphApp {
         ui.add_space(cgui::Spacing::TIGHT);
         ui.add(
             egui::TextEdit::singleline(&mut self.search)
-                .hint_text("Search measurements and targets")
+                .hint_text("Search models")
                 .font(squiglab::theme::font(squiglab::theme::TypeStep::Body))
                 .text_color(palette.text_primary),
         );
@@ -2629,58 +2690,57 @@ impl CrinGraphApp {
             return;
         }
 
-        let mut measurements = BTreeMap::<String, Vec<(usize, String)>>::new();
-        let mut targets = BTreeMap::<String, Vec<(usize, String)>>::new();
-        for (index, group) in self.groups.iter().enumerate() {
-            let brand = brand_name(group);
-            let narrowed = self
-                .brand_filter
-                .as_ref()
-                .is_none_or(|chosen| chosen == &brand);
-            if narrowed && matches_search(&format!("{brand} {}", group.name), &self.search) {
-                let groups = if group.target {
-                    &mut targets
-                } else {
-                    &mut measurements
-                };
-                groups
-                    .entry(brand)
-                    .or_default()
-                    .push((index, group.name.clone()));
-            }
-        }
+        let counts = self.brand_model_counts();
+
         let mut section = LibrarySection::default();
-        egui::ScrollArea::vertical()
-            .id_salt("library")
-            .show(ui, |ui| {
-                cgui::section_header(ui, "Measurements", None);
-                ui.add_space(cgui::Spacing::MICRO);
-                for (brand, models) in measurements {
-                    self.brand_section(ui, "library_brand", &brand, &models, false, &mut section);
-                }
-                ui.add_space(cgui::Spacing::TIGHT);
-                ui.separator();
-                cgui::section_header(ui, "Targets", Some(&self.active_targets.len().to_string()));
-                ui.add_space(cgui::Spacing::MICRO);
-                for (category, models) in targets {
-                    self.brand_section(
-                        ui,
-                        "library_target",
-                        &category,
-                        &models,
-                        true,
-                        &mut section,
-                    );
-                }
-                ui.add_space(cgui::Spacing::TIGHT);
-                ui.separator();
-                self.delta_library_section(ui, &mut section);
-            });
-        for index in section.toggles {
-            self.toggle_curve(index);
+        let wide = ui.available_width() >= MODEL_SPLIT_WIDTH;
+        let (brand_change, toggles) = if wide {
+            // Unequal split mirroring the reference tool's Models tab: a
+            // narrower brand sub-list beside a wider model sub-list.
+            let total_width = ui.available_width();
+            let brand_width = total_width * 0.33;
+            let model_width = total_width * 0.67;
+            ui.horizontal(|ui| {
+                let brand_change = ui
+                    .allocate_ui_with_layout(
+                        egui::vec2(brand_width, f32::INFINITY),
+                        egui::Layout::top_down(egui::Align::Min),
+                        |ui| self.brand_column(ui, counts.as_slice()),
+                    )
+                    .inner;
+                // Effective filter: brand just picked, else current filter,
+                // so narrowing lands in the same frame instead of the next.
+                let effective = brand_change
+                    .as_ref()
+                    .and_then(|change| change.as_deref())
+                    .or(self.brand_filter.as_deref());
+                let models = self.matching_models(counts.as_slice(), effective);
+                let toggles = ui
+                    .allocate_ui_with_layout(
+                        egui::vec2(model_width, f32::INFINITY),
+                        egui::Layout::top_down(egui::Align::Min),
+                        |ui| self.model_column(ui, &models, &mut section),
+                    )
+                    .inner;
+                (brand_change, toggles)
+            }).inner
+        } else {
+            let brand_change = self.brand_column(ui, counts.as_slice());
+            let effective = brand_change
+                .as_ref()
+                .and_then(|change| change.as_deref())
+                .or(self.brand_filter.as_deref());
+            let models = self.matching_models(counts.as_slice(), effective);
+            let toggles = self.model_column(ui, &models, &mut section);
+            (brand_change, toggles)
+        };
+
+        if brand_change.is_some() {
+            self.brand_filter = brand_change.flatten();
+            self.library_tab = LibraryTab::Models;
         }
-        for index in section.delta_toggles {
-            self.toggle_delta(index);
+        for index in toggles {
+            self.toggle_curve(index);
         }
         // Scroll the first selected row into view once: a session restored
         // with a curve far down a list of thousands would otherwise open at
@@ -2693,63 +2753,72 @@ impl CrinGraphApp {
         }
     }
 
+    /// The brand sub-list of the Models tab: "All brands" plus each brand with
+    /// its model count. Picking a brand narrows the model list beside it.
+    ///
+    /// Read-only: it reports the brand the user clicked rather than mutating
+    /// state, so it can run side by side with the model column.
+    fn brand_column(&self, ui: &mut Ui, counts: &[(String, usize)]) -> Option<Option<String>> {
+        use squiglab::ui as cgui;
+        ui.spacing_mut().item_spacing.y = cgui::Spacing::TIGHT;
+        if self.brand_filter.is_some()
+            && ui.selectable_label(false, "All brands").clicked()
+        {
+            return Some(None);
+        }
+        for (brand, count) in counts {
+            let selected = self.brand_filter.as_deref() == Some(brand.as_str());
+            let label = RichText::new(format!("{brand} ({count})"))
+                .strong()
+                .size(squiglab::theme::TypeStep::Body.size());
+            if ui.selectable_label(selected, label).clicked() {
+                return Some(Some(brand.clone()));
+            }
+        }
+        None
+    }
+
+    /// The model sub-list of the Models tab: one row per matching model, each
+    /// named with a right-aligned `+` add button. Clicking `+` toggles the
+    /// model into (or out of) the active set.
+    ///
+    /// Read-only: it reports which models were clicked rather than mutating
+    /// state, so it can run side by side with the brand column.
+    fn model_column(
+        &self,
+        ui: &mut Ui,
+        models: &[(usize, String)],
+        section: &mut LibrarySection,
+    ) -> Vec<usize> {
+        use squiglab::ui as cgui;
+        let mut toggles = Vec::new();
+        ui.spacing_mut().item_spacing.y = cgui::Spacing::TIGHT;
+        for (index, model_name) in models {
+            let selected = self.active.contains(index);
+            let response = ui.horizontal(|ui| {
+                ui.label(
+                    RichText::new(model_name)
+                        .size(squiglab::theme::TypeStep::Body.size()),
+                );
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if ui.button("+").clicked() {
+                        toggles.push(*index);
+                    }
+                });
+            });
+            if selected && section.reveal_rect.is_none() {
+                section.reveal_rect = Some(response.response.rect);
+            }
+        }
+        toggles
+    }
+
     /// The delta targets in the library.
     ///
     /// They sit apart from the targets they correct against, because they are
     /// not curves to compare: selecting one says the readings were taken on a
     /// rig that needs correcting, and nothing else. They never spend one of the
     /// eight measurement slots, for the same reason targets do not.
-    fn delta_library_section(&mut self, ui: &mut Ui, section: &mut LibrarySection) {
-        use squiglab::ui as cgui;
-        cgui::section_header(
-            ui,
-            "Delta targets",
-            (!self.active_deltas.is_empty()).then_some(&self.active_deltas.len().to_string()),
-        );
-        ui.add_space(cgui::Spacing::MICRO);
-        if let Some(error) = &self.delta_error {
-            ui.colored_label(Color32::LIGHT_RED, error);
-            return;
-        }
-        if self.delta_targets.is_empty() {
-            ui.label(
-                RichText::new("No rig corrections in the delta directory.")
-                    .size(squiglab::theme::TypeStep::Body.size()),
-            );
-            return;
-        }
-        for index in 0..self.delta_targets.len() {
-            let target = &self.delta_targets[index];
-            let mut selected = self.active_deltas.contains(&index);
-            let row = ui.horizontal(|ui| {
-                ui.spacing_mut().item_spacing.x = cgui::Spacing::COMPACT;
-                let response = ui.checkbox(
-                    &mut selected,
-                    RichText::new(&target.name).size(squiglab::theme::TypeStep::Body.size()),
-                );
-                // A placeholder corrects nothing, so saying so next to the name
-                // is the difference between a stub and a rig someone trusts.
-                if target.is_placeholder() {
-                    ui.colored_label(
-                        squiglab::theme::Palette::resolve(ui.visuals().dark_mode).warning,
-                        "placeholder",
-                    )
-                    .on_hover_text(
-                        "Built from placeholder calibrations, not measurements. It corrects nothing.",
-                    );
-                }
-                response
-            });
-            if let Some(note) = &target.note {
-                row.response.on_hover_text(note);
-            }
-            if row.inner.changed() {
-                section.delta_toggles.push(index);
-            }
-            ui.spacing_mut().item_spacing.y = cgui::Spacing::MICRO;
-        }
-    }
-
     /// Turn a rig correction on or off.
     fn toggle_delta(&mut self, index: usize) {
         if self.active_deltas.contains(&index) {
@@ -2766,140 +2835,54 @@ impl CrinGraphApp {
     /// state survives the search filter changing the counts in its title, and a
     /// brand holding a selected curve opens by default so the selection is not
     /// hidden inside a collapsed brand.
-    fn brand_section(
-        &mut self,
-        ui: &mut Ui,
-        id_salt: &str,
-        name: &str,
-        models: &[(usize, String)],
-        target: bool,
-        section: &mut LibrarySection,
-    ) {
+    /// The manager content: one row per active curve, plus rig corrections last.
+    /// Rendered inside `lower_strip` rather than owning its own panel, so the
+    /// strip never spans under the library column.
+    fn manager_content(&mut self, ui: &mut Ui) {
         use squiglab::ui as cgui;
-        let contains_active = models
-            .iter()
-            .any(|(index, _)| self.active.contains(index) || self.active_targets.contains(index));
-        let mut state = egui::collapsing_header::CollapsingState::load_with_default_open(
-            ui.ctx(),
-            egui::Id::new((id_salt, name)),
-            contains_active,
+        let count =
+            self.active.len() + self.active_targets.len() + self.active_deltas.len();
+        squiglab::ui::section_header(
+            ui,
+            "Active curves",
+            (count > 0).then_some(&count.to_string()),
         );
-        if self.library_reveal_pending && contains_active {
-            state.set_open(true);
+        ui.add_space(cgui::Spacing::TIGHT);
+        if count == 0 {
+            ui.label("Select up to eight measurements.");
+            return;
         }
-        let header_response = state.show_header(ui, |ui| {
-            ui.label(RichText::new(format!("{name} ({})", models.len())).strong());
-        });
-        header_response.body(|ui| {
-            ui.spacing_mut().item_spacing.y = cgui::Spacing::TIGHT;
-            for (index, model_name) in models {
-                let mut selected = if target {
-                    self.active_targets.contains(index)
-                } else {
-                    self.active.contains(index)
-                };
-                // Targets do not spend a measurement slot, so they stay
-                // checkable when the slots are full; measurements do not.
-                let enabled = if target {
-                    !self.pinned.contains(index) || !selected
-                } else {
-                    !self.pinned.contains(index)
-                        && (selected || self.active.len() < MAX_ACTIVE_CURVES)
-                };
-                let mut response = ui.add_enabled(
-                    enabled,
-                    egui::Checkbox::new(
-                        &mut selected,
-                        RichText::new(model_name).size(squiglab::theme::TypeStep::Body.size()),
-                    ),
-                );
-                if target {
-                    response =
-                        response.on_hover_text("Target curves do not use a measurement slot.");
-                }
-                if selected && section.reveal_rect.is_none() {
-                    section.reveal_rect = Some(response.rect);
-                }
-                if response.changed() {
-                    section.toggles.push(*index);
-                }
+        egui::ScrollArea::vertical().show(ui, |ui| {
+            let mut removals = Vec::new();
+            let mut delta_removals = Vec::new();
+            // A row too narrow for identity and controls side by side
+            // stacks them instead of clipping the controls off the edge.
+            let stack_rows = ui.available_width() < MANAGER_ROW_STACK_WIDTH;
+            for index in self
+                .active
+                .iter()
+                .chain(self.active_targets.iter())
+                .copied()
+                .collect::<Vec<_>>()
+            {
+                let group = self.groups[index].clone();
+                self.manager_row(ui, index, &group, stack_rows, &mut removals);
+                ui.separator();
+            }
+            // Rig corrections come last: they are corrections to what
+            // is above them, not independent curves to read against.
+            for index in self.active_deltas.iter().copied().collect::<Vec<_>>() {
+                let target = self.delta_targets[index].clone();
+                self.manager_delta_row(ui, index, &target, stack_rows, &mut delta_removals);
+                ui.separator();
+            }
+            for index in removals {
+                self.toggle_curve(index);
+            }
+            for index in delta_removals {
+                self.toggle_delta(index);
             }
         });
-    }
-
-    fn manager_panel(&mut self, ui: &mut Ui) {
-        use squiglab::ui as cgui;
-        // Unconditional. The manager is the only place the selection is
-        // accounted for: which headphones, which targets, and which rig
-        // corrections are in force. It is also what fills the space the graph
-        // leaves below its plot, so hiding it left that space dead grey with
-        // nothing in it, which read as the app having failed to draw.
-        // The graph no longer fills the window, so the manager can reclaim the
-        // space it freed: one row per active curve, no scrolling, and stop
-        // growing once every curve is visible. The panel stays resizable, but
-        // never below what its contents need; see the minimum below.
-        // A selected rig correction occupies a row here like any other curve:
-        // it is something the graph is currently being corrected by, and it has
-        // to be visible and removable in the same place as everything else it
-        // is doing.
-        let curve_count = self.active.len() + self.active_targets.len() + self.active_deltas.len();
-        // Size the panel from the row height this viewport will actually use,
-        // so every selected curve is visible without scrolling inside a panel
-        // that is too short to hold it.
-        let (default_height, min_height) = manager_heights(ui.available_width(), curve_count);
-        // The manager sits under the graph and spans the full width, matching
-        // the reference tool. A row has the whole width to work with, so curve
-        // identity sits on the left and every control for that curve lines up on
-        // the right without the row ever needing to wrap.
-        egui::Panel::bottom("curve_manager")
-            .resizable(true)
-            .default_size(default_height)
-            .size_range(min_height..=MANAGER_MAX_HEIGHT)
-            .show(ui, |ui| {
-                let count =
-                    self.active.len() + self.active_targets.len() + self.active_deltas.len();
-                squiglab::ui::section_header(
-                    ui,
-                    "Active curves",
-                    (count > 0).then_some(&count.to_string()),
-                );
-                ui.add_space(cgui::Spacing::TIGHT);
-                if count == 0 {
-                    ui.label("Select up to eight measurements.");
-                    return;
-                }
-                egui::ScrollArea::vertical().show(ui, |ui| {
-                    let mut removals = Vec::new();
-                    let mut delta_removals = Vec::new();
-                    // A row too narrow for identity and controls side by side
-                    // stacks them instead of clipping the controls off the edge.
-                    let stack_rows = ui.available_width() < MANAGER_ROW_STACK_WIDTH;
-                    for index in self
-                        .active
-                        .iter()
-                        .chain(self.active_targets.iter())
-                        .copied()
-                        .collect::<Vec<_>>()
-                    {
-                        let group = self.groups[index].clone();
-                        self.manager_row(ui, index, &group, stack_rows, &mut removals);
-                        ui.separator();
-                    }
-                    // Rig corrections come last: they are corrections to what
-                    // is above them, not independent curves to read against.
-                    for index in self.active_deltas.iter().copied().collect::<Vec<_>>() {
-                        let target = self.delta_targets[index].clone();
-                        self.manager_delta_row(ui, index, &target, stack_rows, &mut delta_removals);
-                        ui.separator();
-                    }
-                    for index in removals {
-                        self.toggle_curve(index);
-                    }
-                    for index in delta_removals {
-                        self.toggle_delta(index);
-                    }
-                });
-            });
     }
 
     /// One rig-correction row in the manager.
@@ -3664,106 +3647,123 @@ impl CrinGraphApp {
             .collect()
     }
 
-    /// The strip of targets between the graph and the manager.
-    ///
-    /// What is being read against is a different question from how far the
-    /// headphones are from it, and on the reference tool the two get their own
-    /// bands for that reason. The strip answers the first — which reference
-    /// targets, and which rig corrections. The manager below it answers the
-    /// second, one row per curve.
-    ///
-    /// Both lists scroll sideways rather than wrapping, so the strip stays one
-    /// row however many targets are in play, and a wide one costs nothing.
-    fn target_strip(&mut self, ui: &mut Ui) {
+    /// The target strip content: DELTA switch, rig-correction chips, and the
+    /// reference-target pills. Rendered inside `lower_strip` rather than owning
+    /// its own panel.
+    fn target_strip_content(&mut self, ui: &mut Ui) {
         use squiglab::ui as cgui;
         let palette = squiglab::theme::Palette::resolve(ui.visuals().dark_mode);
         let delta_open = self.show_delta;
-        egui::Panel::bottom("target_strip")
-            .resizable(false)
-            .exact_size(TARGET_STRIP_HEIGHT)
-            .frame(
-                egui::Frame::default()
-                    .fill(palette.surface_panel)
-                    .inner_margin(egui::Margin::symmetric(cgui::Spacing::COMPACT as i8, 0)),
+        ui.spacing_mut().item_spacing.x = cgui::Spacing::COMPACT;
+        ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = cgui::Spacing::COMPACT;
+
+            // The deviation window's switch, here rather than in the
+            // toolbar because it is a question about the targets named
+            // beside it.
+            let glyph_color = if delta_open {
+                palette.on_accent
+            } else {
+                palette.text_secondary
+            };
+            if cgui::pill(
+                ui,
+                "DELTA",
+                delta_open,
+                "Open the window showing how far each curve is from the target.",
             )
-            .show(ui, |ui| {
-                ui.horizontal_centered(|ui| {
-                    ui.spacing_mut().item_spacing.x = cgui::Spacing::COMPACT;
+            .clicked()
+            {
+                self.show_delta = !self.show_delta;
+            }
+            ui.label(
+                egui::RichText::new("\u{25b2}")
+                    .font(squiglab::theme::font(squiglab::theme::TypeStep::Caption))
+                    .color(glyph_color),
+            );
 
-                    // The deviation window's switch, here rather than in the
-                    // toolbar because it is a question about the targets named
-                    // beside it.
-                    let glyph_color = if delta_open {
-                        palette.on_accent
-                    } else {
-                        palette.text_secondary
-                    };
-                    if cgui::pill(
-                        ui,
-                        "DELTA",
-                        delta_open,
-                        "Open the window showing how far each curve is from the target.",
-                    )
-                    .clicked()
-                    {
-                        self.show_delta = !self.show_delta;
-                    }
-                    ui.label(
-                        egui::RichText::new("\u{25b2}")
-                            .font(squiglab::theme::font(squiglab::theme::TypeStep::Caption))
-                            .color(glyph_color),
-                    );
-
-                    // Rig corrections. Capped, because the reference targets
-                    // need the rest of the strip: a long list of corrections
-                    // that took everything would leave the targets — the thing
-                    // the readings are measured against — with nowhere to be.
-                    if !self.delta_targets.is_empty() {
-                        let cap = ui.available_width() * 0.45;
-                        egui::ScrollArea::horizontal()
-                            .id_salt("delta_chips")
-                            .auto_shrink([true, false])
-                            .max_width(cap)
-                            .show(ui, |ui| {
-                                ui.spacing_mut().item_spacing.x = cgui::Spacing::COMPACT;
-                                for chip in self.delta_chips() {
-                                    if cgui::pill(ui, &chip.label, chip.selected, chip.tooltip)
-                                        .clicked()
-                                    {
-                                        self.toggle_delta(chip.index);
-                                    }
-                                }
-                            });
-                    }
-                    if let Some(error) = &self.delta_error {
-                        ui.colored_label(Color32::LIGHT_RED, error);
-                    }
-
-                    cgui::cluster_rule(ui);
-
-                    // A target is what everything else is read against, so it
-                    // says so rather than sharing a heading with the
-                    // corrections.
-                    cgui::cluster_label(ui, "Reference targets");
-                    // Scrolled sideways, never wrapped. There are more targets
-                    // than any window is wide, and a target that ran off the
-                    // edge would be one the user cannot select — which reads as
-                    // the target not existing.
-                    egui::ScrollArea::horizontal()
-                        .id_salt("target_chips")
-                        .auto_shrink([true, false])
-                        .max_width(ui.available_width())
-                        .show(ui, |ui| {
-                            ui.spacing_mut().item_spacing.x = cgui::Spacing::COMPACT;
-                            for chip in self.target_chips() {
-                                if cgui::pill(ui, &chip.label, chip.selected, chip.tooltip)
-                                    .clicked()
-                                {
-                                    self.toggle_curve(chip.index);
-                                }
+            // Rig corrections. Capped, because the reference targets
+            // need the rest of the strip: a long list of corrections
+            // that took everything would leave the targets — the thing
+            // the readings are measured against — with nowhere to be.
+            if !self.delta_targets.is_empty() {
+                let cap = ui.available_width() * 0.45;
+                egui::ScrollArea::horizontal()
+                    .id_salt("delta_chips")
+                    .auto_shrink([true, false])
+                    .max_width(cap)
+                    .show(ui, |ui| {
+                        ui.spacing_mut().item_spacing.x = cgui::Spacing::COMPACT;
+                        for chip in self.delta_chips() {
+                            if cgui::pill(ui, &chip.label, chip.selected, chip.tooltip)
+                                .clicked()
+                            {
+                                self.toggle_delta(chip.index);
                             }
-                        });
+                        }
+                    });
+            }
+            if let Some(error) = &self.delta_error {
+                ui.colored_label(Color32::LIGHT_RED, error);
+            }
+
+            cgui::cluster_rule(ui);
+
+            // A target is what everything else is read against, so it
+            // says so rather than sharing a heading with the
+            // corrections.
+            cgui::cluster_label(ui, "Reference targets");
+            // Scrolled sideways, never wrapped. There are more targets
+            // than any window is wide, and a target that ran off the
+            // edge would be one the user cannot select — which reads as
+            // the target not existing.
+            egui::ScrollArea::horizontal()
+                .id_salt("target_chips")
+                .auto_shrink([true, false])
+                .max_width(ui.available_width())
+                .show(ui, |ui| {
+                    ui.spacing_mut().item_spacing.x = cgui::Spacing::COMPACT;
+                    for chip in self.target_chips() {
+                        if cgui::pill(ui, &chip.label, chip.selected, chip.tooltip)
+                            .clicked()
+                        {
+                            self.toggle_curve(chip.index);
+                        }
+                    }
                 });
+                });
+    }
+
+    /// The combined lower strip: manager rows above the reference-target pills,
+    /// and (on narrow/tall viewports) the library column stacked beneath them.
+    /// One `Panel::bottom` instead of several, so it never spans under the
+    /// library column and never fights with itself for the bottom edge.
+    fn lower_strip(&mut self, ui: &mut Ui, desktop: bool) {
+        let curve_count = self.active.len() + self.active_targets.len() + self.active_deltas.len();
+        let (default_height, min_height) = manager_heights(ui.available_width(), curve_count);
+        // On narrow/tall viewports cap the strip so the graph above keeps room;
+        // on desktop the strip is only beneath the graph, beside the library.
+        let available_height = ui.available_rect_before_wrap().height();
+        let max_height = if desktop {
+            MANAGER_MAX_HEIGHT
+        } else {
+            f32::max(min_height, (available_height * 0.60).min(MANAGER_MAX_HEIGHT))
+        };
+        let default_height = default_height.min(max_height).max(min_height);
+        egui::Panel::bottom("lower_strip")
+            .resizable(true)
+            .default_size(default_height)
+            .size_range(min_height..=max_height)
+            .show(ui, |ui| {
+                self.manager_content(ui);
+                ui.separator();
+                self.target_strip_content(ui);
+                if !desktop {
+                    ui.separator();
+                    // The library column stacks below the graph on narrow
+                    // viewports, mirroring the reference tool's mobile order.
+                    self.library_column(ui);
+                }
             });
     }
 
@@ -3870,6 +3870,7 @@ impl eframe::App for CrinGraphApp {
         if self.dirty {
             self.rebuild_display_curves();
         }
+        self.header_panel(ui);
         self.toolbar(ui);
         self.delta_window(&ctx);
         self.share_window(&ctx);
@@ -3877,27 +3878,25 @@ impl eframe::App for CrinGraphApp {
         self.upload_window(&ctx);
         self.onboarding_window(&ctx);
         self.tutorial_window(&ctx);
-        // The reference tool has two viewports: below ~1024px content width the
-        // graph stacks above the tab column, and above it the tabs sit beside the
-        // graph. `selector_panel` branches on available width to pick between
-        // them, which is still the full width here because nothing laid out
-        // above this point narrows it.
-        //
-        // Every side, top and bottom panel is laid out before the central one,
-        // and that order is not cosmetic. A `CentralPanel` uses up the rect it
-        // was given, so a bottom panel shown after it is measured against a rect
-        // with no height left and is clamped to zero: it would draw nothing at
-        // all, with the space below the graph left empty.
-        //
-        // The manager goes ahead of the library, not merely ahead of the graph,
-        // so that it spans the full width and the library sits beside the graph
-        // above it. The other way round, the library would own the full height
-        // and the manager would be squeezed into the column beside it.
-        self.status_panel(ui);
-        self.manager_panel(ui);
-        self.target_strip(ui);
-        self.selector_panel(ui);
-        self.central_panel(ui);
+        // Desktop vs mobile layout, mirroring the reference tool:
+        //   Desktop (wide landscape): library column beside the graph, lower
+        //   strip (manager + targets) beneath the graph only — never under the
+        //   library column.
+        //   Mobile (narrow or tall): graph on top, then the lower strip which
+        //   holds the manager, the targets and the library column stacked — all
+        //   inside a single bottom panel so CentralPanel always keeps room.
+        let size = ui.available_size();
+        let desktop = size.x >= 1024.0 && size.x > size.y;
+        if desktop {
+            self.selector_panel(ui, true);
+            self.status_panel(ui);
+            self.lower_strip(ui, true);
+            self.central_panel(ui);
+        } else {
+            self.status_panel(ui);
+            self.lower_strip(ui, false);
+            self.central_panel(ui);
+        }
         if self.loaded && self.load_error.is_none() {
             self.persist_preferences_if_changed();
         }
@@ -3922,14 +3921,10 @@ impl eframe::App for CrinGraphApp {
     }
 }
 
-/// What rendering one brand section of the library found: the checkboxes the
-/// user toggled, and the rect of the first selected row if the brand holds one.
+/// What rendering the Models tab found: the rect of the first selected row, so
+/// it can be scrolled into view once the tab opens.
 #[derive(Default)]
 struct LibrarySection {
-    toggles: Vec<usize>,
-    /// Delta targets toggled this frame, held apart from `toggles` because an
-    /// index into the groups is not an index into the delta targets.
-    delta_toggles: Vec<usize>,
     reveal_rect: Option<egui::Rect>,
 }
 
@@ -5140,8 +5135,17 @@ smoothing_octaves = 3
             app.load_measurements().unwrap();
             let phone = group_named(&app, "HTH67");
             app.active = [phone].into_iter().collect();
-            // Give the curve the default bands the panel would have installed.
-            app.eq_filters.insert(phone, super::default_eq_filters());
+            // Give the curve a band the panel would have installed so the
+            // export names it and writes its filter lines.
+            app.eq_filters.insert(phone, vec![super::EqRow {
+                filter: super::equalizer::Filter::new(
+                    super::equalizer::FilterType::LowShelf,
+                    100.0,
+                    0.7,
+                    6.0,
+                ),
+                enabled: true,
+            }]);
 
             let (name, parametric) = app.parametric_export().expect("a curve is being edited");
             assert_eq!(name, "HTH67 Filters.txt");
@@ -5239,7 +5243,19 @@ smoothing_octaves = 3
         // Nothing installed yet: the panel's default bands are what a first
         // visit would see.
         assert!(app.eq_filters.is_empty());
-        let defaults = super::default_eq_filters();
+        let defaults: Vec<super::EqRow> = (0..5)
+            .map(|_| {
+                super::EqRow {
+                    filter: super::equalizer::Filter::new(
+                        super::equalizer::FilterType::Peaking,
+                        0.0,
+                        1.0,
+                        0.0,
+                    ),
+                    enabled: true,
+                }
+            })
+            .collect();
         assert_eq!(defaults.len(), 5, "the reference shows five default bands");
         app.eq_filters.insert(0, defaults);
         assert_eq!(app.enabled_filters(0).len(), 5);
