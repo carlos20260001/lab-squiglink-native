@@ -45,6 +45,11 @@ const MANAGER_ROW_STACK_WIDTH: f32 = 800.0;
 const MODEL_SPLIT_WIDTH: f32 = 280.0;
 
 const MANAGER_MAX_HEIGHT: f32 = 460.0;
+/// Default / min / max height of the lower strip on mobile (library column
+/// only). Kept modest so the graph above keeps most of the viewport.
+const MOBILE_STRIP_DEFAULT_HEIGHT: f32 = 260.0;
+const MOBILE_STRIP_MIN_HEIGHT: f32 = 120.0;
+const MOBILE_STRIP_MAX_HEIGHT: f32 = 520.0;
 
 /// How wide a curve's preview is in its row.
 const PREVIEW_WIDTH: f32 = 78.0;
@@ -3734,37 +3739,41 @@ impl CrinGraphApp {
                 });
     }
 
-    /// The combined lower strip: manager rows above the reference-target pills,
-    /// and (on narrow/tall viewports) the library column stacked beneath them.
-    /// One `Panel::bottom` instead of several, so it never spans under the
-    /// library column and never fights with itself for the bottom edge.
+    /// The combined lower strip beneath the graph.
+    /// Desktop: manager rows + reference-target pills (library lives beside the
+    /// graph as a left column).
+    /// Mobile: just the library column (tabs + active-tab content), mirroring
+    /// the reference tool's stacked order: graph first, then tabs/content below.
     fn lower_strip(&mut self, ui: &mut Ui, desktop: bool) {
-        let curve_count = self.active.len() + self.active_targets.len() + self.active_deltas.len();
-        let (default_height, min_height) = manager_heights(ui.available_width(), curve_count);
-        // On narrow/tall viewports cap the strip so the graph above keeps room;
-        // on desktop the strip is only beneath the graph, beside the library.
-        let available_height = ui.available_rect_before_wrap().height();
-        let max_height = if desktop {
-            MANAGER_MAX_HEIGHT
-        } else {
-            f32::max(min_height, (available_height * 0.60).min(MANAGER_MAX_HEIGHT))
-        };
-        let default_height = default_height.min(max_height).max(min_height);
-        egui::Panel::bottom("lower_strip")
-            .resizable(true)
-            .default_size(default_height)
-            .size_range(min_height..=max_height)
-            .show(ui, |ui| {
-                self.manager_content(ui);
-                ui.separator();
-                self.target_strip_content(ui);
-                if !desktop {
+        if desktop {
+            let curve_count = self.active.len() + self.active_targets.len() + self.active_deltas.len();
+            let (default_height, min_height) = manager_heights(ui.available_width(), curve_count);
+            egui::Panel::bottom("lower_strip")
+                .resizable(true)
+                .default_size(default_height)
+                .size_range(min_height..=MANAGER_MAX_HEIGHT)
+                .show(ui, |ui| {
+                    self.manager_content(ui);
                     ui.separator();
-                    // The library column stacks below the graph on narrow
-                    // viewports, mirroring the reference tool's mobile order.
+                    self.target_strip_content(ui);
+                });
+        } else {
+            // On narrow/tall viewports the library column stacks below the
+            // graph, mirroring the reference tool's mobile order. Cap the strip
+            // so the graph above keeps room on tall viewports.
+            let available_height = ui.available_rect_before_wrap().height();
+            let max_height = f32::max(
+                MOBILE_STRIP_MIN_HEIGHT,
+                (available_height * 0.70).min(MOBILE_STRIP_MAX_HEIGHT),
+            );
+            egui::Panel::bottom("lower_strip")
+                .resizable(true)
+                .default_size(MOBILE_STRIP_DEFAULT_HEIGHT.min(max_height).max(MOBILE_STRIP_MIN_HEIGHT))
+                .size_range(MOBILE_STRIP_MIN_HEIGHT..=max_height)
+                .show(ui, |ui| {
                     self.library_column(ui);
-                }
-            });
+                });
+        }
     }
 
     fn central_panel(&mut self, ui: &mut Ui) {
@@ -3882,9 +3891,9 @@ impl eframe::App for CrinGraphApp {
         //   Desktop (wide landscape): library column beside the graph, lower
         //   strip (manager + targets) beneath the graph only — never under the
         //   library column.
-        //   Mobile (narrow or tall): graph on top, then the lower strip which
-        //   holds the manager, the targets and the library column stacked — all
-        //   inside a single bottom panel so CentralPanel always keeps room.
+        //   Mobile (narrow or tall): graph on top, then the library column
+        //   (tabs + active-tab content) stacked below — no separate manager or
+        //   target strip, matching the reference tool's mobile order.
         let size = ui.available_size();
         let desktop = size.x >= 1024.0 && size.x > size.y;
         if desktop {
@@ -3893,7 +3902,6 @@ impl eframe::App for CrinGraphApp {
             self.lower_strip(ui, true);
             self.central_panel(ui);
         } else {
-            self.status_panel(ui);
             self.lower_strip(ui, false);
             self.central_panel(ui);
         }
