@@ -45,17 +45,12 @@ const MANAGER_ROW_STACK_WIDTH: f32 = 800.0;
 const MODEL_SPLIT_WIDTH: f32 = 280.0;
 
 const MANAGER_MAX_HEIGHT: f32 = 460.0;
-/// Min / max height of the mobile bottom sheet. The collapsed sheet sizes
-/// itself to its content (manager rows, target stripbar and the pill handle),
-/// so these are only the floor and the ceiling.
-const MOBILE_STRIP_MIN_HEIGHT: f32 = 120.0;
-const MOBILE_STRIP_MAX_HEIGHT: f32 = 520.0;
-/// Vertical room the mobile sheet's pill handle row occupies above its content:
-/// the gap, the 14px pill and the separator under it.
-const MOBILE_SHEET_HANDLE_HEIGHT: f32 = 32.0;
-/// Vertical room the reference-target stripbar needs at the bottom of the
-/// collapsed mobile sheet: one row of pills plus its separator.
-const MOBILE_TARGET_STRIP_HEIGHT: f32 = 48.0;
+/// Min / max height of the mobile library bottom sheet: tall enough for the
+/// tabs and a scrollable list, never so tall that it swallows the graph.
+const LIBRARY_SHEET_MIN_HEIGHT: f32 = 120.0;
+const LIBRARY_SHEET_MAX_HEIGHT: f32 = 520.0;
+/// Width of the hamburger navigation drawer's column.
+const MENU_DRAWER_WIDTH: f32 = 280.0;
 
 /// How wide a curve's preview is in its row.
 const PREVIEW_WIDTH: f32 = 78.0;
@@ -155,21 +150,6 @@ fn manager_heights(width: f32, curve_count: usize) -> (f32, f32) {
         MANAGER_HEIGHT_BASE + row_height
     };
     (content.clamp(min_height, MANAGER_MAX_HEIGHT), min_height)
-}
-
-/// The collapsed and expanded heights of the mobile bottom sheet.
-///
-/// Collapsed, the sheet is exactly as tall as what it shows — the manager rows,
-/// the target stripbar and the pill handle — so shrinking the selection shrinks
-/// the sheet instead of leaving dead space under the target strip. Expanded, it
-/// takes over most of the viewport to show the library, covering the surface
-/// above it like the web tool's drawer.
-fn mobile_sheet_heights(screen_height: f32, width: f32, curve_count: usize) -> (f32, f32) {
-    let (manager_height, _) = manager_heights(width, curve_count);
-    let collapsed = (manager_height + MOBILE_SHEET_HANDLE_HEIGHT + MOBILE_TARGET_STRIP_HEIGHT)
-        .clamp(MOBILE_STRIP_MIN_HEIGHT, MOBILE_STRIP_MAX_HEIGHT);
-    let expanded = (screen_height * 0.70).clamp(MOBILE_STRIP_MIN_HEIGHT, MOBILE_STRIP_MAX_HEIGHT);
-    (collapsed, expanded)
 }
 const UPLOADED_BRAND: &str = "Uploaded";
 const CONFIG_DIRECTORY_NAME: &str = "squiglab";
@@ -664,8 +644,8 @@ pub struct CrinGraphApp {
     library_reveal_pending: bool,
     /// Whether the navigation drawer (opened from the hamburger) is visible.
     menu_open: bool,
-    /// Mobile only: whether the library drawer is slid up covering the surface
-    /// (true) or slid down uncovering the manager + target strip (false).
+    /// Mobile only: whether the library bottom sheet (opened from the header
+    /// button opposite the hamburger) is visible.
     library_drawer_open: bool,
 }
 
@@ -1415,6 +1395,8 @@ impl CrinGraphApp {
                             .clicked()
                         {
                             self.menu_open = true;
+                            // One overlay at a time.
+                            self.library_drawer_open = false;
                         }
                         ui.add_space(8.0);
                         cgui::wordmark(ui);
@@ -1425,6 +1407,32 @@ impl CrinGraphApp {
                         ui.add_space(16.0);
                     }
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        // The library button sits at the far right, opposite
+                        // the hamburger, and opens the library/equalizer sheet
+                        // from the bottom. Mobile only, like the hamburger:
+                        // desktop shows the library as the left column.
+                        if !desktop {
+                            if ui
+                                .add(
+                                    egui::Button::new(
+                                        egui::RichText::new("▤")
+                                            .font(squiglab::theme::font_bold(
+                                                squiglab::theme::TypeStep::Subtitle,
+                                            ))
+                                            .color(palette.text_primary),
+                                    )
+                                    .frame(false)
+                                    .stroke(egui::Stroke::NONE)
+                                    .min_size(egui::vec2(0.0, 0.0)),
+                                )
+                                .on_hover_text("Library")
+                                .clicked()
+                            {
+                                self.library_drawer_open = !self.library_drawer_open;
+                                self.menu_open = false;
+                            }
+                            ui.add_space(8.0);
+                        }
                         cgui::segmented(
                             ui,
                             &[
@@ -1452,17 +1460,19 @@ impl CrinGraphApp {
         }
         let palette = squiglab::theme::Palette::resolve(self.dark_mode);
 
-        // Dimmed backdrop covering the entire screen; closes the drawer when
-        // clicked anywhere outside the drawer column.
+        // Dimmed backdrop; clicking it closes the drawer. It deliberately
+        // stops at the drawer's right edge so taps inside the drawer column
+        // (above or below its rows) never fall through and close it.
+        let backdrop = egui::Rect::from_min_max(
+            egui::pos2(screen_rect.left() + MENU_DRAWER_WIDTH, screen_rect.top()),
+            screen_rect.max,
+        );
         egui::Area::new(egui::Id::new("menu_backdrop"))
             .fixed_pos(egui::pos2(0.0, 0.0))
             .show(ctx, |ui| {
                 ui.painter()
-                    .rect_filled(screen_rect, 0.0, egui::Color32::from_black_alpha(120));
-                if ui
-                    .allocate_rect(screen_rect, egui::Sense::click())
-                    .clicked()
-                {
+                    .rect_filled(backdrop, 0.0, egui::Color32::from_black_alpha(120));
+                if ui.allocate_rect(backdrop, egui::Sense::click()).clicked() {
                     self.menu_open = false;
                 }
             });
@@ -1474,14 +1484,17 @@ impl CrinGraphApp {
             .order(egui::Order::Foreground)
             .show(ctx, |ui| {
                 ui.allocate_ui_with_layout(
-                    egui::vec2(280.0, screen_rect.height()),
+                    egui::vec2(MENU_DRAWER_WIDTH, screen_rect.height()),
                     egui::Layout::top_down(egui::Align::Min),
                     |ui| {
                         egui::Frame::new()
                             .fill(palette.surface_panel)
                             .inner_margin(egui::Margin::symmetric(16, 12))
                             .show(ui, |ui| {
-                                ui.set_min_size(egui::vec2(248.0, screen_rect.height() - 24.0));
+                                ui.set_min_size(egui::vec2(
+                                    MENU_DRAWER_WIDTH - 32.0,
+                                    screen_rect.height() - 24.0,
+                                ));
                                 ui.spacing_mut().item_spacing.y = squiglab::ui::Spacing::TIGHT;
                                 ui.add_space(squiglab::ui::Spacing::SECTION);
 
@@ -1522,6 +1535,76 @@ impl CrinGraphApp {
                                     // Placeholder: settings are not wired up yet.
                                     self.menu_open = false;
                                 }
+                            });
+                    },
+                );
+            });
+    }
+
+    /// The library bottom sheet, opened by the header's library button
+    /// (opposite the hamburger) on mobile.
+    ///
+    /// A dimmed backdrop closes it when clicked; the sheet itself slides up
+    /// from the bottom edge, taking a share of the viewport tall enough for
+    /// the library tabs and a scrollable list. There is no drag handle: the
+    /// header button and the backdrop are the controls.
+    fn library_drawer(&mut self, ctx: &egui::Context, screen_rect: egui::Rect) {
+        let opening = ctx.animate_bool_with_time(
+            egui::Id::new("library_sheet_open"),
+            self.library_drawer_open,
+            0.18,
+        );
+        if !self.library_drawer_open && opening <= 0.0 {
+            return;
+        }
+        let palette = squiglab::theme::Palette::resolve(self.dark_mode);
+        let height =
+            (screen_rect.height() * 0.70).clamp(LIBRARY_SHEET_MIN_HEIGHT, LIBRARY_SHEET_MAX_HEIGHT);
+        let top = screen_rect.bottom() - height * opening;
+
+        // Dimmed backdrop; clicking it closes the sheet. It deliberately
+        // stops at the sheet's top edge so taps inside the sheet (padding,
+        // gaps between rows) never fall through and close it.
+        let backdrop =
+            egui::Rect::from_min_max(screen_rect.min, egui::pos2(screen_rect.right(), top));
+        egui::Area::new(egui::Id::new("library_backdrop"))
+            .fixed_pos(egui::pos2(0.0, 0.0))
+            .show(ctx, |ui| {
+                ui.painter().rect_filled(
+                    backdrop,
+                    0.0,
+                    egui::Color32::from_black_alpha((120.0 * opening) as u8),
+                );
+                if ui.allocate_rect(backdrop, egui::Sense::click()).clicked() {
+                    self.library_drawer_open = false;
+                }
+            });
+
+        // The sheet slides between just past the bottom edge and its resting
+        // place at the bottom of the screen.
+        egui::Area::new(egui::Id::new("library_sheet"))
+            .fixed_pos(egui::pos2(screen_rect.left(), top))
+            .order(egui::Order::Foreground)
+            .show(ctx, |ui| {
+                ui.allocate_ui_with_layout(
+                    egui::vec2(screen_rect.width(), height),
+                    egui::Layout::top_down(egui::Align::Min),
+                    |ui| {
+                        egui::Frame::new()
+                            .fill(palette.surface_panel)
+                            .inner_margin(egui::Margin::symmetric(12, 10))
+                            .corner_radius(egui::CornerRadius {
+                                nw: 12,
+                                ne: 12,
+                                sw: 0,
+                                se: 0,
+                            })
+                            .show(ui, |ui| {
+                                ui.set_min_size(egui::vec2(
+                                    screen_rect.width() - 24.0,
+                                    height - 20.0,
+                                ));
+                                self.library_column(ui);
                             });
                     },
                 );
@@ -3883,105 +3966,22 @@ impl CrinGraphApp {
         });
     }
 
-    /// The combined lower strip beneath the graph.
-    /// Desktop: manager rows + reference-target pills (library lives beside the
-    /// graph as a left column).
-    /// Mobile: a two-state bottom sheet with a pill handle. Collapsed, it shows
-    /// the deltabar target stripbar and the manager rows, sized to its content.
-    /// Expanded, it slides up and covers the surface with the library drawer
-    /// (tabs + models + equalizer columns).
-    fn lower_strip(&mut self, ui: &mut Ui, desktop: bool, screen_rect: egui::Rect) {
-        let palette = squiglab::theme::Palette::resolve(ui.visuals().dark_mode);
-        if desktop {
-            let curve_count =
-                self.active.len() + self.active_targets.len() + self.active_deltas.len();
-            let (default_height, min_height) = manager_heights(ui.available_width(), curve_count);
-            egui::Panel::bottom("lower_strip")
-                .resizable(true)
-                .default_size(default_height)
-                .size_range(min_height..=MANAGER_MAX_HEIGHT)
-                .show(ui, |ui| {
-                    self.manager_content(ui);
-                    ui.separator();
-                    self.target_strip_content(ui);
-                });
-        } else {
-            // Mobile: a two-state bottom sheet. Collapsed (drawer closed) it
-            // sizes itself to the manager rows and the reference-target
-            // stripbar and uncovers the surface above; expanded (drawer open)
-            // it slides up and covers that surface with the library column
-            // (tabs + models + equalizer). The pill handle toggles the states;
-            // `show_switched` animates the slide between them, and dragging the
-            // expanded sheet's edge past its minimum collapses it again. The
-            // two states use distinct ids so their remembered heights do not
-            // overwrite each other.
-            let curve_count =
-                self.active.len() + self.active_targets.len() + self.active_deltas.len();
-            let (collapsed_height, expanded_height) =
-                mobile_sheet_heights(screen_rect.height(), screen_rect.width(), curve_count);
-            let collapsed = egui::Panel::bottom("lower_strip_collapsed")
-                .resizable(true)
-                .exact_size(collapsed_height);
-            let expanded = egui::Panel::bottom("lower_strip_expanded")
-                .resizable(true)
-                .default_size(expanded_height)
-                .size_range(MOBILE_STRIP_MIN_HEIGHT..=MOBILE_STRIP_MAX_HEIGHT);
-            let mut drawer_open = self.library_drawer_open;
-            let mut toggle_requested = false;
-            egui::Panel::show_switched(
-                ui,
-                &mut drawer_open,
-                collapsed,
-                expanded,
-                |ui, expanded| {
-                    // Slide handle: thin pill, always visible, centered.
-                    ui.add_space(4.0);
-                    ui.vertical_centered(|ui| {
-                        let handle_size = egui::vec2(44.0, 14.0);
-                        let (handle_rect, handle_response) =
-                            ui.allocate_exact_size(handle_size, egui::Sense::click());
-                        ui.painter().rect_filled(
-                            handle_rect,
-                            handle_rect.height() / 2.0,
-                            palette.surface_raised,
-                        );
-                        ui.painter().rect_stroke(
-                            handle_rect,
-                            handle_rect.height() / 2.0,
-                            palette.control_stroke(),
-                            egui::StrokeKind::Inside,
-                        );
-                        let chevron = if expanded { "▴" } else { "▾" };
-                        ui.painter().text(
-                            handle_rect.center(),
-                            egui::Align2::CENTER_CENTER,
-                            chevron,
-                            squiglab::theme::font(squiglab::theme::TypeStep::Caption),
-                            palette.text_secondary,
-                        );
-                        if handle_response.clicked() {
-                            toggle_requested = true;
-                        }
-                    });
-                    ui.add_space(4.0);
-                    ui.separator();
-                    if expanded {
-                        // Cover surface: library drawer (tabs + models +
-                        // equalizer columns).
-                        self.library_column(ui);
-                    } else {
-                        // Uncover surface: manager rows + target stripbar.
-                        self.manager_content(ui);
-                        ui.separator();
-                        self.target_strip_content(ui);
-                    }
-                },
-            );
-            if toggle_requested {
-                drawer_open = !drawer_open;
-            }
-            self.library_drawer_open = drawer_open;
-        }
+    /// The combined lower strip beneath the graph, the same on both viewports:
+    /// manager rows + reference-target pills, sized to its content so no dead
+    /// space is left under the target strip. The library lives beside the graph
+    /// as a left column on desktop and in the library bottom sheet on mobile.
+    fn lower_strip(&mut self, ui: &mut Ui) {
+        let curve_count = self.active.len() + self.active_targets.len() + self.active_deltas.len();
+        let (default_height, min_height) = manager_heights(ui.available_width(), curve_count);
+        egui::Panel::bottom("lower_strip")
+            .resizable(true)
+            .default_size(default_height)
+            .size_range(min_height..=MANAGER_MAX_HEIGHT)
+            .show(ui, |ui| {
+                self.manager_content(ui);
+                ui.separator();
+                self.target_strip_content(ui);
+            });
     }
 
     fn central_panel(&mut self, ui: &mut Ui) {
@@ -4101,20 +4101,21 @@ impl eframe::App for CrinGraphApp {
         //   Desktop (wide landscape): library column beside the graph, lower
         //   strip (manager + targets) beneath the graph only — never under the
         //   library column.
-        //   Mobile (narrow or tall): graph on top, then the library column
-        //   (tabs + active-tab content) stacked below — no separate manager or
-        //   target strip, matching the reference tool's mobile order.
+        //   Mobile (narrow or tall): the graph fills the viewport between the
+        //   toolbar and the lower strip; the library opens as a bottom sheet
+        //   from the header's library button.
         if desktop {
             self.selector_panel(ui, true);
             self.status_panel(ui);
-            self.lower_strip(ui, true, screen_rect);
-            self.central_panel(ui);
-        } else {
-            self.lower_strip(ui, false, screen_rect);
-            self.central_panel(ui);
         }
-        // The navigation drawer is an overlay on top of everything else.
+        self.lower_strip(ui);
+        self.central_panel(ui);
+        // The navigation drawer and the library sheet are overlays on top of
+        // everything else; only one can be open at a time.
         self.menu_drawer(&ctx, screen_rect);
+        if !desktop {
+            self.library_drawer(&ctx, screen_rect);
+        }
         if self.loaded && self.load_error.is_none() {
             self.persist_preferences_if_changed();
         }
@@ -5821,42 +5822,6 @@ smoothing_octaves = 3
             "the manager must be shrinkable to reach rows past its maximum"
         );
         assert!(min >= super::MANAGER_HEIGHT_BASE + super::MANAGER_STACKED_ROW_HEIGHT);
-    }
-
-    #[test]
-    fn the_collapsed_mobile_sheet_fits_its_rows_and_leaves_no_dead_space() {
-        // Collapsed, the sheet shows the target stripbar, the handle and the
-        // manager rows — nothing else. Any slack would be dead space under the
-        // target strip, which is what the sheet is sized against.
-        let screen_height = 800.0;
-        let width = 430.0;
-        for count in 1..=4 {
-            let (manager, _) = manager_heights(width, count);
-            let (collapsed, expanded) = super::mobile_sheet_heights(screen_height, width, count);
-            assert_eq!(
-                collapsed,
-                manager + super::MOBILE_SHEET_HANDLE_HEIGHT + super::MOBILE_TARGET_STRIP_HEIGHT,
-                "{count} curves: the collapsed sheet must fit its content exactly"
-            );
-            // Expanded, the sheet covers most of the viewport but never more
-            // than the maximum, so the graph keeps a sliver to peek at.
-            assert!(expanded > collapsed);
-            assert!(expanded <= super::MOBILE_STRIP_MAX_HEIGHT);
-        }
-    }
-
-    #[test]
-    fn the_mobile_sheet_is_clamped_at_its_range_limits() {
-        // A tiny screen must still leave at least the floor for the handle and
-        // rows, and a long selection must stop at the ceiling instead of
-        // swallowing the whole viewport.
-        let (collapsed, expanded) = super::mobile_sheet_heights(400.0, 430.0, 0);
-        assert!(collapsed >= super::MOBILE_STRIP_MIN_HEIGHT);
-        assert!(collapsed <= super::MOBILE_STRIP_MAX_HEIGHT);
-        assert!(expanded >= super::MOBILE_STRIP_MIN_HEIGHT);
-        let (collapsed, expanded) = super::mobile_sheet_heights(2000.0, 430.0, 40);
-        assert_eq!(collapsed, super::MOBILE_STRIP_MAX_HEIGHT);
-        assert_eq!(expanded, super::MOBILE_STRIP_MAX_HEIGHT);
     }
 
     #[test]

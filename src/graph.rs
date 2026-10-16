@@ -462,26 +462,14 @@ fn escape_xml(value: &str) -> String {
 
 impl GraphCanvas<'_> {
     pub fn show(&self, ui: &mut Ui, curves: &[PlotCurve<'_>]) -> GraphInteraction {
-        // The graph sizes itself to the plot instead of claiming the whole
-        // panel. Taking all available height left a large empty band between the
-        // graph and the manager below it, while the plot inside was capped to the
-        // reference tool's proportions anyway.
-        let inset_left = 64.0;
-        let inset_top = 14.0;
-        let inset_right = 18.0;
-        let inset_bottom = 54.0;
+        // The graph claims the whole panel. Leaving the widget at the
+        // reference proportion's height left a dead band between the graph and
+        // the manager on any viewport taller than the plot, which reads as
+        // wasted space. The plot inside stretches to everything the margins
+        // leave, so the band is always part of the graph.
         let panel = ui.available_size();
-        let plot_width = (panel.x - inset_left - inset_right).max(120.0);
-        // Prefer the reference proportion, but never grow past the panel, and
-        // never shrink below a height the axis and band labels still fit in.
-        let plot_height = (plot_width / Self::PLOT_ASPECT_RATIO)
-            .min((panel.y - inset_top - inset_bottom).max(0.0))
-            .max(120.0);
-        let size = egui::vec2(
-            plot_width + inset_left + inset_right,
-            plot_height + inset_top + inset_bottom,
-        );
-        let (rect, response) = ui.allocate_exact_size(size, Sense::hover());
+        let (rect, response) = ui.allocate_exact_size(panel, Sense::hover());
+        let (plot_width, plot_height) = Self::plot_size(panel);
         let visuals = ui.visuals();
         let palette = Palette::resolve(visuals.dark_mode);
         // The graph is the darkest surface in the application so saturated
@@ -496,10 +484,10 @@ impl GraphCanvas<'_> {
         let plot_rect = Rect::from_min_max(
             // Left room for the dB scale, top for the rig note, and enough
             // underneath for the frequency ticks plus the named bands below them.
-            Pos2::new(rect.left() + inset_left, rect.top() + inset_top),
+            Pos2::new(rect.left() + Self::INSET_LEFT, rect.top() + Self::INSET_TOP),
             Pos2::new(
-                rect.right() - inset_right,
-                rect.top() + inset_top + plot_height,
+                rect.left() + Self::INSET_LEFT + plot_width,
+                rect.top() + Self::INSET_TOP + plot_height,
             ),
         );
         let (y_min, y_max) = Self::scaled_y_range(y_range(curves), self.y_scale);
@@ -876,9 +864,35 @@ impl GraphCanvas<'_> {
         }
     }
 
+    /// Left room for the dB scale.
+    const INSET_LEFT: f32 = 64.0;
+    /// Top room for the rig note.
+    const INSET_TOP: f32 = 14.0;
+    /// Right edge breathing room.
+    const INSET_RIGHT: f32 = 18.0;
+    /// Room underneath for the frequency ticks plus the named bands below them.
+    const INSET_BOTTOM: f32 = 54.0;
+    /// Floors that keep the axis and band labels fitting on tiny viewports.
+    const MIN_PLOT_WIDTH: f32 = 120.0;
+    const MIN_PLOT_HEIGHT: f32 = 120.0;
+
+    /// The plot size inside a panel: everything the margins leave.
+    ///
+    /// The widget claims the whole panel and the plot stretches to fill it, so
+    /// a viewport taller than the reference proportion grows the plot instead
+    /// of leaving a dead band between the graph and the manager below it.
+    fn plot_size(panel: egui::Vec2) -> (f32, f32) {
+        (
+            (panel.x - Self::INSET_LEFT - Self::INSET_RIGHT).max(Self::MIN_PLOT_WIDTH),
+            (panel.y - Self::INSET_TOP - Self::INSET_BOTTOM).max(Self::MIN_PLOT_HEIGHT),
+        )
+    }
+
     /// How many units wide the plot is for every unit of height. The reference
-    /// tool draws a wide, short graph; matching the ratio matches its apparent
-    /// slope, which a taller plot exaggerates.
+    /// tool draws a wide, short graph, so the SVG export keeps that framing.
+    /// The live canvas no longer caps itself to this ratio: on viewports taller
+    /// than the ratio implies, the cap left dead space and the user reads it as
+    /// wasted room.
     const PLOT_ASPECT_RATIO: f32 = 3.4;
 
     /// How many labels to group in the corner before letting the rest follow
@@ -1422,6 +1436,25 @@ mod tests {
             (3.0..=3.8).contains(&aspect),
             "aspect ratio {aspect} does not match the reference tool's framing"
         );
+    }
+
+    #[test]
+    fn the_plot_stretches_to_fill_a_tall_panel() {
+        // The widget claims the whole panel and the plot takes everything the
+        // margins leave. Capping the plot to the reference proportion instead
+        // left a dead band between the graph and the manager on tall viewports.
+        let (width, height) = super::GraphCanvas::plot_size(egui::vec2(400.0, 600.0));
+        assert_eq!(
+            width,
+            400.0 - super::GraphCanvas::INSET_LEFT - super::GraphCanvas::INSET_RIGHT
+        );
+        assert_eq!(
+            height,
+            600.0 - super::GraphCanvas::INSET_TOP - super::GraphCanvas::INSET_BOTTOM
+        );
+        // Tiny viewports stop at the floor rather than collapsing the axes.
+        let (_, height) = super::GraphCanvas::plot_size(egui::vec2(200.0, 80.0));
+        assert_eq!(height, super::GraphCanvas::MIN_PLOT_HEIGHT);
     }
 
     #[test]
