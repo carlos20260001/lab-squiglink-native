@@ -1,6 +1,10 @@
 use crate::theme::{self, Palette, TypeStep};
 use egui::{Align2, Color32, Id, Pos2, Rect, Sense, Stroke, Ui, Vec2};
-use squiglab_core::data::FRPoint;
+use squiglab_core::graph::{
+    clamp_label_position, corner_label_position, curve_control_points, format_axis_frequency,
+    format_frequency, nearest_curve_index, nearest_point, nice_limit, place_labels,
+    sample_curve_path, scaled_y_range, tick_db, y_range, Transform,
+};
 pub use squiglab_core::graph::{LabelLayout, PlotCurve, ZoomRegion};
 use std::collections::BTreeMap;
 
@@ -76,7 +80,7 @@ impl DeltaBar {
         );
         // Symmetric about zero, because a deviation has no preferred sign:
         // being 6 dB above the target is no closer to correct than 6 dB below.
-        let limit = Self::nice_limit(
+        let limit = nice_limit(
             curves
                 .iter()
                 .flat_map(|curve| curve.points.iter().map(|point| point.db.abs()))
@@ -95,7 +99,7 @@ impl DeltaBar {
             painter.text(
                 Pos2::new(rect.left() + Self::INSET_LEFT - 6.0, y),
                 Align2::LEFT_CENTER,
-                Self::tick_db(tick),
+                tick_db(tick),
                 axis_font.clone(),
                 palette.text_tertiary,
             );
@@ -158,27 +162,6 @@ impl DeltaBar {
         );
 
         response.hover_pos().map(|pos| transform.x_at(pos.x))
-    }
-
-    /// Round a peak deviation up to a value a person would choose, so the
-    /// scale reads as \u{00b1}5 rather than as \u{00b1}4.37.
-    fn nice_limit(peak: f32) -> f32 {
-        for step in [0.5_f32, 1.0, 2.0, 5.0, 10.0, 20.0, 50.0] {
-            if peak <= step {
-                return step;
-            }
-        }
-        (peak / 50.0).ceil() * 50.0
-    }
-
-    fn tick_db(db: f32) -> String {
-        let magnitude = db.abs();
-        let sign = if db < 0.0 { "\u{2212}" } else { "+" };
-        if magnitude >= 10.0 {
-            format!("{sign}{magnitude:.0}")
-        } else {
-            format!("{sign}{magnitude:.1}")
-        }
     }
 }
 
@@ -264,7 +247,7 @@ pub fn export_svg(
     let transform = Transform::new(
         plot_rect,
         zoom.x_range(),
-        GraphCanvas::scaled_y_range(y_range(curves), y_scale),
+        scaled_y_range(y_range(curves), y_scale),
     );
     let palette = Palette::resolve(dark_mode);
     let (background, text_color, grid_color) = (
@@ -409,7 +392,7 @@ pub fn export_svg(
     }
 
     if !label_candidates.is_empty() {
-        let automatic = GraphCanvas::place_labels(
+        let automatic = place_labels(
             label_candidates
                 .iter()
                 .map(|(key, point, size)| ((*key).to_owned(), point.y, size.y))
@@ -431,7 +414,7 @@ pub fn export_svg(
                     )
                 },
             );
-            let position = GraphCanvas::clamp_label_position(position, size, plot_rect);
+            let position = clamp_label_position(position, size, plot_rect);
             let curve = curves.iter().find(|curve| curve.label_key == key).unwrap();
             svg.push_str(&format!(
                 r#"<text x="{:.2}" y="{:.2}" fill="{}" font-family="Open Sans, sans-serif" font-size="{label_size}" font-weight="700">{}</text>"#,
@@ -525,7 +508,7 @@ impl GraphCanvas<'_> {
                 rect.top() + Self::INSET_TOP + plot_height,
             ),
         );
-        let (y_min, y_max) = Self::scaled_y_range(y_range(curves), self.y_scale);
+        let (y_min, y_max) = scaled_y_range(y_range(curves), self.y_scale);
         let transform = Transform::new(plot_rect, self.zoom.x_range(), (y_min, y_max));
         let painter = ui.painter();
         painter.rect_filled(rect, 0.0, background);
@@ -673,7 +656,7 @@ impl GraphCanvas<'_> {
                 smooth,
                 theme::graph::CURVE_WIDTH,
             );
-            screen_curves.push(Self::sample_curve_path(&points, smooth));
+            screen_curves.push(sample_curve_path(&points, smooth));
             if self.show_labels {
                 if let Some(point) = curve
                     .points
@@ -702,7 +685,7 @@ impl GraphCanvas<'_> {
             }
         }
 
-        let default_positions = Self::place_labels(
+        let default_positions = place_labels(
             label_candidates
                 .iter()
                 .map(|(key, point, size, _, _)| ((*key).to_owned(), point.y, size.y))
@@ -723,7 +706,13 @@ impl GraphCanvas<'_> {
                         // Grouped: stack the first few labels in one corner as a
                         // legend. Any beyond the cap keep following their curve,
                         // so a large selection still gets labelled.
-                        Self::corner_label_position(self.label_layout, index, size, plot_rect)
+                        corner_label_position(
+                            self.label_layout,
+                            index,
+                            size,
+                            plot_rect,
+                            theme::TypeStep::Body.size() + 8.0,
+                        )
                     }
                 },
                 |position| {
@@ -733,7 +722,7 @@ impl GraphCanvas<'_> {
                     )
                 },
             );
-            top_left = Self::clamp_label_position(top_left, size, plot_rect);
+            top_left = clamp_label_position(top_left, size, plot_rect);
             let label_rect = Rect::from_min_size(top_left, size);
             let label_response = ui.interact(
                 label_rect.expand(3.0),
@@ -749,7 +738,7 @@ impl GraphCanvas<'_> {
                     .ctx()
                     .data(|data| data.get_temp::<Pos2>(label_response.id))
                     .unwrap_or(top_left);
-                top_left = Self::clamp_label_position(
+                top_left = clamp_label_position(
                     drag_origin + label_response.drag_delta(),
                     size,
                     plot_rect,
@@ -831,7 +820,7 @@ impl GraphCanvas<'_> {
             .hover_pos()
             .filter(|position| plot_rect.contains(*position))
         {
-            if let Some(index) = Self::nearest_curve_index(&screen_curves, position, 14.0) {
+            if let Some(index) = nearest_curve_index(&screen_curves, position, 14.0) {
                 Self::draw_curve_lines(
                     &plot_painter,
                     &screen_curves[index],
@@ -968,87 +957,6 @@ impl GraphCanvas<'_> {
 
     /// How many labels to group in the corner before letting the rest follow
     /// their curves. The reference tool groups about five.
-    const MAX_GROUPED_LABELS: usize = 6;
-
-    /// Stack a label in the chosen corner, one per line from the corner inward.
-    fn corner_label_position(
-        corner: LabelLayout,
-        index: usize,
-        size: Vec2,
-        plot_rect: Rect,
-    ) -> Pos2 {
-        // Inset clears the y-axis labels on the left and the tick text on the
-        // right, so the block never sits under either.
-        let inset = egui::vec2(10.0, 8.0);
-        let line = TypeStep::Body.size() + 8.0;
-        let row = index.min(Self::MAX_GROUPED_LABELS - 1) as f32;
-
-        match corner {
-            // CurveEnd never reaches here; the caller branches on it first.
-            LabelLayout::CurveEnd => Pos2::ZERO,
-            LabelLayout::CornerBottomLeft => Pos2::new(
-                plot_rect.left() + inset.x + 26.0,
-                plot_rect.bottom() - inset.y - size.y - row * line,
-            ),
-            LabelLayout::CornerBottomRight => Pos2::new(
-                plot_rect.right() - inset.x - size.x - 26.0,
-                plot_rect.bottom() - inset.y - size.y - row * line,
-            ),
-            LabelLayout::CornerTopLeft => Pos2::new(
-                plot_rect.left() + inset.x + 26.0,
-                plot_rect.top() + inset.y + 16.0 + row * line,
-            ),
-        }
-    }
-
-    fn place_labels(mut labels: Vec<(String, f32, f32)>, plot_rect: Rect) -> BTreeMap<String, f32> {
-        // Keyed by the caller-supplied label key rather than the drawn text: two
-        // curves can legitimately carry the same text (the left and right channel
-        // of one measurement, for instance), and keying by text would collapse
-        // them onto a single slot and let them overlap.
-        labels.sort_by(|left, right| left.1.total_cmp(&right.1));
-        let mut positioned: Vec<(String, f32, f32)> = Vec::with_capacity(labels.len());
-        let mut next_top = plot_rect.top();
-        for (key, desired_center, height) in labels {
-            let top = (desired_center - height / 2.0).max(next_top);
-            positioned.push((key, top, height));
-            next_top = top + height + 2.0;
-        }
-        let mut next_top = plot_rect.bottom();
-        for (_, top, height) in positioned.iter_mut().rev() {
-            *top = top.min(next_top - *height);
-            next_top = *top - 2.0;
-        }
-        positioned
-            .into_iter()
-            .map(|(key, top, height)| {
-                (
-                    key,
-                    top.clamp(
-                        plot_rect.top(),
-                        (plot_rect.bottom() - height).max(plot_rect.top()),
-                    ),
-                )
-            })
-            .collect()
-    }
-
-    fn clamp_label_position(position: Pos2, size: Vec2, bounds: Rect) -> Pos2 {
-        Pos2::new(
-            position
-                .x
-                .clamp(bounds.left(), (bounds.right() - size.x).max(bounds.left())),
-            position
-                .y
-                .clamp(bounds.top(), (bounds.bottom() - size.y).max(bounds.top())),
-        )
-    }
-
-    fn scaled_y_range((minimum, maximum): (f32, f32), scale: f32) -> (f32, f32) {
-        let center = (minimum + maximum) / 2.0;
-        let half_range = (maximum - minimum) * scale.clamp(0.35, 4.0) / 2.0;
-        (center - half_range, center + half_range)
-    }
 
     /// The mark and the name, faded back behind the curves.
     ///
@@ -1129,153 +1037,6 @@ impl GraphCanvas<'_> {
             }
         }
     }
-
-    fn sample_curve_path(points: &[Pos2], smooth: bool) -> Vec<Pos2> {
-        let controls = curve_control_points(points, smooth);
-        if controls.is_empty() {
-            return points.to_vec();
-        }
-
-        let mut sampled = Vec::with_capacity(controls.len() * 8 + 1);
-        sampled.push(points[0]);
-        for [start, control1, control2, end] in controls {
-            for step in 1..=8 {
-                sampled.push(cubic_bezier(
-                    start,
-                    control1,
-                    control2,
-                    end,
-                    step as f32 / 8.0,
-                ));
-            }
-        }
-        sampled
-    }
-
-    fn point_segment_distance(point: Pos2, start: Pos2, end: Pos2) -> f32 {
-        let segment = end - start;
-        let length_squared = segment.length_sq();
-        if length_squared == 0.0 {
-            return point.distance(start);
-        }
-        let projection = ((point - start).dot(segment) / length_squared).clamp(0.0, 1.0);
-        point.distance(start + segment * projection)
-    }
-
-    fn nearest_curve_index(curves: &[Vec<Pos2>], position: Pos2, threshold: f32) -> Option<usize> {
-        curves
-            .iter()
-            .enumerate()
-            .filter_map(|(index, points)| {
-                let distance = points
-                    .windows(2)
-                    .map(|pair| Self::point_segment_distance(position, pair[0], pair[1]))
-                    .fold(f32::INFINITY, f32::min);
-                (distance <= threshold).then_some((index, distance))
-            })
-            .min_by(|left, right| left.1.total_cmp(&right.1))
-            .map(|(index, _)| index)
-    }
-}
-
-fn curve_control_points(points: &[Pos2], natural: bool) -> Vec<[Pos2; 4]> {
-    if points.len() < 3 {
-        return Vec::new();
-    }
-    let (first_x, second_x, first_y, second_y) = if natural {
-        let (first_x, second_x) =
-            natural_control_points(&points.iter().map(|p| p.x).collect::<Vec<_>>());
-        let (first_y, second_y) =
-            natural_control_points(&points.iter().map(|p| p.y).collect::<Vec<_>>());
-        (first_x, second_x, first_y, second_y)
-    } else {
-        let tension = 1.0 / 12.0;
-        let mut first_x = Vec::with_capacity(points.len() - 1);
-        let mut second_x = Vec::with_capacity(points.len() - 1);
-        let mut first_y = Vec::with_capacity(points.len() - 1);
-        let mut second_y = Vec::with_capacity(points.len() - 1);
-        for index in 0..points.len() - 1 {
-            let start = points[index];
-            let end = points[index + 1];
-            let previous = points[index.saturating_sub(1)];
-            let next = points[(index + 2).min(points.len() - 1)];
-            first_x.push(if index == 0 {
-                start.x
-            } else {
-                start.x + tension * (end.x - previous.x)
-            });
-            first_y.push(if index == 0 {
-                start.y
-            } else {
-                start.y + tension * (end.y - previous.y)
-            });
-            second_x.push(if index + 1 == points.len() - 1 {
-                end.x
-            } else {
-                end.x + tension * (start.x - next.x)
-            });
-            second_y.push(if index + 1 == points.len() - 1 {
-                end.y
-            } else {
-                end.y + tension * (start.y - next.y)
-            });
-        }
-        (first_x, second_x, first_y, second_y)
-    };
-
-    (0..points.len() - 1)
-        .map(|index| {
-            [
-                points[index],
-                Pos2::new(first_x[index], first_y[index]),
-                Pos2::new(second_x[index], second_y[index]),
-                points[index + 1],
-            ]
-        })
-        .collect()
-}
-
-fn natural_control_points(values: &[f32]) -> (Vec<f32>, Vec<f32>) {
-    let segments = values.len() - 1;
-    let mut lower = vec![0.0; segments];
-    let mut diagonal = vec![0.0; segments];
-    let mut rhs = vec![0.0; segments];
-    lower[0] = 0.0;
-    diagonal[0] = 2.0;
-    rhs[0] = values[0] + 2.0 * values[1];
-    for index in 1..segments - 1 {
-        lower[index] = 1.0;
-        diagonal[index] = 4.0;
-        rhs[index] = 4.0 * values[index] + 2.0 * values[index + 1];
-    }
-    lower[segments - 1] = 2.0;
-    diagonal[segments - 1] = 7.0;
-    rhs[segments - 1] = 8.0 * values[segments - 1] + values[segments];
-    for index in 1..segments {
-        let multiplier = lower[index] / diagonal[index - 1];
-        diagonal[index] -= multiplier;
-        rhs[index] -= multiplier * rhs[index - 1];
-    }
-
-    let mut first = vec![0.0; segments];
-    let mut second = vec![0.0; segments];
-    first[segments - 1] = rhs[segments - 1] / diagonal[segments - 1];
-    for index in (0..segments - 1).rev() {
-        first[index] = (rhs[index] - first[index + 1]) / diagonal[index];
-    }
-    second[segments - 1] = (values[segments] + first[segments - 1]) / 2.0;
-    for index in 0..segments - 1 {
-        second[index] = 2.0 * values[index + 1] - first[index + 1];
-    }
-    (first, second)
-}
-
-fn cubic_bezier(start: Pos2, control1: Pos2, control2: Pos2, end: Pos2, t: f32) -> Pos2 {
-    let inverse = 1.0 - t;
-    start * inverse.powi(3)
-        + control1.to_vec2() * (3.0 * inverse.powi(2) * t)
-        + control2.to_vec2() * (3.0 * inverse * t.powi(2))
-        + end.to_vec2() * t.powi(3)
 }
 
 fn svg_curve_path(points: &[Pos2], smooth: bool) -> String {
@@ -1299,125 +1060,15 @@ fn svg_curve_path(points: &[Pos2], smooth: bool) -> String {
     path
 }
 
-#[derive(Clone, Copy)]
-struct Transform {
-    rect: Rect,
-    x_range: (f32, f32),
-    y_range: (f32, f32),
-}
-
-impl Transform {
-    fn new(rect: Rect, x_range: (f32, f32), y_range: (f32, f32)) -> Self {
-        Self {
-            rect,
-            x_range,
-            y_range,
-        }
-    }
-
-    fn hz_to_x(self, hz: f32) -> f32 {
-        let min = self.x_range.0.ln();
-        let t = (hz.ln() - min) / (self.x_range.1.ln() - min);
-        self.rect.left() + t * self.rect.width()
-    }
-
-    fn x_at(self, x: f32) -> f32 {
-        let t = (x - self.rect.left()) / self.rect.width();
-        (self.x_range.0.ln() + t * (self.x_range.1.ln() - self.x_range.0.ln())).exp()
-    }
-
-    fn db_to_y(self, db: f32) -> f32 {
-        self.rect.bottom()
-            - (db - self.y_range.0) / (self.y_range.1 - self.y_range.0) * self.rect.height()
-    }
-}
-
-fn y_range(curves: &[PlotCurve<'_>]) -> (f32, f32) {
-    // Targets are excluded from the plotted dB range. A target with a steep
-    // high-frequency rolloff — the Harman target reaches 14.7 dB at 20 kHz —
-    // would otherwise drag the axis down to 10 dB and compress the measurements
-    // being compared into the top of the graph, which is the opposite of the
-    // comparison this tool exists for. Targets are still drawn; they simply clip
-    // at the bottom of the plot, as they do in the reference tool.
-    //
-    // If only targets are active, fall back to them so the plot is never empty.
-    let measuring: Vec<&PlotCurve<'_>> = curves.iter().filter(|curve| !curve.target).collect();
-    let curves: &[&PlotCurve<'_>] = if measuring.is_empty() {
-        &curves.iter().collect::<Vec<_>>()
-    } else {
-        &measuring
-    };
-    let bounds = curves
-        .iter()
-        .flat_map(|curve| curve.points.iter().map(|point| point.db))
-        .filter(|value| value.is_finite())
-        .fold(None, |bounds: Option<(f32, f32)>, value| {
-            Some(match bounds {
-                Some((min, max)) => (min.min(value), max.max(value)),
-                None => (value, value),
-            })
-        });
-    match bounds {
-        Some((min, max)) => {
-            let padding = ((max - min) * 0.08).max(3.0);
-            (
-                ((min - padding) / 5.0).floor() * 5.0,
-                ((max + padding) / 5.0).ceil() * 5.0,
-            )
-        }
-        None => (20.0, 120.0),
-    }
-}
-
-fn format_frequency(hz: f32) -> String {
-    if hz >= 1000.0 {
-        format!("{:.2} kHz", hz / 1000.0)
-    } else {
-        format!("{hz:.0} Hz")
-    }
-}
-
-fn format_axis_frequency(hz: f32) -> String {
-    if hz <= 20.0 {
-        format!("{hz:.0}Hz")
-    } else if hz >= 20000.0 {
-        format!("{:.0}kHz", hz / 1000.0)
-    } else if hz >= 1000.0 {
-        format!("{}k", hz as u32 / 1000)
-    } else {
-        format!("{hz:.0}")
-    }
-}
-
-fn nearest_point(points: &[FRPoint], frequency: f32) -> Option<&FRPoint> {
-    if points.is_empty() {
-        return None;
-    }
-    let upper = points.partition_point(|point| point.hz < frequency);
-    match (upper.checked_sub(1), points.get(upper)) {
-        (Some(lower), Some(upper_point)) => {
-            if (frequency / points[lower].hz).ln().abs() <= (upper_point.hz / frequency).ln().abs()
-            {
-                Some(&points[lower])
-            } else {
-                Some(upper_point)
-            }
-        }
-        (Some(lower), None) => Some(&points[lower]),
-        (None, Some(upper_point)) => Some(upper_point),
-        (None, None) => None,
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{
-        curve_control_points, export_svg, format_axis_frequency, GraphCanvas, Provenance,
-        Transform, Watermark,
-    };
+    use super::{export_svg, Provenance, Watermark};
     use egui::{pos2, Rect};
     use squiglab_core::data::FRPoint;
-    use squiglab_core::graph::{PlotCurve, ZoomRegion};
+    use squiglab_core::graph::{
+        clamp_label_position, curve_control_points, format_axis_frequency, nearest_curve_index,
+        place_labels, scaled_y_range, PlotCurve, Transform, ZoomRegion,
+    };
     use std::collections::BTreeMap;
 
     #[test]
@@ -1441,7 +1092,7 @@ mod tests {
     #[test]
     fn automatic_label_placement_stays_inside_the_plot_and_separates_labels() {
         let plot = Rect::from_min_max(pos2(0.0, 0.0), pos2(400.0, 100.0));
-        let positions = GraphCanvas::place_labels(
+        let positions = place_labels(
             vec![
                 ("top".to_owned(), 1.0, 12.0),
                 ("middle".to_owned(), 48.0, 12.0),
@@ -1592,11 +1243,12 @@ mod tests {
         let corner = crate::graph::LabelLayout::CornerBottomLeft;
         let tops: Vec<egui::Pos2> = (0..4)
             .map(|index| {
-                crate::graph::GraphCanvas::corner_label_position(
+                crate::graph::corner_label_position(
                     corner,
                     index,
                     egui::vec2(60.0, 18.0),
                     plot,
+                    18.0,
                 )
             })
             .collect();
@@ -1620,7 +1272,7 @@ mod tests {
         // Two curves ending near each other request almost the same y. The
         // second must be pushed down rather than drawn on top of the first.
         let plot = Rect::from_min_max(pos2(0.0, 0.0), pos2(400.0, 600.0));
-        let positions = GraphCanvas::place_labels(
+        let positions = place_labels(
             vec![
                 ("first".to_owned(), 300.0, 18.0),
                 ("second".to_owned(), 305.4, 18.0),
@@ -1642,20 +1294,17 @@ mod tests {
     fn dragged_label_anchor_is_clamped_to_plot_bounds() {
         let plot = Rect::from_min_max(pos2(10.0, 20.0), pos2(110.0, 120.0));
         assert_eq!(
-            GraphCanvas::clamp_label_position(pos2(-10.0, 500.0), egui::vec2(30.0, 15.0), plot),
+            clamp_label_position(pos2(-10.0, 500.0), egui::vec2(30.0, 15.0), plot),
             pos2(10.0, 105.0)
         );
     }
 
     #[test]
     fn vertical_scale_expands_and_contracts_around_the_same_center() {
-        assert_eq!(GraphCanvas::scaled_y_range((20.0, 80.0), 1.0), (20.0, 80.0));
-        assert_eq!(
-            GraphCanvas::scaled_y_range((20.0, 80.0), 2.0),
-            (-10.0, 110.0)
-        );
-        assert_eq!(GraphCanvas::scaled_y_range((20.0, 80.0), 0.5), (35.0, 65.0));
-        assert_eq!(GraphCanvas::scaled_y_range((20.0, 80.0), 0.0), (39.5, 60.5));
+        assert_eq!(scaled_y_range((20.0, 80.0), 1.0), (20.0, 80.0));
+        assert_eq!(scaled_y_range((20.0, 80.0), 2.0), (-10.0, 110.0));
+        assert_eq!(scaled_y_range((20.0, 80.0), 0.5), (35.0, 65.0));
+        assert_eq!(scaled_y_range((20.0, 80.0), 0.0), (39.5, 60.5));
     }
 
     #[test]
@@ -1665,13 +1314,10 @@ mod tests {
             vec![pos2(0.0, 30.0), pos2(100.0, 30.0)],
         ];
         assert_eq!(
-            GraphCanvas::nearest_curve_index(&curves, pos2(50.0, 27.0), 14.0),
+            nearest_curve_index(&curves, pos2(50.0, 27.0), 14.0),
             Some(1)
         );
-        assert_eq!(
-            GraphCanvas::nearest_curve_index(&curves, pos2(50.0, 15.0), 5.0),
-            None
-        );
+        assert_eq!(nearest_curve_index(&curves, pos2(50.0, 15.0), 5.0), None);
     }
 
     #[test]

@@ -3562,6 +3562,7 @@ dependencies = [
  "anyhow",
  "cpal",
  "dirs",
+ "emath",
  "libspa-sys",
  "once_cell",
  "pipewire",
