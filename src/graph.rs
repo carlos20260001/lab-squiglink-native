@@ -274,8 +274,41 @@ pub struct GraphCanvas<'a> {
     pub bands: &'a [FrequencyBand],
     /// Optional provenance caption drawn in the top-right corner of the graph.
     pub rig_description: Option<&'a str>,
+    /// The mark and the name behind the curves.
+    pub watermark: Watermark<'a>,
     pub y_scale: f32,
 }
+
+/// The mark the reference tool stamps behind the curves, and the name it
+/// prints under it.
+///
+/// The web reference draws these into the same SVG it displays and exports
+/// (`web/config.js`, `watermark()`), so a graph carries the mark wherever it
+/// goes. The screen draws the mark from a texture the caller has loaded; the
+/// export embeds the same bytes.
+#[derive(Clone, Copy, Default)]
+pub struct Watermark<'a> {
+    /// The mark itself, as PNG bytes.
+    pub png: Option<&'a [u8]>,
+    /// The mark as a loaded texture, for the screen.
+    pub texture: Option<egui::TextureId>,
+    /// The name printed under the mark.
+    pub text: Option<&'a str>,
+}
+
+/// What an exported graph says about itself: the mark and the name behind the
+/// curves, and the rig the measurements came from.
+#[derive(Clone, Copy, Default)]
+pub struct Provenance<'a> {
+    pub watermark: Watermark<'a>,
+    pub rig_description: Option<&'a str>,
+}
+
+/// The width of the reference tool's plot area, in its own SVG units: an
+/// 800-unit graph less 15 units of padding on each side. The watermark is
+/// sized against it, so the mark keeps the reference's proportions whatever
+/// the plot is scaled to.
+const REFERENCE_PLOT_WIDTH: f32 = 770.0;
 
 /// A named region of the frequency axis.
 #[derive(Clone, Copy)]
@@ -291,6 +324,7 @@ pub fn export_svg(
     label_positions: &BTreeMap<String, [f32; 2]>,
     dark_mode: bool,
     y_scale: f32,
+    provenance: Provenance<'_>,
 ) -> String {
     // Wide and short, matching the on-screen plot, so an exported graph has the
     // same apparent slopes as the one it was exported from.
@@ -320,7 +354,7 @@ pub fn export_svg(
     let axis_size = TypeStep::Caption.size();
     let label_size = TypeStep::Body.size();
     let mut svg = format!(
-        r#"<svg xmlns="http://www.w3.org/2000/svg" width="{WIDTH:.0}" height="{HEIGHT:.0}" viewBox="0 0 {WIDTH:.0} {HEIGHT:.0}"><rect width="100%" height="100%" fill="{background}"/>"#
+        r#"<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="{WIDTH:.0}" height="{HEIGHT:.0}" viewBox="0 0 {WIDTH:.0} {HEIGHT:.0}"><rect width="100%" height="100%" fill="{background}"/>"#
     );
     // Match the canvas: grid lines stay dense, labels thin out when they would
     // collide, so a narrow export is not a wall of overlapping tick text.
@@ -370,6 +404,39 @@ pub fn export_svg(
         plot_rect.width(),
         plot_rect.height(),
     ));
+    // The mark and the name, in the reference's group at a fifth of the usual
+    // opacity, centred on the plot and drawn before the curves so they lie
+    // over it.
+    let watermark_scale = plot_rect.width() / REFERENCE_PLOT_WIDTH;
+    let watermark_center = Pos2::new(
+        plot_rect.center().x,
+        plot_rect.center().y - 20.0 * watermark_scale,
+    );
+    svg.push_str(&format!(
+        r#"<g opacity="0.2" transform="translate({:.2},{:.2})">"#,
+        watermark_center.x, watermark_center.y,
+    ));
+    if let Some(png) = provenance.watermark.png {
+        let side = 128.0 * watermark_scale;
+        svg.push_str(&format!(
+            r#"<image x="{:.2}" y="{:.2}" width="{:.2}" height="{:.2}" xlink:href="data:image/png;base64,{}"/>"#,
+            -side / 2.0,
+            -side / 2.0,
+            side,
+            side,
+            base64(png),
+        ));
+    }
+    if let Some(text) = provenance.watermark.text {
+        svg.push_str(&format!(
+            r#"<text x="0" y="{:.2}" fill="{}" font-family="Open Sans, sans-serif" font-size="{:.2}" text-anchor="middle">{}</text>"#,
+            70.0 * watermark_scale,
+            svg_color(palette.text_secondary),
+            28.0 * watermark_scale,
+            escape_xml(text),
+        ));
+    }
+    svg.push_str("</g>");
     let mut label_candidates = Vec::new();
     for curve in curves {
         let points: Vec<Pos2> = curve
@@ -408,6 +475,17 @@ pub fn export_svg(
         ));
     }
     svg.push_str("</g>");
+
+    // The provenance line the screen shows in the corner of the graph.
+    if let Some(rig) = provenance.rig_description {
+        svg.push_str(&format!(
+            r#"<text x="{:.2}" y="{:.2}" fill="{text_color}" font-family="Hack, monospace" font-size="{:.2}" text-anchor="end">Measured on: {}</text>"#,
+            plot_rect.right() - 4.0,
+            plot_rect.top() + 10.0,
+            TypeStep::Micro.size(),
+            escape_xml(rig),
+        ));
+    }
 
     if !label_candidates.is_empty() {
         let automatic = GraphCanvas::place_labels(
@@ -449,6 +527,34 @@ pub fn export_svg(
 
 fn svg_color(color: Color32) -> String {
     format!("#{:02x}{:02x}{:02x}", color.r(), color.g(), color.b())
+}
+
+/// Base64 for the mark the export embeds as a data URI.
+///
+/// The SVG has to carry the image itself: a file next to it would be a second
+/// thing to lose, and a graph that is exported on its own should still show
+/// what it is.
+fn base64(bytes: &[u8]) -> String {
+    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
+    for chunk in bytes.chunks(3) {
+        let second = chunk.get(1).copied().unwrap_or(0);
+        let third = chunk.get(2).copied().unwrap_or(0);
+        let bits = (u32::from(chunk[0]) << 16) | (u32::from(second) << 8) | u32::from(third);
+        out.push(ALPHABET[(bits >> 18) as usize & 63] as char);
+        out.push(ALPHABET[(bits >> 12) as usize & 63] as char);
+        out.push(if chunk.len() > 1 {
+            ALPHABET[(bits >> 6) as usize & 63] as char
+        } else {
+            '='
+        });
+        out.push(if chunk.len() > 2 {
+            ALPHABET[bits as usize & 63] as char
+        } else {
+            '='
+        });
+    }
+    out
 }
 
 fn escape_xml(value: &str) -> String {
@@ -616,6 +722,10 @@ impl GraphCanvas<'_> {
                 axis_text,
             );
         }
+
+        // The mark and the name go down first, so the curves are drawn over
+        // them, faded back far enough to read as background.
+        self.draw_watermark(&plot_painter, plot_rect);
 
         let mut label_candidates = Vec::new();
         let mut screen_curves = Vec::with_capacity(curves.len());
@@ -979,6 +1089,39 @@ impl GraphCanvas<'_> {
         (center - half_range, center + half_range)
     }
 
+    /// The mark and the name, faded back behind the curves.
+    ///
+    /// The reference draws them in one group at a fifth of the usual opacity,
+    /// centred on the plot. egui's fonts are not scalable, so the name uses the
+    /// app's type scale rather than the reference's size; the mark keeps the
+    /// reference's proportions exactly.
+    fn draw_watermark(&self, painter: &egui::Painter, plot_rect: Rect) {
+        if self.watermark.texture.is_none() && self.watermark.text.is_none() {
+            return;
+        }
+        let scale = plot_rect.width() / REFERENCE_PLOT_WIDTH;
+        let center = plot_rect.center() - Vec2::new(0.0, 20.0 * scale);
+        let tint = Color32::from_white_alpha(51);
+        if let Some(texture) = self.watermark.texture {
+            let side = 128.0 * scale;
+            painter.image(
+                texture,
+                Rect::from_center_size(center, Vec2::new(side, side)),
+                Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)),
+                tint,
+            );
+        }
+        if let Some(text) = self.watermark.text {
+            painter.text(
+                center + Vec2::new(0.0, 70.0 * scale),
+                Align2::CENTER_CENTER,
+                text,
+                theme::font(TypeStep::Title),
+                tint,
+            );
+        }
+    }
+
     fn draw_curve(
         painter: &egui::Painter,
         points: &[Pos2],
@@ -1308,8 +1451,8 @@ fn nearest_point(points: &[FRPoint], frequency: f32) -> Option<&FRPoint> {
 #[cfg(test)]
 mod tests {
     use super::{
-        curve_control_points, export_svg, format_axis_frequency, GraphCanvas, PlotCurve, Transform,
-        ZoomRegion,
+        curve_control_points, export_svg, format_axis_frequency, GraphCanvas, PlotCurve,
+        Provenance, Transform, Watermark, ZoomRegion,
     };
     use crate::data::FRPoint;
     use egui::{pos2, Color32, Rect};
@@ -1575,7 +1718,15 @@ mod tests {
                 target: true,
             },
         ];
-        let svg = export_svg(&curves, ZoomRegion::Full, 5, &BTreeMap::new(), true, 1.0);
+        let svg = export_svg(
+            &curves,
+            ZoomRegion::Full,
+            5,
+            &BTreeMap::new(),
+            true,
+            1.0,
+            Provenance::default(),
+        );
         assert!(svg.starts_with("<svg"));
         assert!(svg.contains("<path"));
         assert!(svg.contains("#0c2238"));
@@ -1585,6 +1736,55 @@ mod tests {
         assert!(svg.contains("IEM &lt;A &amp; B&gt;"));
         assert!(svg.contains("20k"));
         assert!(svg.ends_with("</svg>"));
+    }
+
+    #[test]
+    fn svg_export_carries_the_mark_the_name_and_the_rig_line() {
+        // The reference stamps all three into the graph it exports
+        // (`web/config.js`, `watermark()`), so an exported graph says what it
+        // is and where it came from.
+        let points = [
+            FRPoint {
+                hz: 100.0,
+                db: 60.0,
+            },
+            FRPoint {
+                hz: 1000.0,
+                db: 65.0,
+            },
+        ];
+        let curves = [PlotCurve {
+            label: "Curve",
+            label_key: "curve",
+            points: &points,
+            color: Color32::WHITE,
+            dashed: false,
+            target: false,
+        }];
+        let svg = export_svg(
+            &curves,
+            ZoomRegion::Full,
+            5,
+            &BTreeMap::new(),
+            true,
+            1.0,
+            Provenance {
+                watermark: Watermark {
+                    png: Some(b"not really a png"),
+                    texture: None,
+                    text: Some("SquigLab"),
+                },
+                rig_description: Some("clone IEC 711"),
+            },
+        );
+        // The mark travels inside the file, as a data URI, so the SVG is still
+        // one file to hand over.
+        assert!(svg.contains("data:image/png;base64,"));
+        // The name is printed under the mark, in the faded group.
+        assert!(svg.contains("SquigLab"));
+        assert!(svg.contains(r#"<g opacity="0.2""#));
+        // The rig line the screen shows in the corner.
+        assert!(svg.contains("Measured on: clone IEC 711"));
     }
 
     #[test]
@@ -1607,8 +1807,24 @@ mod tests {
             dashed: false,
             target: false,
         }];
-        let full = export_svg(&curves, ZoomRegion::Full, 5, &BTreeMap::new(), false, 1.0);
-        let zoomed = export_svg(&curves, ZoomRegion::Bass, 5, &BTreeMap::new(), false, 2.0);
+        let full = export_svg(
+            &curves,
+            ZoomRegion::Full,
+            5,
+            &BTreeMap::new(),
+            false,
+            1.0,
+            Provenance::default(),
+        );
+        let zoomed = export_svg(
+            &curves,
+            ZoomRegion::Bass,
+            5,
+            &BTreeMap::new(),
+            false,
+            2.0,
+            Provenance::default(),
+        );
 
         assert_ne!(full, zoomed);
         assert!(full.contains("<svg"));
@@ -1660,7 +1876,15 @@ mod tests {
             target: false,
         }];
 
-        let svg = export_svg(&curves, ZoomRegion::Full, 1, &BTreeMap::new(), false, 1.0);
+        let svg = export_svg(
+            &curves,
+            ZoomRegion::Full,
+            1,
+            &BTreeMap::new(),
+            false,
+            1.0,
+            Provenance::default(),
+        );
         assert!(svg.contains(" C "));
     }
 

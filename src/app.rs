@@ -5,10 +5,17 @@ use squiglab::color::target_color;
 use squiglab::data::{self, CurveInfo, FRPoint, PhoneBook};
 use squiglab::delta::{self, DeltaTarget};
 use squiglab::equalizer;
-use squiglab::graph::{export_svg as render_svg, DeltaBar, GraphCanvas, PlotCurve, ZoomRegion};
+use squiglab::graph::{
+    export_svg as render_svg, DeltaBar, GraphCanvas, PlotCurve, Provenance, Watermark, ZoomRegion,
+};
 use squiglab::processing::{self, NormParams, SmoothingParams};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
+
+/// The name the graph carries behind its curves. The web reference stamps it
+/// into the graph it draws and exports (`web/config.js`, `watermark()`), under
+/// a mark of its own.
+const WATERMARK_TEXT: &str = env!("CRINGRAPH_APP_NAME");
 
 const MAX_ACTIVE_CURVES: usize = 8;
 const MAX_SMOOTH_LEVEL: usize = 12;
@@ -3982,18 +3989,25 @@ impl CrinGraphApp {
     fn central_panel(&mut self, ui: &mut Ui) {
         egui::CentralPanel::default().show(ui, |ui| {
             if let Some(error) = &self.processing_error {
-                ui.colored_label(Color32::LIGHT_RED, error);
+                let palette = squiglab::theme::Palette::resolve(self.dark_mode);
+                ui.colored_label(palette.error, error);
             }
             if self.display_curves.is_empty() {
-                ui.centered_and_justified(|ui| {
-                    ui.heading(if self.curves.is_empty() {
-                        "No measurements found"
-                    } else {
-                        "Select measurements to compare"
-                    });
-                });
+                ui.allocate_ui_with_layout(
+                    ui.available_rect_before_wrap().size()
+                        - egui::vec2(0.0, ui.available_height() * 0.35),
+                    egui::Layout::top_down_justified(egui::Align::Center),
+                    |ui| {
+                        ui.heading(if self.curves.is_empty() {
+                            "No measurements found"
+                        } else {
+                            "Select measurements to compare"
+                        });
+                    },
+                );
                 return;
             }
+            let watermark = self.watermark();
             let plot_curves: Vec<PlotCurve<'_>> = self
                 .display_curves
                 .iter()
@@ -4019,6 +4033,7 @@ impl CrinGraphApp {
                 }),
                 bands: &FREQUENCY_BANDS,
                 rig_description: self.rig_description.as_deref(),
+                watermark,
                 y_scale: self.y_scale,
             }
             .show(ui, &plot_curves);
@@ -4027,6 +4042,20 @@ impl CrinGraphApp {
                 self.y_scale = y_scale;
             }
         });
+    }
+
+    /// The name stamped behind the curves.
+    ///
+    /// The reference stamps a mark as well (`web/config.js`, `watermark()`);
+    /// the application has no compact mark of its own — its icon is a wordmark
+    /// lockup that reads as a smudge at watermark size — so the name stands
+    /// alone for now, and the mark is one `png` away.
+    fn watermark(&self) -> Watermark<'static> {
+        Watermark {
+            png: None,
+            texture: None,
+            text: Some(WATERMARK_TEXT),
+        }
     }
 
     fn export_svg(&mut self) {
@@ -4049,6 +4078,10 @@ impl CrinGraphApp {
             &self.label_positions,
             self.dark_mode,
             self.y_scale,
+            Provenance {
+                watermark: self.watermark(),
+                rig_description: self.rig_description.as_deref(),
+            },
         );
         match save_svg(&svg) {
             Ok(path) => {
