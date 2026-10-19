@@ -1,64 +1,97 @@
-//! What belongs to the graph: the targets, and the curves that are on it.
+//! What belongs to the graph: the target chips, and the rows of the curves
+//! that are on it.
 //!
-//! The reference puts the target chips under the graph and the list of active
-//! curves under those, and this is the same two things.
+//! The reference puts the targets in a strip under the graph, grouped by the
+//! kind of target they are, and the active curves in a table below that: a row
+//! each, with the curve's colour, its name, the channels shown, the offset
+//! that moves it, and the buttons that act on it.
 
-use egui::{RichText, Ui};
+use egui::{Align, Layout, RichText, Ui};
 
 use crate::app::App;
 use crate::theme::{self, metrics, TypeStep};
-use squiglab_core::session::ChannelMode;
+use squiglab_core::session::{ChannelMode, EqBank};
 
-/// The target chips, and the list of active curves.
+/// The target chips, and the rows of the active curves.
 pub fn show(ui: &mut Ui, app: &mut App) {
     ui.add_space(metrics::GAP);
     targets(ui, app);
     ui.add_space(metrics::GAP);
-    active(ui, app);
+    manager(ui, app);
 }
 
-/// The chips that turn the targets on and off.
+/// The chips that turn the targets on and off, grouped as the reference groups
+/// them.
 fn targets(ui: &mut Ui, app: &mut App) {
     let palette = theme::current_palette();
     let targets: Vec<usize> = app.session.active_targets.iter().copied().collect();
     if targets.is_empty() {
         return;
     }
-    ui.horizontal_wrapped(|ui| {
-        ui.label(
-            RichText::new("TARGETS")
-                .font(TypeStep::Label.font())
-                .color(palette.text_tertiary),
-        );
-        for index in targets {
-            let name = app.session.groups[index].name.clone();
-            let on = app.session.active_targets.contains(&index);
-            let response = ui
-                .selectable_label(
-                    on,
-                    RichText::new(name)
-                        .font(TypeStep::Label.font())
-                        .color(if on {
-                            palette.on_accent
-                        } else {
-                            palette.text_secondary
-                        }),
-                )
-                .on_hover_text("Show this target on the graph");
-            if response.clicked() {
-                if on {
-                    app.session.active_targets.remove(&index);
-                } else {
-                    app.session.active_targets.insert(index);
-                }
-                app.session.rebuild_display_curves();
-            }
+    // The categories keep their own order, so the strip reads the same way
+    // every time.
+    let order = [
+        "Neutral targets",
+        "Reviewer targets",
+        "Preference targets",
+        "Other targets",
+    ];
+    let mut first = true;
+    for category in order {
+        let in_category: Vec<usize> = targets
+            .iter()
+            .copied()
+            .filter(|&index| {
+                squiglab_core::session::target_category(&app.session.groups[index].name) == category
+            })
+            .collect();
+        if in_category.is_empty() {
+            continue;
         }
-    });
+        ui.horizontal_wrapped(|ui| {
+            if !first {
+                ui.label(
+                    RichText::new("|")
+                        .font(TypeStep::Label.font())
+                        .color(palette.text_tertiary),
+                );
+            }
+            first = false;
+            ui.label(
+                RichText::new(format!("{category}:"))
+                    .font(TypeStep::Label.font())
+                    .color(palette.text_tertiary),
+            );
+            for index in in_category {
+                let name = app.session.groups[index].name.clone();
+                let on = app.session.active_targets.contains(&index);
+                let response = ui
+                    .selectable_label(
+                        on,
+                        RichText::new(name)
+                            .font(TypeStep::Label.font())
+                            .color(if on {
+                                palette.on_accent
+                            } else {
+                                palette.text_secondary
+                            }),
+                    )
+                    .on_hover_text("Show this target on the graph");
+                if response.clicked() {
+                    if on {
+                        app.session.active_targets.remove(&index);
+                    } else {
+                        app.session.active_targets.insert(index);
+                    }
+                    app.session.rebuild_display_curves();
+                }
+            }
+        });
+    }
 }
 
-/// The list of the curves that are on the graph.
-fn active(ui: &mut Ui, app: &mut App) {
+/// The rows of the curves that are on the graph.
+fn manager(ui: &mut Ui, app: &mut App) {
     let palette = theme::current_palette();
     let active: Vec<usize> = app.session.active.iter().copied().collect();
     if active.is_empty() {
@@ -69,66 +102,141 @@ fn active(ui: &mut Ui, app: &mut App) {
         );
         return;
     }
-    ui.horizontal_wrapped(|ui| {
+    for index in active {
+        row(ui, app, index);
+    }
+}
+
+/// One row of the manager: who the curve is, and what can be done to it.
+fn row(ui: &mut Ui, app: &mut App, index: usize) {
+    let palette = theme::current_palette();
+    let group = &app.session.groups[index];
+    let name = group.name.clone();
+    let color = theme::color(crate::graph::curve_color(app, index));
+
+    ui.horizontal(|ui| {
+        // The curve's colour, as a dot.
+        let (rect, _) = ui.allocate_exact_size(egui::vec2(10.0, 10.0), egui::Sense::hover());
+        ui.painter().circle_filled(rect.center(), 5.0, color);
         ui.label(
-            RichText::new("ACTIVE CURVES")
-                .font(TypeStep::Label.font())
-                .color(palette.text_tertiary),
+            RichText::new(name.clone())
+                .font(TypeStep::Body.font())
+                .color(palette.text_primary),
         );
-        for index in active {
-            let group = &app.session.groups[index];
-            let name = group.name.clone();
-            let response = ui
-                .selectable_label(
-                    true,
-                    RichText::new(name.clone())
-                        .font(TypeStep::Label.font())
-                        .color(palette.on_accent),
-                )
-                .on_hover_text("This measurement is on the graph");
-            if response.clicked() {
-                app.session.active.remove(&index);
-                app.session.rebuild_display_curves();
-            }
 
-            // The channel: the reference offers left, right and both.
-            let mode = app
-                .session
-                .channel_modes
-                .get(&index)
-                .copied()
-                .unwrap_or(ChannelMode::Both);
-            for (option, name) in [
-                (ChannelMode::Left, "L"),
-                (ChannelMode::Right, "R"),
-                (ChannelMode::Both, "Both"),
-            ] {
-                let selected = mode == option;
-                if ui
-                    .selectable_label(selected, RichText::new(name).font(TypeStep::Label.font()))
-                    .on_hover_text("Which channels of the measurement to show")
-                    .clicked()
-                {
-                    app.session.channel_modes.insert(index, option);
-                    app.session.rebuild_display_curves();
-                }
-            }
-
-            // The offset: the curve moved up or down, in decibels.
-            let mut offset = app.session.offsets.get(&index).copied().unwrap_or(0.0);
+        // The channels: the reference offers left, right and both.
+        let mode = app
+            .session
+            .channel_modes
+            .get(&index)
+            .copied()
+            .unwrap_or(ChannelMode::Both);
+        for (option, name) in [
+            (ChannelMode::Left, "L"),
+            (ChannelMode::Right, "R"),
+            (ChannelMode::Both, "Both"),
+        ] {
+            let selected = mode == option;
             if ui
-                .add(
-                    egui::DragValue::new(&mut offset)
-                        .range(-20.0..=20.0)
-                        .speed(0.1)
-                        .suffix(" dB"),
-                )
-                .on_hover_text("Move this curve up or down")
-                .changed()
+                .selectable_label(selected, RichText::new(name).font(TypeStep::Label.font()))
+                .on_hover_text("Which channels of the measurement to show")
+                .clicked()
             {
-                app.session.offsets.insert(index, offset);
+                app.session.channel_modes.insert(index, option);
                 app.session.rebuild_display_curves();
             }
         }
+
+        // The offset: the curve moved up or down, in decibels.
+        let mut offset = app.session.offsets.get(&index).copied().unwrap_or(0.0);
+        if ui
+            .add(
+                egui::DragValue::new(&mut offset)
+                    .range(-20.0..=20.0)
+                    .speed(0.1)
+                    .suffix(" dB"),
+            )
+            .on_hover_text("Move this curve up or down")
+            .changed()
+        {
+            app.session.offsets.insert(index, offset);
+            app.session.rebuild_display_curves();
+        }
+
+        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+            // Remove.
+            if crate::icons::button(
+                ui,
+                crate::icons::Icon::Close,
+                "Take this curve off the graph",
+                false,
+            )
+            .clicked()
+            {
+                app.session.toggle_curve(index);
+                app.session.rebuild_display_curves();
+            }
+            // Export.
+            if crate::icons::button(
+                ui,
+                crate::icons::Icon::Save,
+                "Save this curve as a text file",
+                false,
+            )
+            .clicked()
+            {
+                match app.session.export_curve_text(index) {
+                    Ok(text) => app.say(format!("The curve is ready to save: {text}")),
+                    Err(problem) => app.say(format!("The curve was not saved: {problem}")),
+                }
+            }
+            // Pin.
+            let pinned = app.session.pinned.contains(&index);
+            if crate::icons::button(
+                ui,
+                if pinned {
+                    crate::icons::Icon::Pin
+                } else {
+                    crate::icons::Icon::PinOutline
+                },
+                "Pin the curve so it stays when the others are taken off",
+                pinned,
+            )
+            .clicked()
+            {
+                if pinned {
+                    app.session.pinned.remove(&index);
+                } else {
+                    app.session.pinned.insert(index);
+                }
+                app.session.dirty = true;
+            }
+            // Hide.
+            let hidden = app.session.hidden.contains(&index);
+            if crate::icons::button(
+                ui,
+                if hidden {
+                    crate::icons::Icon::EyeCrossed
+                } else {
+                    crate::icons::Icon::Eye
+                },
+                "Hide the curve without taking it off the graph",
+                hidden,
+            )
+            .clicked()
+            {
+                if hidden {
+                    app.session.hidden.remove(&index);
+                } else {
+                    app.session.hidden.insert(index);
+                }
+                app.session.rebuild_display_curves();
+            }
+        });
     });
+}
+
+/// The bank a row belongs to, for the panels that ask.
+pub fn bank(app: &App) -> EqBank {
+    app.session.eq_bank
 }

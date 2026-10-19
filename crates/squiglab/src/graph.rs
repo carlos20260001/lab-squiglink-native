@@ -75,6 +75,26 @@ fn draw(app: &App, painter: &egui::Painter, rect: Rect) {
     watermark(painter, plot);
 }
 
+/// The colour a measurement is drawn in.
+///
+/// The palette is turned in order, so a curve keeps its colour for as long as
+/// it is on the graph, and the manager row and the graph agree.
+pub fn curve_color(app: &App, group_index: usize) -> squiglab_core::color::Rgb {
+    let position = app
+        .session
+        .display_curves
+        .iter()
+        .position(|curve| {
+            curve.group_index == group_index
+                && matches!(
+                    curve.source,
+                    squiglab_core::session::CurveSource::Measurement
+                )
+        })
+        .unwrap_or(group_index);
+    squiglab_core::color::get_curve_color_with_offset(position, app.session.color_offset)
+}
+
 /// The curves the graph draws: the measurements and the targets that are on.
 fn plot_curves(app: &App) -> Vec<PlotCurve<'_>> {
     let mut curves = Vec::new();
