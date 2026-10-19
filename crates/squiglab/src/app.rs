@@ -59,10 +59,16 @@ pub struct App {
     pub volume: f32,
     /// The frequency the tone generator is playing.
     pub frequency: f32,
+    /// What the sound tools last said.
+    pub sound_message: Option<String>,
     /// Whether a picture of the window was asked for.
     pub screenshot_requested: bool,
+    /// Whether the constraints panel is open.
+    pub constraints_open: bool,
     /// The file the upload panel is waiting to load.
     pub upload_path: String,
+    /// The file the equalizer's import is waiting to load.
+    pub import_path: String,
     /// What the upload panel last said.
     pub upload_message: Option<String>,
 }
@@ -132,8 +138,11 @@ impl App {
             source: squiglab_core::audio::Source::Tone { freq: 1000.0 },
             volume: 0.2,
             frequency: 1000.0,
+            sound_message: None,
             screenshot_requested: false,
+            constraints_open: false,
             upload_path: String::new(),
+            import_path: String::new(),
             upload_message: None,
         }
         .with_theme(theme)

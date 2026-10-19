@@ -248,29 +248,30 @@ pub fn show(ui: &mut Ui, app: &mut App) {
                     );
                 }
             });
-            if number(ui, &mut row.filter.freq, 0.0, 20_000.0, 0, 62.0) {
+            if number(ui, &mut row.filter.freq, 0.0, 20_000.0, 0, 56.0, "Hz") {
                 changed = true;
             }
-            if number(ui, &mut row.filter.gain, -40.0, 40.0, 1, 58.0) {
+            if number(ui, &mut row.filter.gain, -40.0, 40.0, 1, 50.0, "dB") {
                 changed = true;
             }
-            if number(ui, &mut row.filter.q, 0.0, 20.0, 2, 46.0) {
+            if number(ui, &mut row.filter.q, 0.0, 20.0, 2, 36.0, "") {
                 changed = true;
             }
         });
     }
-    ui.label(
-        RichText::new("Frequencies in hertz, gains in decibels.")
-            .font(TypeStep::Label.font())
-            .color(palette.text_tertiary),
-    );
     if changed {
         write_bank(app, phone, bank, rows);
     }
 
     // --- the row controls ---
+    // The buttons share the width between them, as the reference's do.
+    let third = (ui.available_width() - metrics::GAP * 2.0) / 3.0;
     ui.horizontal(|ui| {
-        if ui.button("+").on_hover_text("Add a band").clicked() {
+        if ui
+            .add_sized([third, 28.0], egui::Button::new("+"))
+            .on_hover_text("Add a band")
+            .clicked()
+        {
             let mut rows = app
                 .session
                 .eq_filters
@@ -292,7 +293,7 @@ pub fn show(ui: &mut Ui, app: &mut App) {
             }
         }
         if ui
-            .button("−")
+            .add_sized([third, 28.0], egui::Button::new("−"))
             .on_hover_text("Remove the last band")
             .clicked()
         {
@@ -314,7 +315,7 @@ pub fn show(ui: &mut Ui, app: &mut App) {
             }
         }
         if ui
-            .button("Sort")
+            .add_sized([third, 28.0], egui::Button::new("Sort"))
             .on_hover_text("Order the bands by frequency")
             .clicked()
         {
@@ -328,7 +329,21 @@ pub fn show(ui: &mut Ui, app: &mut App) {
     ui.add_space(metrics::GAP);
 
     // --- what a fit may produce ---
-    constraints(ui, app);
+    // The reference hides the constraints behind a gear, and the column is
+    // narrow enough that the room they take is worth having back.
+    let constraints_open = app.constraints_open;
+    ui.horizontal(|ui| {
+        if ui
+            .selectable_label(constraints_open, "Constraints")
+            .on_hover_text("What a fit is allowed to produce")
+            .clicked()
+        {
+            app.constraints_open = !constraints_open;
+        }
+    });
+    if constraints_open {
+        constraints(ui, app);
+    }
 
     // --- the change history ---
     ui.add_space(metrics::GAP);
@@ -337,8 +352,29 @@ pub fn show(ui: &mut Ui, app: &mut App) {
     // --- the exports ---
     ui.add_space(metrics::GAP);
     ui.horizontal(|ui| {
+        ui.label(
+            RichText::new("Import")
+                .font(TypeStep::Label.font())
+                .color(palette.text_tertiary),
+        );
+        ui.add(
+            egui::TextEdit::singleline(&mut app.import_path)
+                .hint_text("An Equalizer APO file")
+                .desired_width(ui.available_width() - 60.0),
+        );
+    });
+    ui.add_space(metrics::GAP);
+    let half = (ui.available_width() - metrics::GAP) / 2.0;
+    ui.horizontal(|ui| {
         if ui
-            .button("Export")
+            .add_sized([half, 28.0], egui::Button::new("Import"))
+            .on_hover_text("Load an Equalizer APO file")
+            .clicked()
+        {
+            import(app, phone);
+        }
+        if ui
+            .add_sized([half, 28.0], egui::Button::new("Export"))
             .on_hover_text("Save an Equalizer APO file")
             .clicked()
         {
@@ -348,7 +384,10 @@ pub fn show(ui: &mut Ui, app: &mut App) {
             }
         }
         if ui
-            .button("Export Graphic EQ")
+            .add_sized(
+                [ui.available_width(), 28.0],
+                egui::Button::new("Export Graphic EQ (Wavelet)"),
+            )
             .on_hover_text("Save a Wavelet file")
             .clicked()
         {
@@ -567,6 +606,13 @@ fn history(ui: &mut Ui, app: &mut App) {
             }
         }
     });
+    // The reference writes the shortcuts under the buttons, so they are
+    // written here too.
+    ui.label(
+        RichText::new("Undo: Ctrl+Z / ⌘Z, Redo: Shift+Ctrl+Z / Shift+⌘Z")
+            .font(TypeStep::Label.font())
+            .color(palette.text_tertiary),
+    );
 }
 
 /// A short summary of the equalizer, for the tabs that are not the equalizer.
@@ -619,7 +665,15 @@ fn snapshot(app: &App) -> Snapshot {
 }
 
 /// A number in the band table, typed rather than dragged.
-fn number(ui: &mut Ui, value: &mut f64, low: f64, high: f64, places: usize, width: f32) -> bool {
+fn number(
+    ui: &mut Ui,
+    value: &mut f64,
+    low: f64,
+    high: f64,
+    places: usize,
+    width: f32,
+    unit: &str,
+) -> bool {
     let mut text = match places {
         0 => format!("{value:.0}"),
         1 => format!("{value:.1}"),
@@ -629,6 +683,14 @@ fn number(ui: &mut Ui, value: &mut f64, low: f64, high: f64, places: usize, widt
         [width, 20.0],
         egui::TextEdit::singleline(&mut text).desired_width(width),
     );
+    if !unit.is_empty() {
+        // The unit sits beside the figure, as the reference writes it.
+        ui.label(
+            RichText::new(unit)
+                .font(TypeStep::Label.font())
+                .color(theme::current_palette().text_tertiary),
+        );
+    }
     if !response.changed() {
         return false;
     }
@@ -638,5 +700,31 @@ fn number(ui: &mut Ui, value: &mut f64, low: f64, high: f64, places: usize, widt
             true
         }
         Err(_) => false,
+    }
+}
+
+/// Load an Equalizer APO file into the curve's equalizer.
+///
+/// There is no file dialog, so the path is typed, as the upload panel's is.
+fn import(app: &mut App, phone: usize) {
+    let path = app.import_path.trim();
+    if path.is_empty() {
+        app.say("Name the file to import.");
+        return;
+    }
+    let text = match std::fs::read_to_string(path) {
+        Ok(text) => text,
+        Err(problem) => {
+            app.say(format!("The file was not read: {problem}"));
+            return;
+        }
+    };
+    match app.session.import_parametric(phone, &text) {
+        Ok(count) => {
+            app.import_path.clear();
+            app.say(format!("{count} bands were imported."));
+            app.session.rebuild_display_curves();
+        }
+        Err(problem) => app.say(format!("The file was not imported: {problem}")),
     }
 }
