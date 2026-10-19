@@ -36,6 +36,34 @@ dirs = "7"
 ureq = { version = "3", features = ["json"] }
 serde_json = "1.0"
 
+# The file picker. The desktop and the browser have one between them, and
+# the phone has its own, which is written here against the platform's own
+# libraries rather than taken from a third party.
+[target.'cfg(any(target_os = "linux", target_os = "macos", target_os = "windows", target_arch = "wasm32"))'.dependencies]
+rfd = "0.17.2"
+
+# The phone's own picker. The versions are the ones the window already
+# uses, so that there is one of each in the tree.
+[target.'cfg(target_os = "ios")'.dependencies]
+objc2 = { version = "0.5.2", features = ["relax-sign-encoding"] }
+objc2-foundation = { version = "0.2.2", features = [
+    "NSArray",
+    "NSString",
+    "NSURL",
+    "NSObject",
+    "NSEnumerator",
+    "block2",
+] }
+objc2-ui-kit = { version = "0.2.2", features = [
+    "UIApplication",
+    "UIDocumentPickerViewController",
+    "UIResponder",
+    "UIView",
+    "UIViewController",
+    "UIWindow",
+    "objc2-uniform-type-identifiers",
+] }
+
 [build-dependencies]
 squiglab-core = { path = "../squiglab-core" }
 winresource = "0.1"

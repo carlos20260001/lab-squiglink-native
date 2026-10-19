@@ -7,6 +7,7 @@
 pub mod app;
 pub mod curves;
 pub mod equalizer;
+pub mod filepick;
 pub mod graph;
 pub mod header;
 pub mod icons;

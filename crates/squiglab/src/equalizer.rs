@@ -416,8 +416,20 @@ pub fn show(ui: &mut Ui, app: &mut App) {
         ui.add(
             egui::TextEdit::singleline(&mut app.import_path)
                 .hint_text("An Equalizer APO file")
-                .desired_width(ui.available_width() - 60.0),
+                .desired_width(ui.available_width() - 110.0),
         );
+        // The system dialog, where there is one.
+        if ui
+            .button("Browse")
+            .on_hover_text("Choose the file with the system's own dialog")
+            .clicked()
+        {
+            app.ask_for_file(
+                crate::app::Pick::ImportParametric,
+                "An Equalizer APO file",
+                &["txt", "cfg", "apo"],
+            );
+        }
     });
     ui.add_space(metrics::GAP);
     let half = (ui.available_width() - metrics::GAP) / 2.0;

@@ -1183,8 +1183,22 @@ impl Session {
             .to_owned();
         let contents = std::fs::read_to_string(path)
             .map_err(|error| format!("Unable to read the file: {error:#}"))?;
+        self.import_upload_text(&file_name, &contents, as_target)
+    }
+
+    /// Load a measurement that has already been read.
+    ///
+    /// Where there is no filesystem to read from, as in a browser or on a
+    /// phone, the file arrives as text and this is where it is taken.
+    pub fn import_upload_text(
+        &mut self,
+        file_name: &str,
+        contents: &str,
+        as_target: bool,
+    ) -> Result<String, String> {
+        let file_name = file_name.to_owned();
         let uploaded =
-            crate::data::parse_upload(&file_name, &contents, &self.upload_grid, as_target)
+            crate::data::parse_upload(&file_name, contents, &self.upload_grid, as_target)
                 .map_err(|error| format!("{file_name} was not accepted: {error}"))?;
         if as_target {
             // A target the database already carries would draw twice, so the

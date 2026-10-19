@@ -140,8 +140,20 @@ pub fn show(ui: &mut Ui, app: &mut App) {
                 ui.add(
                     egui::TextEdit::singleline(&mut app.music.path)
                         .hint_text("A music file")
-                        .desired_width(ui.available_width() - 60.0),
+                        .desired_width(ui.available_width() - 110.0),
                 );
+                // The system dialog, where there is one.
+                if ui
+                    .button("Browse")
+                    .on_hover_text("Choose the file with the system's own dialog")
+                    .clicked()
+                {
+                    app.ask_for_file(
+                        crate::app::Pick::Music,
+                        "A music file",
+                        &["mp3", "flac", "wav", "ogg", "m4a"],
+                    );
+                }
             });
         }
 
@@ -263,6 +275,18 @@ fn play_file(app: &mut App) {
             let seconds = decoded.seconds();
             play_decoded(app, decoded);
             app.music.message = Some(format!("Playing {path} ({seconds:.0} seconds)."));
+        }
+        Err(problem) => app.music.message = Some(problem),
+    }
+}
+
+/// Play a music file that has already been read, wherever it came from.
+pub fn play_bytes(app: &mut App, name: &str, bytes: &[u8]) {
+    match squiglab_core::audio::decode::decode_bytes(bytes) {
+        Ok(decoded) => {
+            let seconds = decoded.seconds();
+            play_decoded(app, decoded);
+            app.music.message = Some(format!("Playing {name} ({seconds:.0} seconds)."));
         }
         Err(problem) => app.music.message = Some(problem),
     }

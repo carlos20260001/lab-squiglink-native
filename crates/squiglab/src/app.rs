@@ -31,6 +31,17 @@ impl Tab {
     }
 }
 
+/// What a file the user has chosen is for.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Pick {
+    /// A measurement to upload, as a measurement or as a target.
+    Upload,
+    /// An equalizer file to import.
+    ImportParametric,
+    /// A music file to play.
+    Music,
+}
+
 /// The application: the state, and the frame it draws.
 pub struct App {
     /// The program: what is loaded, what is selected, and what has changed.
@@ -74,6 +85,11 @@ pub struct App {
     pub constraints_open: bool,
     /// Whether the sound tools' settings are open, behind their gear.
     pub sound_settings_open: bool,
+    /// The file the user is being asked for, and the dialog that is asking.
+    pub picker: Option<(Pick, crate::filepick::Picker)>,
+    /// The measurement the user chose with the system's dialog, waiting to be
+    /// loaded as a measurement or as a target.
+    pub pending_upload: Option<crate::filepick::Chosen>,
     /// The file the upload panel is waiting to load.
     pub upload_path: String,
     /// The file the equalizer's import is waiting to load.
@@ -154,6 +170,8 @@ impl App {
             screenshot_requested: false,
             constraints_open: false,
             sound_settings_open: false,
+            picker: None,
+            pending_upload: None,
             upload_path: String::new(),
             import_path: String::new(),
             upload_message: None,
@@ -192,6 +210,8 @@ impl App {
         // What the music player was doing while the window was busy.
         crate::music::take_results(self);
         crate::music::take_preview(self);
+        // What the file picker has come back with.
+        self.take_chosen_file();
 
         egui::CentralPanel::default()
             .frame(
@@ -300,6 +320,113 @@ impl App {
                 crate::curves::show(ui, self);
                 self.status_line(ui);
             });
+    }
+
+    /// Ask for a file, if nothing else is being asked for.
+    pub fn ask_for_file(&mut self, what: Pick, title: &str, extensions: &[&str]) {
+        if self.picker.is_some() {
+            return;
+        }
+        self.picker = Some((what, crate::filepick::Picker::start(title, extensions)));
+    }
+
+    /// Take the file the user chose, and do what it was wanted for.
+    fn take_chosen_file(&mut self) {
+        let Some((what, picker)) = &mut self.picker else {
+            return;
+        };
+        let Some(chosen) = picker.take() else {
+            return;
+        };
+        let what = *what;
+        self.picker = None;
+        match what {
+            Pick::Upload => {
+                self.pending_upload = Some(chosen);
+                self.upload_message = None;
+            }
+            Pick::ImportParametric => self.import_chosen(chosen),
+            Pick::Music => self.play_chosen(chosen),
+        }
+    }
+
+    /// Load the measurement the user chose with the dialog, if there is one,
+    /// and otherwise the file they named.
+    pub fn upload_chosen(&mut self, as_target: bool) {
+        let chosen = self.pending_upload.take();
+        let (name, text) = match chosen {
+            Some(chosen) => {
+                let name = if chosen.name.is_empty() {
+                    "The file".to_owned()
+                } else {
+                    chosen.name.clone()
+                };
+                match chosen.text() {
+                    Some(text) => (name, text),
+                    None => {
+                        self.upload_message = Some("That file could not be read.".to_owned());
+                        return;
+                    }
+                }
+            }
+            None => {
+                let path = self.upload_path.trim().to_owned();
+                if path.is_empty() {
+                    self.upload_message = Some("Name the file to load.".to_owned());
+                    return;
+                }
+                let name = std::path::Path::new(&path)
+                    .file_stem()
+                    .and_then(|stem| stem.to_str())
+                    .unwrap_or("The file")
+                    .to_owned();
+                match std::fs::read_to_string(&path) {
+                    Ok(text) => (name, text),
+                    Err(problem) => {
+                        self.upload_message = Some(format!("The file was not loaded: {problem}"));
+                        return;
+                    }
+                }
+            }
+        };
+        match self.session.import_upload_text(&name, &text, as_target) {
+            Ok(message) => {
+                self.upload_message = Some(message);
+                self.session.rebuild_display_curves();
+            }
+            Err(problem) => {
+                self.upload_message = Some(format!("The file was not loaded: {problem}"))
+            }
+        }
+    }
+
+    /// Load the equalizer file the user chose.
+    fn import_chosen(&mut self, chosen: crate::filepick::Chosen) {
+        let Some(text) = chosen.text() else {
+            self.status = Some("That file could not be read.".to_owned());
+            return;
+        };
+        let Some(phone) = self.session.eq_phone else {
+            self.status = Some("Choose a measurement to give it an equalizer.".to_owned());
+            return;
+        };
+        match self.session.import_parametric(phone, &text) {
+            Ok(count) => {
+                self.status = Some(format!("{count} bands were imported."));
+                self.session.rebuild_display_curves();
+                crate::sound::push_chain(self);
+            }
+            Err(problem) => self.status = Some(format!("The file was not imported: {problem}")),
+        }
+    }
+
+    /// Play the music the user chose.
+    fn play_chosen(&mut self, chosen: crate::filepick::Chosen) {
+        let Some(bytes) = chosen.contents() else {
+            self.sound_message = Some("That file could not be read.".to_owned());
+            return;
+        };
+        crate::music::play_bytes(self, &chosen.name, &bytes);
     }
 
     /// What the program last said, at the foot of the window.

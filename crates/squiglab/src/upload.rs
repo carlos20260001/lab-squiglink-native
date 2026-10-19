@@ -43,6 +43,18 @@ pub fn show(ui: &mut Ui, app: &mut App) {
                 .hint_text("A measurement file")
                 .desired_width(ui.available_width() - 150.0),
         );
+        // The system dialog, where there is one.
+        if ui
+            .button("Browse")
+            .on_hover_text("Choose the file with the system's own dialog")
+            .clicked()
+        {
+            app.ask_for_file(
+                crate::app::Pick::Upload,
+                "A measurement file",
+                &["txt", "csv", "fr"],
+            );
+        }
     });
     ui.add_space(metrics::GAP);
     ui.horizontal(|ui| {
@@ -51,14 +63,14 @@ pub fn show(ui: &mut Ui, app: &mut App) {
             .on_hover_text("Load this measurement")
             .clicked()
         {
-            upload(app, false);
+            app.upload_chosen(false);
         }
         if ui
             .button("Upload Target")
             .on_hover_text("Load this measurement as a target")
             .clicked()
         {
-            upload(app, true);
+            app.upload_chosen(true);
         }
     });
     if let Some(message) = &app.upload_message {
@@ -68,24 +80,5 @@ pub fn show(ui: &mut Ui, app: &mut App) {
                 .font(TypeStep::Label.font())
                 .color(palette.text_secondary),
         );
-    }
-}
-
-/// Load the file the user named.
-fn upload(app: &mut App, as_target: bool) {
-    let path = app.upload_path.trim();
-    if path.is_empty() {
-        app.upload_message = Some("Name the file to load.".to_owned());
-        return;
-    }
-    match app
-        .session
-        .import_upload(std::path::Path::new(path), as_target)
-    {
-        Ok(message) => {
-            app.upload_message = Some(message);
-            app.session.rebuild_display_curves();
-        }
-        Err(problem) => app.upload_message = Some(format!("The file was not loaded: {problem}")),
     }
 }
