@@ -58,6 +58,48 @@ pub type SearchHandle = std::thread::JoinHandle<Result<Vec<Track>, String>>;
 pub type PreviewHandle = std::thread::JoinHandle<Result<Vec<u8>, String>>;
 
 /// The card, as the reference draws it.
+/// A button with no border and no fill, the way the reference writes its
+/// quiet actions.
+pub fn text_button(ui: &mut egui::Ui, text: &str) -> egui::Response {
+    text_button_in(ui, text, None)
+}
+
+/// The same, but spread across a width, with the words in the middle.
+pub fn text_button_in(ui: &mut egui::Ui, text: &str, width: Option<f32>) -> egui::Response {
+    let palette = crate::theme::current_palette();
+    let font = egui::FontId::new(12.0, egui::FontFamily::Proportional);
+    let galley = ui
+        .painter()
+        .layout_no_wrap(text.to_owned(), font, palette.text_tertiary);
+    let size = galley.size();
+    let box_width = width.unwrap_or(size.x + 8.0);
+    let (rect, response) =
+        ui.allocate_exact_size(egui::vec2(box_width, size.y + 12.0), egui::Sense::click());
+    let colour = if response.hovered() {
+        palette.accent_text
+    } else {
+        palette.text_tertiary
+    };
+    let at = if width.is_some() {
+        rect.center() - egui::vec2(size.x * 0.5, size.y * 0.5)
+    } else {
+        rect.left_center() + egui::vec2(4.0, 0.0)
+    };
+    ui.painter().galley(at, galley, colour);
+    if response.hovered() {
+        let under = egui::Rect::from_min_max(
+            egui::pos2(at.x, at.y + size.y),
+            egui::pos2(at.x + size.x, at.y + size.y),
+        );
+        ui.painter().hline(
+            under.min.x..=under.max.x,
+            under.min.y,
+            egui::Stroke::new(1.0, palette.accent_text),
+        );
+    }
+    response
+}
+
 pub fn show(ui: &mut Ui, app: &mut App) {
     let palette = theme::current_palette();
     let path = app.music.path.clone();
@@ -69,18 +111,17 @@ pub fn show(ui: &mut Ui, app: &mut App) {
 
     crate::sound::card(ui, "Music", |ui| {
         // --- the two ways in ---
-        // The reference's row: add a file, or search the catalogue.
+        // The reference's row: add a file, or search the catalogue. Both are
+        // plain words, with no border around them.
         ui.horizontal(|ui| {
-            if ui
-                .button("+ Add Music")
+            if crate::music::text_button(ui, "+ Add Music")
                 .on_hover_text("Play a file from this computer")
                 .clicked()
             {
                 app.music.naming = !app.music.naming;
                 app.music.searching_for = false;
             }
-            if ui
-                .button("Search Apple")
+            if crate::music::text_button(ui, "Search Apple")
                 .on_hover_text("Search the Apple Music catalogue for a preview")
                 .clicked()
             {

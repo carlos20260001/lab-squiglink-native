@@ -10,11 +10,13 @@ use crate::app::{App, Tab};
 use crate::theme::{self, metrics, TypeStep};
 use squiglab_core::session::{matches_search, MeasurementGroup};
 
-/// The tabs, and the list under them.
-pub fn show(ui: &mut Ui, app: &mut App) {
+/// The tabs, which stay put while the panel beneath them scrolls.
+pub fn show_tabs(ui: &mut Ui, app: &mut App) {
     tabs(ui, app);
-    ui.add_space(metrics::GAP);
+}
 
+/// The list under the tabs.
+pub fn show_list(ui: &mut Ui, app: &mut App) {
     // --- the search ---
     let mut search = app.search.clone();
     ui.horizontal(|ui| {
@@ -35,22 +37,57 @@ pub fn show(ui: &mut Ui, app: &mut App) {
 }
 
 /// The three tabs.
+///
+/// The reference draws them as three buttons joined side by side, each a
+/// third of the column's width, with the chosen one filled in the accent.
 fn tabs(ui: &mut Ui, app: &mut App) {
     let palette = theme::current_palette();
+    let width = (ui.available_width() - metrics::GAP * 2.0) / 3.0;
     ui.horizontal(|ui| {
-        for tab in [Tab::Brands, Tab::Models, Tab::Equalizer] {
+        ui.spacing_mut().item_spacing.x = 0.0;
+        for (index, tab) in [Tab::Brands, Tab::Models, Tab::Equalizer]
+            .into_iter()
+            .enumerate()
+        {
             let selected = app.tab == tab;
+            let radius = match index {
+                0 => egui::CornerRadius {
+                    nw: metrics::RADIUS as u8,
+                    sw: metrics::RADIUS as u8,
+                    ..egui::CornerRadius::ZERO
+                },
+                2 => egui::CornerRadius {
+                    ne: metrics::RADIUS as u8,
+                    se: metrics::RADIUS as u8,
+                    ..egui::CornerRadius::ZERO
+                },
+                _ => egui::CornerRadius::ZERO,
+            };
+            let button = egui::Button::new(
+                RichText::new(tab.label())
+                    .font(TypeStep::Control.font())
+                    .color(if selected {
+                        palette.on_accent
+                    } else {
+                        palette.text_secondary
+                    }),
+            )
+            .fill(if selected {
+                palette.accent
+            } else {
+                palette.page
+            })
+            .stroke(egui::Stroke::new(
+                1.0,
+                if selected {
+                    palette.accent
+                } else {
+                    palette.border
+                },
+            ))
+            .corner_radius(radius);
             let response = ui
-                .selectable_label(
-                    selected,
-                    RichText::new(tab.label())
-                        .font(TypeStep::Control.font())
-                        .color(if selected {
-                            palette.text_primary
-                        } else {
-                            palette.text_secondary
-                        }),
-                )
+                .add_sized([width, 34.0], button)
                 .on_hover_text(match tab {
                     Tab::Brands => "The brands, and the measurements under each",
                     Tab::Models => "The measurements of the brand that is chosen",
@@ -61,6 +98,13 @@ fn tabs(ui: &mut Ui, app: &mut App) {
             }
         }
     });
+    // The rule under the tab row.
+    ui.add_space(metrics::GAP);
+    let (rect, _) =
+        ui.allocate_exact_size(egui::vec2(ui.available_width(), 1.0), egui::Sense::hover());
+    ui.painter()
+        .rect_filled(rect, 0.0, theme::current_palette().divider);
+    ui.add_space(metrics::GAP);
 }
 
 /// The list of brands.
@@ -162,9 +206,19 @@ fn brand_column(ui: &mut Ui, app: &mut App) {
                     continue;
                 }
                 let selected = app.brand.as_deref() == Some(brand.as_str());
-                if ui
-                    .selectable_label(
-                        selected,
+                // The reference clips the brand names rather than wrapping
+                // them, so the column stays a fixed width.
+                let (rect, response) = ui.allocate_exact_size(
+                    egui::vec2(ui.available_width(), metrics::ROW_HEIGHT),
+                    egui::Sense::click(),
+                );
+                if selected {
+                    ui.painter()
+                        .rect_filled(rect, metrics::RADIUS, palette.accent);
+                }
+                let label = ui.put(
+                    rect,
+                    egui::Label::new(
                         RichText::new(shorten(
                             ui.ctx(),
                             &brand,
@@ -177,8 +231,12 @@ fn brand_column(ui: &mut Ui, app: &mut App) {
                             palette.text_primary
                         }),
                     )
+                    .truncate(),
+                );
+                if label
                     .on_hover_text(format!("Show {brand}'s measurements"))
                     .clicked()
+                    || response.clicked()
                 {
                     app.brand = Some(brand.clone());
                 }

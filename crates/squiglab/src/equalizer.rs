@@ -68,12 +68,33 @@ pub fn show(ui: &mut Ui, app: &mut App) {
                 .font(TypeStep::Title.font_bold())
                 .color(palette.text_primary),
         );
+        // The reference's head: the word "Reset", the arrow that bends back,
+        // and the cog.
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            if ui
-                .button("Reset")
-                .on_hover_text("Clear this curve's bands")
+            let (rect, response) =
+                ui.allocate_exact_size(egui::vec2(20.0, 20.0), egui::Sense::click());
+            crate::icons::draw(
+                ui.painter(),
+                rect,
+                crate::icons::Icon::Settings,
+                palette.text_tertiary,
+            );
+            if response
+                .on_hover_text("The settings of the equalizer")
                 .clicked()
             {
+                app.constraints_open = !app.constraints_open;
+            }
+            ui.add_space(metrics::GAP);
+            let (rect, _) = ui.allocate_exact_size(egui::vec2(16.0, 16.0), egui::Sense::hover());
+            crate::icons::draw(
+                ui.painter(),
+                rect,
+                crate::icons::Icon::Reset,
+                palette.text_tertiary,
+            );
+            let response = crate::music::text_button(ui, "Reset");
+            if response.on_hover_text("Clear this curve's bands").clicked() {
                 if let Some(phone) = app.session.eq_phone {
                     app.session.eq_filters.insert(phone, Vec::new());
                     app.history.record(snapshot(app));
@@ -139,7 +160,7 @@ pub fn show(ui: &mut Ui, app: &mut App) {
         }
 
         if ui
-            .button("AutoEQ")
+            .button("Auto EQ")
             .on_hover_text("Fit bands to the target")
             .clicked()
         {
@@ -196,6 +217,18 @@ pub fn show(ui: &mut Ui, app: &mut App) {
     // The table edits one bank at a time: the shared one, or a channel's own.
     let bank = app.session.eq_bank;
     rows.retain(|row| row.bank == bank);
+    // The reference always shows ten bands, empty ones included, so a curve
+    // with no equalizer of its own still has the table to fill in.
+    let empty = rows.is_empty();
+    if empty {
+        rows = (0..squiglab_core::session::MAX_EQ_ROWS)
+            .map(|_| EqRow {
+                filter: Filter::new(FilterType::Peaking, 0.0, 0.0, 0.0),
+                enabled: true,
+                bank,
+            })
+            .collect();
+    }
     let mut changed = false;
 
     ui.horizontal(|ui| {
@@ -218,6 +251,9 @@ pub fn show(ui: &mut Ui, app: &mut App) {
     });
     for row in rows.iter_mut() {
         ui.horizontal(|ui| {
+            // The reference's fields are short: twenty points, not the
+            // thirty-six the rest of the program's controls are.
+            ui.spacing_mut().interact_size.y = 20.0;
             let mut enabled = row.enabled;
             if ui
                 .add_sized([22.0, 20.0], egui::Checkbox::new(&mut enabled, ""))
@@ -227,27 +263,47 @@ pub fn show(ui: &mut Ui, app: &mut App) {
                 row.enabled = enabled;
                 changed = true;
             }
-            // A menu rather than a select: the select is wider than the names
-            // it holds, and the column is narrow.
-            ui.add_sized(
-                [52.0, 20.0],
-                egui::Button::new(row.filter.filter_type.short_name())
-                    .min_size(egui::vec2(52.0, 20.0)),
-            )
-            .on_hover_text("The kind of filter this band is")
-            .context_menu(|ui| {
-                for filter_type in [
-                    FilterType::Peaking,
-                    FilterType::LowShelf,
-                    FilterType::HighShelf,
-                ] {
-                    ui.selectable_value(
-                        &mut row.filter.filter_type,
-                        filter_type,
-                        filter_type.short_name(),
-                    );
-                }
-            });
+            // A menu rather than a select: the reference writes the kind of
+            // filter in plain words with a caret beside it.
+            let (rect, response) =
+                ui.allocate_exact_size(egui::vec2(52.0, 20.0), egui::Sense::click());
+            let font = TypeStep::Body.font();
+            ui.painter().text(
+                rect.left_center() + egui::vec2(2.0, 0.0),
+                egui::Align2::LEFT_CENTER,
+                row.filter.filter_type.short_name(),
+                font,
+                palette.accent_text,
+            );
+            // The caret.
+            let caret = egui::Rect::from_center_size(
+                rect.left_center() + egui::vec2(38.0, 0.0),
+                egui::vec2(8.0, 5.0),
+            );
+            ui.painter().add(egui::Shape::convex_polygon(
+                vec![
+                    egui::pos2(caret.left(), caret.top()),
+                    egui::pos2(caret.right(), caret.top()),
+                    egui::pos2(caret.center().x, caret.bottom()),
+                ],
+                palette.text_tertiary,
+                egui::Stroke::NONE,
+            ));
+            response
+                .on_hover_text("The kind of filter this band is")
+                .context_menu(|ui| {
+                    for filter_type in [
+                        FilterType::Peaking,
+                        FilterType::LowShelf,
+                        FilterType::HighShelf,
+                    ] {
+                        ui.selectable_value(
+                            &mut row.filter.filter_type,
+                            filter_type,
+                            filter_type.short_name(),
+                        );
+                    }
+                });
             if number(ui, &mut row.filter.freq, 0.0, 20_000.0, 0, 56.0, "Hz") {
                 changed = true;
             }
@@ -260,9 +316,17 @@ pub fn show(ui: &mut Ui, app: &mut App) {
         });
     }
     if changed {
-        write_bank(app, phone, bank, rows);
+        // The empty bands the reference shows are not kept: only the ones
+        // that have been filled in are.
+        let kept: Vec<EqRow> = rows
+            .iter()
+            .filter(|row| row.filter.freq > 0.0)
+            .cloned()
+            .collect();
+        write_bank(app, phone, bank, kept);
         crate::sound::push_chain(app);
     }
+    let _ = empty;
 
     // --- the row controls ---
     // The buttons share the width between them, as the reference's do.
@@ -330,18 +394,9 @@ pub fn show(ui: &mut Ui, app: &mut App) {
     ui.add_space(metrics::GAP);
 
     // --- what a fit may produce ---
-    // The reference hides the constraints behind a gear, and the column is
-    // narrow enough that the room they take is worth having back.
+    // The reference hides the constraints behind the cog in the head, and the
+    // column is narrow enough that the room they take is worth having back.
     let constraints_open = app.constraints_open;
-    ui.horizontal(|ui| {
-        if ui
-            .selectable_label(constraints_open, "Constraints")
-            .on_hover_text("What a fit is allowed to produce")
-            .clicked()
-        {
-            app.constraints_open = !constraints_open;
-        }
-    });
     if constraints_open {
         constraints(ui, app);
     }
@@ -374,30 +429,38 @@ pub fn show(ui: &mut Ui, app: &mut App) {
         {
             import(app, phone);
         }
-        if ui
-            .add_sized([half, 28.0], egui::Button::new("Export"))
-            .on_hover_text("Save an Equalizer APO file")
-            .clicked()
-        {
+        let export = ui.add_sized([half, 28.0], egui::Button::new("Export"));
+        // The reference puts the download mark at the right of the button.
+        let icon = egui::Rect::from_center_size(
+            export.rect.right_center() - egui::vec2(14.0, 0.0),
+            egui::vec2(16.0, 16.0),
+        );
+        crate::icons::draw(
+            ui.painter(),
+            icon,
+            crate::icons::Icon::Download,
+            palette.text_tertiary,
+        );
+        if export.on_hover_text("Save an Equalizer APO file").clicked() {
             match app.session.parametric_export() {
                 Some((name, contents)) => app.say(format!("{name} is ready to save: {contents}")),
                 None => app.say("There is no equalizer to export."),
             }
         }
-        if ui
-            .add_sized(
-                [ui.available_width(), 28.0],
-                egui::Button::new("Export Graphic EQ (Wavelet)"),
-            )
-            .on_hover_text("Save a Wavelet file")
-            .clicked()
-        {
-            match app.session.graphic_eq_export() {
-                Some((name, contents)) => app.say(format!("{name} is ready to save: {contents}")),
-                None => app.say("There is no equalizer to export."),
-            }
-        }
     });
+    // The reference puts the Wavelet export on a row of its own, the whole
+    // width of the column, and writes it as plain words.
+    ui.add_space(metrics::GAP);
+    let width = ui.available_width();
+    if crate::music::text_button_in(ui, "Export Graphic EQ (Wavelet)", Some(width))
+        .on_hover_text("Save a Wavelet file")
+        .clicked()
+    {
+        match app.session.graphic_eq_export() {
+            Some((name, contents)) => app.say(format!("{name} is ready to save: {contents}")),
+            None => app.say("There is no equalizer to export."),
+        }
+    }
 }
 
 /// The constraints: what a fit is allowed to produce.
@@ -675,22 +738,50 @@ fn number(
     width: f32,
     unit: &str,
 ) -> bool {
+    let palette = theme::current_palette();
     let mut text = match places {
         0 => format!("{value:.0}"),
         1 => format!("{value:.1}"),
-        _ => format!("{value:.2}"),
+        _ => {
+            // The reference does not write the zeros it does not need.
+            let mut text = format!("{value:.2}");
+            if text.contains('.') {
+                while text.ends_with('0') {
+                    text.pop();
+                }
+                if text.ends_with('.') {
+                    text.pop();
+                }
+            }
+            text
+        }
+    };
+    // The unit sits inside the field, at its right, as the reference writes
+    // it, and the figure is in the accent.
+    let unit_font = TypeStep::Label.font();
+    let unit_font_for_width = unit_font.clone();
+    let unit_width = if unit.is_empty() {
+        0.0
+    } else {
+        ui.painter()
+            .layout_no_wrap(unit.to_owned(), unit_font_for_width, palette.text_tertiary)
+            .size()
+            .x
+            + 6.0
     };
     let response = ui.add_sized(
         [width, 20.0],
-        egui::TextEdit::singleline(&mut text).desired_width(width),
+        egui::TextEdit::singleline(&mut text)
+            .desired_width(width - unit_width)
+            .text_color(palette.accent_text),
     );
     if !unit.is_empty() {
-        // The unit sits beside the figure, as the reference writes it.
-        ui.label(
-            RichText::new(unit)
-                .font(TypeStep::Label.font())
-                .color(theme::current_palette().text_tertiary),
-        );
+        let galley = ui
+            .painter()
+            .layout_no_wrap(unit.to_owned(), unit_font, palette.text_tertiary);
+        let at = response.rect.right_center()
+            + egui::vec2(-galley.size().x - 4.0, -galley.size().y * 0.5);
+        ui.painter().galley(at, galley, palette.text_tertiary);
     }
     if !response.changed() {
         return false;

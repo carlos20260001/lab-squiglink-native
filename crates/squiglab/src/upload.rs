@@ -19,13 +19,16 @@ pub fn show(ui: &mut Ui, app: &mut App) {
             .color(palette.text_primary),
     );
     ui.add_space(metrics::GAP);
-    ui.label(
-        RichText::new(
-            "Measurements from another rig do not mix with the ones here: they were taken \
-             with different equipment, so they are not the same measurement.",
+    ui.add(
+        egui::Label::new(
+            RichText::new(
+                "Measurements from another rig do not mix with the ones here: they were \
+                 taken with different equipment, so they are not the same measurement.",
+            )
+            .font(TypeStep::Label.font())
+            .color(palette.text_secondary),
         )
-        .font(TypeStep::Label.font())
-        .color(palette.text_secondary),
+        .wrap(),
     );
     ui.add_space(metrics::GAP);
 

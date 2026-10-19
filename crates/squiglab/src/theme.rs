@@ -60,10 +60,14 @@ pub mod metrics {
     pub const HEADER_HEIGHT: f32 = 48.0;
     /// The left column's width.
     pub const COLUMN_WIDTH: f32 = 350.0;
+    /// The padding down the sides of the left column. The reference's
+    /// panel and its tab row both carry it, so the column's contents sit
+    /// sixteen points in from its edge.
+    pub const COLUMN_PADDING: f32 = 16.0;
     /// The brand column's width, inside the left column.
-    pub const BRAND_COLUMN_WIDTH: f32 = 94.0;
+    pub const BRAND_COLUMN_WIDTH: f32 = 70.0;
     /// The list's width, inside the left column.
-    pub const LIST_WIDTH: f32 = COLUMN_WIDTH - BRAND_COLUMN_WIDTH;
+    pub const LIST_WIDTH: f32 = COLUMN_WIDTH - COLUMN_PADDING * 2.0 - BRAND_COLUMN_WIDTH;
     /// A list row's height.
     pub const ROW_HEIGHT: f32 = 36.0;
     /// An input's height.
@@ -122,10 +126,10 @@ impl TypeStep {
     pub fn size(self) -> f32 {
         match self {
             TypeStep::Logo => 18.0,
-            TypeStep::Title => 16.0,
+            TypeStep::Title => 14.0,
             TypeStep::Control => 12.0,
             TypeStep::Label => 11.0,
-            TypeStep::Body => 13.0,
+            TypeStep::Body => 12.0,
         }
     }
 
@@ -217,32 +221,32 @@ impl Palette {
     /// The light theme: the reference's default.
     pub fn light() -> Self {
         Self {
-            page: hsl(54, 5, 96),
-            graph: hsl(54, 0, 100),
-            field: hsl(210, 10, 98),
-            sunken: hsl(54, 5, 90),
+            // The reference's neutrals are plain greys: the page at ninety-six
+            // per cent, the fields on white, and the sunken surfaces at ninety.
+            page: hsl(0, 0, 96),
+            graph: hsl(0, 0, 100),
+            field: hsl(0, 0, 100),
+            sunken: hsl(0, 0, 90),
 
             header: hsl(215, 20, 10),
-            text_primary: hsl(210, 20, 10),
-            text_secondary: hsl(210, 20, 40),
-            text_tertiary: hsl(210, 20, 55),
-            text_disabled: hsl(210, 10, 70),
+            text_primary: hsl(0, 0, 10),
+            text_secondary: hsl(0, 0, 40),
+            text_tertiary: hsl(0, 0, 65),
+            text_disabled: hsl(0, 0, 70),
 
-            // The reference's accent is hsl(210, 53%, 49%), which carries white
-            // text at 4.3:1. The lightness is dropped a step so the white text
-            // on an accent fill clears 4.5:1; the colour is otherwise the
-            // reference's own.
-            accent: hsl(210, 53, 46),
-            accent_text: hsl(210, 50, 40),
-            accent_hover: hsl(210, 53, 40),
-            accent_active: hsl(210, 53, 34),
+            // The reference's accent is hsl(210, 70%, 40%), which carries
+            // white text at 5.9:1.
+            accent: hsl(210, 70, 40),
+            accent_text: hsl(210, 60, 34),
+            accent_hover: hsl(210, 70, 34),
+            accent_active: hsl(210, 70, 28),
             on_accent: hsl(0, 0, 100),
 
-            border: hsl(54, 0, 82),
-            border_strong: hsl(54, 0, 65),
-            divider: hsl(54, 5, 88),
-            hover_fill: hsl(54, 5, 90),
-            active_fill: hsl(54, 5, 86),
+            border: hsl(0, 0, 82),
+            border_strong: hsl(0, 0, 65),
+            divider: hsl(0, 0, 90),
+            hover_fill: hsl(0, 0, 92),
+            active_fill: hsl(0, 0, 86),
 
             warning: Color32::from_rgb(0xA6, 0x6E, 0x10),
             error: Color32::from_rgb(0xB0, 0x38, 0x38),
@@ -652,9 +656,11 @@ mod tests {
 
     #[test]
     fn the_themes_are_the_reference_s_own() {
-        // The light theme's page is the reference's warm off-white.
-        assert_eq!(Palette::light().page, hsl(54, 5, 96));
-        assert_eq!(Palette::light().graph, hsl(54, 0, 100));
+        // The light theme's page is the reference's plain grey, and its
+        // accent is the reference's own blue.
+        assert_eq!(Palette::light().page, hsl(0, 0, 96));
+        assert_eq!(Palette::light().graph, hsl(0, 0, 100));
+        assert_eq!(Palette::light().accent, hsl(210, 70, 40));
         // The dark theme's accent is the native's blue.
         assert_eq!(Palette::dark().accent, Color32::from_rgb(0x38, 0x70, 0xA6));
         assert_eq!(Palette::dark().page, hsl(215, 14, 10));
@@ -696,15 +702,15 @@ mod tests {
         assert_eq!(TypeStep::Logo.size(), 18.0);
         assert_eq!(TypeStep::Control.size(), 12.0);
         assert_eq!(TypeStep::Label.size(), 11.0);
-        assert_eq!(TypeStep::Body.size(), 13.0);
+        assert_eq!(TypeStep::Body.size(), 12.0);
     }
 
     #[test]
     fn the_measure_is_the_reference_s_own() {
         assert_eq!(metrics::HEADER_HEIGHT, 48.0);
         assert_eq!(metrics::COLUMN_WIDTH, 350.0);
-        assert_eq!(metrics::BRAND_COLUMN_WIDTH, 94.0);
-        assert_eq!(metrics::LIST_WIDTH, 256.0);
+        assert_eq!(metrics::BRAND_COLUMN_WIDTH, 70.0);
+        assert_eq!(metrics::LIST_WIDTH, 248.0);
         assert_eq!(metrics::ROW_HEIGHT, 36.0);
         assert_eq!(metrics::PLOT_ASPECT_RATIO, 800.0 / 360.0);
     }

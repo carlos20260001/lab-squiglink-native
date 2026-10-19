@@ -22,6 +22,12 @@ pub enum Icon {
     Remove,
     /// The words BASE and -LINE: the curve the others are read against.
     Baseline,
+    /// A triangle: the source is played.
+    Play,
+    /// A cog: the settings.
+    Settings,
+    /// An arrow bending back: the equalizer is cleared.
+    Reset,
 }
 
 /// The size a mark is drawn at, in points.
@@ -73,7 +79,28 @@ fn paths_for(icon: Icon) -> Vec<&'static str> {
             "M9 15l-4.5 4.5",
             "M14.5 4l5.5 5.5",
         ],
-        Icon::Baseline | Icon::Remove => Vec::new(),
+        // The cog, from the stylesheet's mask.
+        Icon::Settings => vec![
+            "M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 0 0 2.573 1.066c1.543-.94 3.31-.826 4.687 0a1.724 1.724 0 0 0 1.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 0 0-1.066 2.573c.94 1.543.826 3.31 0 4.687a1.724 1.724 0 0 0-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 0 0-2.573-1.066c-1.543.94-3.31.826-4.687 0a1.724 1.724 0 0 0-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 0 0 1.066-2.573c-.94-1.543-.826-3.31 0-4.687a1.724 1.724 0 0 0 2.572-1.065z",
+            "M9 12a3 3 0 1 0 6 0a3 3 0 1 0-6 0",
+        ],
+        // The arrow that bends back, from the stylesheet's mask.
+        Icon::Reset => vec!["M9 14l-4-4l4-4", "M5 10h11a4 4 0 0 1 4 4v1"],
+        Icon::Baseline | Icon::Remove | Icon::Play => Vec::new(),
+    }
+}
+
+/// The reference's player triangle, filled rather than drawn in outline.
+pub fn play(painter: &Painter, rect: Rect, color: Color32) {
+    let scale = rect.height().min(rect.width()) / 24.0;
+    let origin = rect.min;
+    let points = flatten(
+        "M6 4v16a1 1 0 0 0 1.524.852l13-8a1 1 0 0 0 0-1.704l-13-8a1 1 0 0 0-1.524.852z",
+        scale,
+        origin,
+    );
+    if points.len() > 2 {
+        painter.add(egui::Shape::convex_polygon(points, color, Stroke::NONE));
     }
 }
 

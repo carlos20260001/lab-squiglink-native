@@ -20,27 +20,17 @@ pub fn show(ui: &mut Ui, app: &mut App) {
                 .font(TypeStep::Title.font_bold())
                 .color(palette.text_primary),
         );
-        ui.add_space(metrics::GAP);
-        // The reference's Compare switch: with it on (B) the source is played
-        // through the equalizer, and with it off (A) it is played on its own.
-        let mut compare = app.compare;
-        let letter = if compare { "B" } else { "A" };
-        if ui
-            .checkbox(&mut compare, letter)
-            .on_hover_text(
-                "With B the source is played through the equalizer, and with A it is played \
-                 on its own.",
-            )
-            .changed()
-        {
-            app.compare = compare;
-            push_chain(app);
-        }
-        ui.label(
-            RichText::new("Compare")
-                .font(TypeStep::Label.font())
-                .color(palette.text_tertiary),
-        );
+        // The reference's Compare switch sits at the right of the heading:
+        // the word, the switch, and the gear.
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.add_space(metrics::GAP);
+            compare_switch(ui, app);
+            ui.label(
+                RichText::new("Compare")
+                    .font(TypeStep::Label.font())
+                    .color(palette.text_tertiary),
+            );
+        });
     });
     ui.add_space(metrics::GAP);
 
@@ -79,25 +69,29 @@ pub fn show(ui: &mut Ui, app: &mut App) {
             );
         }
         ui.add_space(metrics::GAP);
+        // The reference's row: the slider, and the frequency it is at.
         let mut frequency = app.frequency;
-        if ui
-            .add_sized(
-                [ui.available_width(), 24.0],
-                egui::Slider::new(&mut frequency, app.tone_band.0..=app.tone_band.1).suffix(" Hz"),
-            )
-            .on_hover_text("The frequency being played")
-            .changed()
-        {
-            app.frequency = frequency;
-            if let Some(player) = &app.player {
-                player.set_settings(Settings {
-                    source: Source::Tone {
-                        freq: f64::from(frequency),
-                    },
-                    volume: app.volume,
-                });
+        let slider_width = (ui.available_width() - 70.0).max(40.0);
+        ui.horizontal(|ui| {
+            let (slider, moved) = frequency_slider(ui, slider_width, &mut frequency, app.tone_band);
+            ui.label(
+                RichText::new(format!("{frequency:.0} Hz"))
+                    .font(TypeStep::Label.font())
+                    .color(palette.text_tertiary),
+            );
+            slider.on_hover_text("The frequency being played");
+            if moved {
+                app.frequency = frequency;
+                if let Some(player) = &app.player {
+                    player.set_settings(Settings {
+                        source: Source::Tone {
+                            freq: f64::from(frequency),
+                        },
+                        volume: app.volume,
+                    });
+                }
             }
-        }
+        });
     });
     ui.add_space(metrics::GAP);
 
@@ -108,11 +102,16 @@ pub fn show(ui: &mut Ui, app: &mut App) {
                 .font(TypeStep::Label.font())
                 .color(palette.text_tertiary),
         );
-        if ui
-            .button("Reset")
-            .on_hover_text("Sweep the whole axis")
-            .clicked()
-        {
+        // The reference writes the word and the arrow that bends back.
+        let response = crate::music::text_button(ui, "Reset");
+        let (rect, _) = ui.allocate_exact_size(egui::vec2(16.0, 16.0), egui::Sense::hover());
+        crate::icons::draw(
+            ui.painter(),
+            rect,
+            crate::icons::Icon::Reset,
+            palette.text_tertiary,
+        );
+        if response.on_hover_text("Sweep the whole axis").clicked() {
             app.tone_band = (20.0, 20_000.0);
         }
         let mut low = app.tone_band.0;
@@ -154,39 +153,139 @@ pub fn show(ui: &mut Ui, app: &mut App) {
     }
 }
 
+/// The reference's Compare switch: a track with A and B in it, and the chosen
+/// one on a filled thumb. With B the source is played through the equalizer,
+/// and with A it is played on its own.
+fn compare_switch(ui: &mut Ui, app: &mut App) {
+    let palette = theme::current_palette();
+    let (rect, response) = ui.allocate_exact_size(egui::vec2(54.0, 24.0), egui::Sense::click());
+    ui.painter().rect_filled(rect, 12.0, palette.field);
+    ui.painter().rect_stroke(
+        rect,
+        12.0,
+        egui::Stroke::new(1.0, palette.border_strong),
+        egui::StrokeKind::Inside,
+    );
+    let font = egui::FontId::new(11.0, egui::FontFamily::Proportional);
+    let a = rect.left_center() + egui::vec2(13.0, 0.0);
+    let b = rect.right_center() - egui::vec2(13.0, 0.0);
+    let (chosen, other, letter, other_letter) = if app.compare {
+        (b, a, "B", "A")
+    } else {
+        (a, b, "A", "B")
+    };
+    ui.painter().circle_filled(chosen, 7.0, palette.accent);
+    ui.painter().text(
+        chosen,
+        egui::Align2::CENTER_CENTER,
+        letter,
+        font.clone(),
+        palette.on_accent,
+    );
+    ui.painter().text(
+        other,
+        egui::Align2::CENTER_CENTER,
+        other_letter,
+        font,
+        palette.text_tertiary,
+    );
+    if response
+        .on_hover_text(
+            "With B the source is played through the equalizer, and with A it is played \
+             on its own.",
+        )
+        .clicked()
+    {
+        app.compare = !app.compare;
+        push_chain(app);
+    }
+}
+
+/// The reference's slider: a thin track with a round thumb on it.
+fn frequency_slider(
+    ui: &mut Ui,
+    width: f32,
+    value: &mut f32,
+    band: (f32, f32),
+) -> (egui::Response, bool) {
+    let palette = theme::current_palette();
+    let height = 16.0;
+    let (rect, response) =
+        ui.allocate_exact_size(egui::vec2(width, height), egui::Sense::click_and_drag());
+    let mut changed = false;
+    let track = egui::Rect::from_center_size(rect.center(), egui::vec2(rect.width(), 8.0));
+    ui.painter().rect_filled(track, 4.0, palette.field);
+    ui.painter().rect_stroke(
+        track,
+        4.0,
+        egui::Stroke::new(1.0, palette.border),
+        egui::StrokeKind::Inside,
+    );
+    let span = (band.1 - band.0).max(1.0);
+    let place = ((*value - band.0) / span).clamp(0.0, 1.0);
+    let thumb = egui::Rect::from_center_size(
+        egui::pos2(track.left() + place * track.width(), track.center().y),
+        egui::vec2(12.0, 12.0),
+    );
+    ui.painter()
+        .circle_filled(thumb.center(), 6.0, palette.text_tertiary);
+    if response.dragged() || response.clicked() {
+        if let Some(pointer) = response.interact_pointer_pos() {
+            let place = ((pointer.x - track.left()) / track.width()).clamp(0.0, 1.0);
+            *value = band.0 + place * span;
+            changed = true;
+        }
+    }
+    (response, changed)
+}
+
 /// A source in its own card, as the reference keeps them.
 pub fn card(ui: &mut Ui, title: &str, contents: impl FnOnce(&mut Ui)) {
     let palette = theme::current_palette();
-    egui::Frame::group(ui.style())
-        .fill(palette.sunken)
-        .corner_radius(egui::CornerRadius::same(6))
-        .inner_margin(egui::Margin::same(10))
+    let width = ui.available_width();
+    egui::Frame::new()
+        .fill(palette.graph)
+        .corner_radius(egui::CornerRadius::same(10))
+        .stroke(egui::Stroke::new(1.0, palette.border))
+        .inner_margin(egui::Margin::symmetric(12, 10))
         .show(ui, |ui| {
+            ui.set_width(width - 24.0);
             ui.label(
                 RichText::new(title)
-                    .font(TypeStep::Label.font())
-                    .color(palette.text_secondary),
+                    .font(egui::FontId::new(13.0, egui::FontFamily::Proportional))
+                    .color(palette.text_tertiary),
             );
-            ui.add_space(metrics::GAP);
+            ui.add_space(metrics::GAP_LARGE);
             contents(ui);
         });
 }
 
-/// The play button of a source: a wide pill, as the reference draws it.
-fn play_button(ui: &mut Ui, playing: bool) -> bool {
+/// The play button of a source: a wide pill with the reference's triangle in
+/// it, and no lettering.
+pub fn play_button(ui: &mut Ui, playing: bool) -> bool {
     let palette = theme::current_palette();
-    let (fill, color) = if playing {
-        (palette.accent, palette.on_accent)
+    let (rect, response) =
+        ui.allocate_exact_size(egui::vec2(ui.available_width(), 44.0), egui::Sense::click());
+    let fill = if playing {
+        palette.accent
     } else {
-        (palette.sunken, palette.text_secondary)
+        palette.sunken
     };
-    ui.add_sized(
-        [ui.available_width(), 28.0],
-        egui::Button::new(RichText::new(if playing { "Stop" } else { "Play" }).color(color))
-            .fill(fill)
-            .corner_radius(egui::CornerRadius::same(14)),
-    )
-    .clicked()
+    let mark = if playing {
+        palette.on_accent
+    } else {
+        palette.text_tertiary
+    };
+    ui.painter().rect_filled(rect, 22.0, fill);
+    ui.painter().rect_stroke(
+        rect,
+        22.0,
+        egui::Stroke::new(1.0, palette.border_strong),
+        egui::StrokeKind::Inside,
+    );
+    let icon = egui::Rect::from_center_size(rect.center(), egui::vec2(20.0, 20.0));
+    crate::icons::play(ui.painter(), icon, mark);
+    response.clicked()
 }
 
 /// The filters the source is played through: the shared ones, and the ones

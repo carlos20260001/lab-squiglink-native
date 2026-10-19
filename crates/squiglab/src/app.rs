@@ -250,27 +250,34 @@ impl App {
             .frame(
                 egui::Frame::new()
                     .fill(theme::current_palette().page)
-                    .inner_margin(egui::Margin::same(0)),
+                    // The reference's column carries sixteen points of
+                    // padding down its sides, so the tabs and the panel
+                    // beneath them sit in from the edge.
+                    .inner_margin(egui::Margin::symmetric(metrics::COLUMN_PADDING as i8, 0)),
             )
             .show(ui, |ui| {
+                // The tabs stay put and the panel beneath them scrolls, which
+                // is how the reference's equalizer behaves: the extra panel
+                // has its own scroll and the tabs above it do not move.
+                crate::selector::show_tabs(ui, self);
                 egui::ScrollArea::vertical()
                     .id_salt("column_scroll")
                     .auto_shrink([false, false])
-                    .show(ui, |ui| {
-                        crate::selector::show(ui, self);
-                        ui.separator();
-                        match self.tab {
-                            Tab::Equalizer => {
-                                crate::equalizer::show(ui, self);
-                                ui.separator();
-                                crate::sound::show(ui, self);
-                            }
-                            _ => {
-                                crate::equalizer::show_summary(ui, self);
-                            }
+                    .show(ui, |ui| match self.tab {
+                        Tab::Equalizer => {
+                            crate::equalizer::show(ui, self);
+                            ui.separator();
+                            crate::sound::show(ui, self);
+                            ui.separator();
+                            crate::upload::show(ui, self);
                         }
-                        ui.separator();
-                        crate::upload::show(ui, self);
+                        _ => {
+                            crate::selector::show_list(ui, self);
+                            ui.separator();
+                            crate::equalizer::show_summary(ui, self);
+                            ui.separator();
+                            crate::upload::show(ui, self);
+                        }
                     });
             });
     }
