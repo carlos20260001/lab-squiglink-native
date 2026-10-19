@@ -333,7 +333,7 @@ pub fn show(ui: &mut Ui, app: &mut App) {
     let third = (ui.available_width() - metrics::GAP * 2.0) / 3.0;
     ui.horizontal(|ui| {
         if ui
-            .add_sized([third, 28.0], egui::Button::new("+"))
+            .add_sized([third, 28.0], egui::Button::new("＋"))
             .on_hover_text("Add a band")
             .clicked()
         {
@@ -358,7 +358,7 @@ pub fn show(ui: &mut Ui, app: &mut App) {
             }
         }
         if ui
-            .add_sized([third, 28.0], egui::Button::new("−"))
+            .add_sized([third, 28.0], egui::Button::new("－"))
             .on_hover_text("Remove the last band")
             .clicked()
         {

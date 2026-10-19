@@ -1,11 +1,11 @@
-//! The marks the row's buttons carry.
+//! The marks the program's buttons carry.
 //!
-//! The reference draws these as SVG — a path in its markup for the eye and the
-//! words for the baseline and the pin, and a mask in its stylesheet for the
-//! download. The same paths are used here, so the marks are the reference's
-//! rather than something like them.
+//! Every one of them is the reference's own vector: the paths in its
+//! stylesheet's masks, and the paths in its own markup, drawn in the box the
+//! reference draws them in and at the size it draws them at. The reference's
+//! own shape, rather than something like it.
 
-use egui::{Color32, FontId, Painter, Pos2, Rect, Stroke, Vec2};
+use egui::{Color32, Painter, Pos2, Rect, Stroke, Vec2};
 
 /// A mark one of the row's buttons carries.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -18,12 +18,14 @@ pub enum Icon {
     Pin,
     /// An arrow into a tray: the curve is saved.
     Download,
-    /// A cross in a circle: the curve is taken off the graph.
+    /// A cross: the curve is taken off the graph.
     Remove,
-    /// The words BASE and -LINE: the curve the others are read against.
-    Baseline,
     /// A triangle: the source is played.
     Play,
+    /// A square: the source is stopped.
+    Stop,
+    /// A cross of two bars: the measurement is put on the graph.
+    Plus,
     /// A cog: the settings.
     Settings,
     /// An arrow bending back: the equalizer is cleared.
@@ -40,58 +42,120 @@ pub enum Icon {
 const SIZE: f32 = 16.0;
 
 /// Draw a mark inside a rectangle.
+///
+/// The mark is drawn in the box the reference draws it in, and at the size
+/// the reference draws it at, so that the shapes are its own rather than
+/// something like them.
 pub fn draw(painter: &Painter, rect: Rect, icon: Icon, color: Color32) {
-    match icon {
-        Icon::Baseline => baseline(painter, rect, color),
-        Icon::Remove => remove(painter, rect, color),
-        _ => {
-            let paths = paths_for(icon);
-            let scale = SIZE / 24.0;
-            let origin = rect.min;
-            let stroke = Stroke::new(2.0 * scale, color);
-            for path in paths {
-                let points = flatten(path, scale, origin);
-                if points.len() > 1 {
-                    painter.add(egui::Shape::line(points, stroke));
-                }
+    let box_of = box_of(icon);
+    let scale = SIZE / box_of;
+    let origin = rect.min;
+    if filled(icon) {
+        if icon == Icon::Remove {
+            // The reference's cross is a shape that cannot be filled here, so
+            // it is drawn as the two bars it is made of, with the same
+            // geometry: the ends of the arms are five units in a box of a
+            // hundred and twenty, and the bars are ten wide.
+            let bar = 10.0 * scale;
+            let arm = 28.18 * scale;
+            let far = 91.82 * scale;
+            let stroke = Stroke::new(bar, color);
+            painter.add(egui::Shape::line(
+                vec![
+                    Pos2::new(origin.x + arm, origin.y + arm),
+                    Pos2::new(origin.x + far, origin.y + far),
+                ],
+                stroke,
+            ));
+            painter.add(egui::Shape::line(
+                vec![
+                    Pos2::new(origin.x + arm, origin.y + far),
+                    Pos2::new(origin.x + far, origin.y + arm),
+                ],
+                stroke,
+            ));
+            return;
+        }
+        if icon == Icon::Plus {
+            // The reference's cross of two bars, with the same geometry: the
+            // bars are ten wide in a box of a hundred and twenty, and they
+            // reach from fifteen to a hundred and five.
+            let bar = 10.0 * scale;
+            let near = 15.0 * scale;
+            let far = 105.0 * scale;
+            let middle = 60.0 * scale;
+            let stroke = Stroke::new(bar, color);
+            painter.add(egui::Shape::line(
+                vec![
+                    Pos2::new(origin.x + near, origin.y + middle),
+                    Pos2::new(origin.x + far, origin.y + middle),
+                ],
+                stroke,
+            ));
+            painter.add(egui::Shape::line(
+                vec![
+                    Pos2::new(origin.x + middle, origin.y + near),
+                    Pos2::new(origin.x + middle, origin.y + far),
+                ],
+                stroke,
+            ));
+            return;
+        }
+        for path in paths_for(icon) {
+            let points = flatten(path, scale, origin);
+            if points.len() > 2 {
+                painter.add(egui::Shape::Path(egui::epaint::PathShape {
+                    points,
+                    fill: color,
+                    stroke: egui::epaint::PathStroke::NONE,
+                    closed: true,
+                }));
             }
+        }
+        return;
+    }
+    let stroke = Stroke::new(2.0 * scale, color);
+    for path in paths_for(icon) {
+        let points = flatten(path, scale, origin);
+        if points.len() > 1 {
+            painter.add(egui::Shape::line(points, stroke));
         }
     }
 }
 
-/// The reference's paths, in its own 24 by 24 box.
+/// The reference's paths, in its own box.
 fn paths_for(icon: Icon) -> Vec<&'static str> {
     match icon {
         // The download, from the stylesheet's mask.
         Icon::Download => vec![
-            "M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2",
-            "M7 11l5 5l5-5",
+            "M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2 -2v-2",
+            "M7 11l5 5l5 -5",
             "M12 4l0 12",
         ],
         // The eye, from the stylesheet's mask.
         Icon::Eye => vec![
-            "M10 12a2 2 0 1 0 4 0a2 2 0 1 0-4 0",
-            "M21 12c-2.4 4-5.4 6-9 6c-3.6 0-6.6-2-9-6c2.4-4 5.4-6 9-6c3.6 0 6.6 2 9 6",
+            "M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0",
+            "M21 12c-2.4 4 -5.4 6 -9 6c-3.6 0 -6.6 -2 -9 -6c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6",
         ],
         // The crossed eye.
         Icon::EyeCrossed => vec![
             "M10.585 10.587a2 2 0 0 0 2.829 2.828",
-            "M16.681 16.673a8.717 8.717 0 0 0 1-4.681 1.327c-3.6 0-6.6-2-9-6c1.272-2.12 2.712-3.678 4.32-4.674m2.86-1.146a9.055 9.055 0 0 1 1 1.82-.18c3.6 0 6.6 2 9 6c-.666 1.11-1.379 2.067-2.138 2.87",
+            "M16.681 16.673a8.717 8.717 0 0 1 -4.681 1.327c-3.6 0 -6.6 -2 -9 -6c1.272 -2.12 2.712 -3.678 4.32 -4.674m2.86 -1.146a9.055 9.055 0 0 1 1.82 -.18c3.6 0 6.6 2 9 6c-.666 1.11 -1.379 2.067 -2.138 2.87",
             "M3 3l18 18",
         ],
         // The pin.
         Icon::Pin => vec![
-            "M15 4.5l-4 4l-4 1.5l-1.5 1.5l7 7l1.5-1.5l1.5-4l4-4",
+            "M15 4.5l-4 4l-4 1.5l-1.5 1.5l7 7l1.5 -1.5l1.5 -4l4 -4",
             "M9 15l-4.5 4.5",
             "M14.5 4l5.5 5.5",
         ],
         // The cog, from the stylesheet's mask.
         Icon::Settings => vec![
-            "M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 0 0 2.573 1.066c1.543-.94 3.31-.826 4.687 0a1.724 1.724 0 0 0 1.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 0 0-1.066 2.573c.94 1.543.826 3.31 0 4.687a1.724 1.724 0 0 0-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 0 0-2.573-1.066c-1.543.94-3.31.826-4.687 0a1.724 1.724 0 0 0-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 0 0 1.066-2.573c-.94-1.543-.826-3.31 0-4.687a1.724 1.724 0 0 0 2.572-1.065z",
-            "M9 12a3 3 0 1 0 6 0a3 3 0 1 0-6 0",
+            "M10.325 4.317c.426 -1.756 2.924 -1.756 3.35 0a1.724 1.724 0 0 0 2.573 1.066c1.543 -.94 3.31 .826 2.37 2.37a1.724 1.724 0 0 0 1.065 2.572c1.756 .426 1.756 2.924 0 3.35a1.724 1.724 0 0 0 -1.066 2.573c.94 1.543 -.826 3.31 -2.37 2.37a1.724 1.724 0 0 0 -2.572 1.065c-.426 1.756 -2.924 1.756 -3.35 0a1.724 1.724 0 0 0 -2.573 -1.066c-1.543 .94 -3.31 -.826 -2.37 -2.37a1.724 1.724 0 0 0 -1.065 -2.572c-1.756 -.426 -1.756 -2.924 0 -3.35a1.724 1.724 0 0 0 1.066 -2.573c-.94 -1.543 .826 -3.31 2.37 -2.37c1 .608 2.296 .07 2.572 -1.065",
+            "M9 12a3 3 0 1 0 6 0a3 3 0 0 0 -6 0",
         ],
         // The arrow that bends back, from the stylesheet's mask.
-        Icon::Reset => vec!["M9 14l-4-4l4-4", "M5 10h11a4 4 0 0 1 4 4v1"],
+        Icon::Reset => vec!["M9 14l-4 -4l4 -4", "M5 10h11a4 4 0 1 1 0 8h-1"],
         // The wave the reference draws for the baseline, from its stylesheet.
         Icon::Squiggle => vec![
             "M21 12h-2c-.894 0 -1.662 -.857 -1.761 -2c-.296 -3.45 -.749 -6 -2.749 -6s-2.5 3.582 -2.5 8s-.5 8 -2.5 8s-2.452 -2.547 -2.749 -6c-.1 -1.147 -.867 -2 -1.763 -2h-2",
@@ -102,82 +166,38 @@ fn paths_for(icon: Icon) -> Vec<&'static str> {
         Icon::Volume => vec![
             "M15 8a5 5 0 0 1 0 8",
             "M17.7 5a9 9 0 0 1 0 14",
-            "M6 15h-2a1 1 0 0 1 -1 -1v-4a1 1 0 0 1 1 -1h2l3.5-4.5a.8 .8 0 0 1 1.5 .5v14a.8 .8 0 0 1 -1.5 .5l-3.5-4.5",
+            "M6 15h-2a1 1 0 0 1 -1 -1v-4a1 1 0 0 1 1 -1h2l3.5 -4.5a.8 .8 0 0 1 1.5 .5v14a.8 .8 0 0 1 -1.5 .5l-3.5 -4.5",
         ],
-        Icon::Baseline | Icon::Remove | Icon::Play => Vec::new(),
+        // The player's triangle, filled.
+        Icon::Play => vec![
+            "M6 4v16a1 1 0 0 0 1.524 .852l13 -8a1 1 0 0 0 0 -1.704l-13 -8a1 1 0 0 0 -1.524 .852z",
+        ],
+        // The player's square, filled.
+        Icon::Stop => vec!["M17 4h-10a3 3 0 0 0 -3 3v10a3 3 0 0 0 3 3h10a3 3 0 0 0 3 -3v-10a3 3 0 0 0 -3 -3z"],
+        // The cross that takes a curve off the graph, filled, in the
+        // reference's own hundred-and-twenty point box.
+        Icon::Remove => vec![
+            "M95.36,24.64h0a5,5,0,0,0-7.08,0L60,52.93,31.72,24.64a5,5,0,0,0-7.08,0h0a5,5,0,0,0,0,7.08L52.93,60,24.64,88.28a5,5,0,0,0,0,7.08h0a5,5,0,0,0,7.08,0L60,67.07,88.28,95.36a5,5,0,0,0,7.08,0h0a5,5,0,0,0,0-7.08L67.07,60,95.36,31.72A5,5,0,0,0,95.36,24.64Z",
+        ],
+        // The cross that puts a measurement on the graph, in the same box.
+        Icon::Plus => vec![
+            "M110,60h0a5,5,0,0,0-5-5H65V15a5,5,0,0,0-5-5h0a5,5,0,0,0-5,5V55H15a5,5,0,0,0-5,5h0a5,5,0,0,0,5,5H55v40a5,5,0,0,0,5,5h0a5,5,0,0,0,5-5V65h40A5,5,0,0,0,110,60Z",
+        ],
     }
 }
 
-/// The reference's player triangle, filled rather than drawn in outline.
-pub fn play(painter: &Painter, rect: Rect, color: Color32) {
-    let scale = rect.height().min(rect.width()) / 24.0;
-    let origin = rect.min;
-    let points = flatten(
-        "M6 4v16a1 1 0 0 0 1.524.852l13-8a1 1 0 0 0 0-1.704l-13-8a1 1 0 0 0-1.524.852z",
-        scale,
-        origin,
-    );
-    if points.len() > 2 {
-        painter.add(egui::Shape::convex_polygon(points, color, Stroke::NONE));
+/// The box the reference's mark is drawn in.
+fn box_of(icon: Icon) -> f32 {
+    match icon {
+        // The two crosses are drawn in a hundred-and-twenty point box.
+        Icon::Remove | Icon::Plus => 120.0,
+        _ => 24.0,
     }
 }
 
-/// The words the reference's baseline mark is made of.
-fn baseline(painter: &Painter, rect: Rect, color: Color32) {
-    let font = FontId::proportional(6.0);
-    painter.text(
-        Pos2::new(rect.center().x, rect.top() + 5.0),
-        egui::Align2::CENTER_TOP,
-        "BASE",
-        font.clone(),
-        color,
-    );
-    painter.text(
-        Pos2::new(rect.center().x, rect.top() + 11.0),
-        egui::Align2::CENTER_TOP,
-        "-LINE",
-        font,
-        color,
-    );
-}
-
-/// The circled cross the reference's remove mark is.
-fn remove(painter: &Painter, rect: Rect, color: Color32) {
-    let centre = rect.center();
-    let radius = rect.height().min(rect.width()) * 0.38;
-    painter.circle_stroke(centre, radius, Stroke::new(1.4, color));
-    let arm = radius * 0.7;
-    painter.line_segment(
-        [
-            Pos2::new(centre.x - arm, centre.y - arm),
-            Pos2::new(centre.x + arm, centre.y + arm),
-        ],
-        Stroke::new(1.4, color),
-    );
-    painter.line_segment(
-        [
-            Pos2::new(centre.x + arm, centre.y - arm),
-            Pos2::new(centre.x - arm, centre.y + arm),
-        ],
-        Stroke::new(1.4, color),
-    );
-}
-
-/// A button that draws a mark rather than spelling it.
-pub fn button(ui: &mut egui::Ui, icon: Icon, tooltip: &str, selected: bool) -> egui::Response {
-    let palette = crate::theme::current_palette();
-    let (rect, response) = ui.allocate_exact_size(Vec2::splat(24.0), egui::Sense::click());
-    if response.hovered() {
-        ui.painter()
-            .rect_filled(rect, egui::CornerRadius::same(4), palette.hover_fill);
-    }
-    let color = if selected {
-        palette.accent
-    } else {
-        palette.text_secondary
-    };
-    draw(ui.painter(), rect, icon, color);
-    response.on_hover_text(tooltip)
+/// Whether the mark is filled in, rather than drawn in outline.
+fn filled(icon: Icon) -> bool {
+    matches!(icon, Icon::Play | Icon::Stop | Icon::Remove | Icon::Plus)
 }
 
 /// A mark in a cell, as the reference's row of buttons draws them.
@@ -473,4 +493,51 @@ fn cubic(from: Pos2, first: Pos2, second: Pos2, to: Pos2, t: f32) -> Pos2 {
         a * from.x + b * first.x + c * second.x + d * to.x,
         a * from.y + b * first.y + c * second.y + d * to.y,
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A half circle is a half circle, whichever way the flags are set.
+    #[test]
+    fn an_arc_is_flattened_onto_its_circle() {
+        for flags in ["0 0 0", "0 0 1", "0 1 0", "0 1 1"] {
+            let path = format!("M0 0a5 5 {flags} 10 0");
+            let points = flatten(&path, 1.0, Pos2::ZERO);
+            assert!(points.len() > 8, "{flags}: only {} points", points.len());
+            for point in &points {
+                let distance = ((point.x - 5.0).powi(2) + point.y.powi(2)).sqrt();
+                assert!(
+                    (distance - 5.0).abs() < 0.05,
+                    "{flags}: a point was {distance} from the middle"
+                );
+            }
+        }
+    }
+
+    /// The cross that takes a curve off the graph is the reference's own
+    /// shape: a wide X in the middle of its box.
+    #[test]
+    fn the_cross_is_the_reference_s_own_shape() {
+        let path = "M95.36,24.64h0a5,5,0,0,0-7.08,0L60,52.93,31.72,24.64a5,5,0,0,0-7.08,0h0a5,5,0,0,0,0,7.08L52.93,60,24.64,88.28a5,5,0,0,0,0,7.08h0a5,5,0,0,0,7.08,0L60,67.07,88.28,95.36a5,5,0,0,0,7.08,0h0a5,5,0,0,0,0-7.08L67.07,60,95.36,31.72A5,5,0,0,0,95.36,24.64Z";
+        let points = flatten(path, 1.0, Pos2::ZERO);
+        let left = points.iter().map(|p| p.x).fold(f32::MAX, f32::min);
+        let right = points.iter().map(|p| p.x).fold(f32::MIN, f32::max);
+        let top = points.iter().map(|p| p.y).fold(f32::MAX, f32::min);
+        let bottom = points.iter().map(|p| p.y).fold(f32::MIN, f32::max);
+        assert!(
+            right - left > 60.0,
+            "the cross is only {} wide",
+            right - left
+        );
+        assert!(
+            bottom - top > 60.0,
+            "the cross is only {} tall",
+            bottom - top
+        );
+        // It is in the middle of its own box.
+        assert!(((left + right) / 2.0 - 60.0).abs() < 1.0);
+        assert!(((top + bottom) / 2.0 - 60.0).abs() < 1.0);
+    }
 }

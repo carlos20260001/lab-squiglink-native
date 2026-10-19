@@ -306,7 +306,7 @@ fn model_list(ui: &mut Ui, app: &mut App) {
                         .add_sized(
                             [20.0, 26.0],
                             egui::Button::new(
-                                RichText::new("×")
+                                RichText::new("⊗")
                                     .font(TypeStep::Body.font())
                                     .color(palette.text_secondary),
                             )
@@ -357,17 +357,19 @@ fn model_list(ui: &mut Ui, app: &mut App) {
                     // The reference's rows carry a plus at their end, which
                     // puts the measurement on the graph.
                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                        if ui
-                            .add_sized(
-                                [20.0, 20.0],
-                                egui::Button::new(
-                                    RichText::new("+")
-                                        .font(TypeStep::Body.font())
-                                        .color(palette.text_tertiary),
-                                )
-                                .fill(egui::Color32::TRANSPARENT)
-                                .stroke(egui::Stroke::NONE),
-                            )
+                        // The mark is the reference's own cross, in its own
+                        // hundred-and-twenty point box.
+                        let (rect, response) =
+                            ui.allocate_exact_size(egui::vec2(20.0, 20.0), egui::Sense::click());
+                        let mark =
+                            egui::Rect::from_center_size(rect.center(), egui::vec2(16.0, 16.0));
+                        crate::icons::draw(
+                            ui.painter(),
+                            mark,
+                            crate::icons::Icon::Plus,
+                            palette.text_tertiary,
+                        );
+                        if response
                             .on_hover_text("Put this measurement on the graph")
                             .clicked()
                             && !on

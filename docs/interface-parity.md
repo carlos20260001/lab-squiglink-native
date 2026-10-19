@@ -10,6 +10,18 @@ already knows (`norm-phon`, `norm-fr`, `smooth-level`, `inspector`, `label`,
 The reference's source is kept whole in [`web/`](../web), on the `pink-eq`
 branch of the site repository, and the native is written against it.
 
+## The marks
+
+Every mark the program draws is the reference's own vector, taken from its
+stylesheet's masks and from its markup: the eye and the crossed eye, the
+pin, the download, the cross that takes a curve off the graph, the wave and
+the line of the baseline, the cog, the arrow that bends back, the player's
+triangle and square, the speaker, and the cross that puts a measurement on
+the graph. Each is drawn in the box the reference draws it in — the two
+crosses in its hundred-and-twenty point box — and at the size it draws them
+at. The two crosses are not shapes that can be filled here, so they are
+drawn as the bars they are made of, with the same geometry.
+
 ## The shell
 
 | Reference | Native |

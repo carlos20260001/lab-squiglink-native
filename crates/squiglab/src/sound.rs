@@ -377,7 +377,18 @@ pub fn play_button(ui: &mut Ui, playing: bool) -> bool {
         egui::StrokeKind::Inside,
     );
     let icon = egui::Rect::from_center_size(rect.center(), egui::vec2(20.0, 20.0));
-    crate::icons::play(ui.painter(), icon, mark);
+    // The reference's triangle when it is idle, and its square when it is
+    // playing.
+    crate::icons::draw(
+        ui.painter(),
+        icon,
+        if playing {
+            crate::icons::Icon::Stop
+        } else {
+            crate::icons::Icon::Play
+        },
+        mark,
+    );
     response.clicked()
 }
 
