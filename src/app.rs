@@ -59,6 +59,12 @@ const LIBRARY_SHEET_MAX_HEIGHT: f32 = 520.0;
 /// Width of the hamburger navigation drawer's column.
 const MENU_DRAWER_WIDTH: f32 = 280.0;
 
+/// Container inset for overlay backdrops and sheets, so they do not draw over
+/// the header/toolbar chrome at the top of the viewport. Multiples of 4pt.
+const INSET_LEFT: f32 = 8.0;
+const INSET_TOP: f32 = 48.0;
+const INSET_RIGHT: f32 = 8.0;
+
 /// How wide a curve's preview is in its row.
 const PREVIEW_WIDTH: f32 = 78.0;
 /// How tall a curve's preview is in its row.
@@ -613,6 +619,12 @@ pub struct CrinGraphApp {
     eq_target: Option<usize>,
     /// How many filters Auto EQ may produce.
     eq_max_filters: usize,
+    /// The frequency band AutoEQ fits within, as the reference tool lets the
+    /// user set it: the low bound, and the high bound.
+    eq_range: (f64, f64),
+    /// The band the tone generator's slider sweeps, as the reference tool lets
+    /// the user set it: the low bound, and the high bound.
+    tone_range: (f64, f64),
     eq_import_open: bool,
     eq_import_path: String,
     eq_import_error: Option<String>,
@@ -716,6 +728,8 @@ impl Default for CrinGraphApp {
             eq_phone: None,
             eq_target: None,
             eq_max_filters: DEFAULT_EQ_MAX_FILTERS,
+            eq_range: squiglab::equalizer::AUTO_EQ_RANGE,
+            tone_range: (20.0, 20_000.0),
             eq_import_open: false,
             eq_import_path: String::new(),
             eq_import_error: None,
@@ -747,6 +761,33 @@ impl CrinGraphApp {
             shared_state,
             debug_hooks,
             ..Self::default()
+        }
+    }
+
+    /// Close every navigation/content overlay except the named one, so only one
+    /// overlay is open at a time. `show_delta` (the deviation window) stays
+    /// independent: it is a separate question, not a navigation overlay.
+    fn close_all_overlays_except(&mut self, except: Option<&str>) {
+        if except != Some("menu") {
+            self.menu_open = false;
+        }
+        if except != Some("library") {
+            self.library_drawer_open = false;
+        }
+        if except != Some("share") {
+            self.share_window_open = false;
+        }
+        if except != Some("upload") {
+            self.upload_open = false;
+        }
+        if except != Some("eq_import") {
+            self.eq_import_open = false;
+        }
+        if except != Some("onboarding") {
+            self.onboarding_open = false;
+        }
+        if except != Some("tutorial") {
+            self.tutorial_segment = None;
         }
     }
 
@@ -1271,32 +1312,52 @@ impl CrinGraphApp {
     /// overflow menu on narrow ones, so the two layouts cannot drift apart.
     fn toolbar_processing(&mut self, ui: &mut Ui) {
         use squiglab::ui as cgui;
-        // The segmented control and its unit suffix already name what this is,
-        // so no cluster label is needed here; the space buys room for the
-        // toolbar to stay on one row.
-        cgui::segmented(
-            ui,
-            &[(true, "phon"), (false, "Hz")],
-            &mut self.phon_normalization,
-            Some("Normalize against a loudness reference (phon) or a reference frequency (Hz)"),
-        );
-        if self.phon_normalization {
-            ui.add(
-                egui::DragValue::new(&mut self.target_phon)
-                    .range(0.0..=100.0)
-                    .speed(1.0)
-                    .suffix(" phon"),
-            )
-            .on_hover_text("Loudness level the curve is normalized to");
-        } else {
-            ui.add(
-                egui::DragValue::new(&mut self.target_hz)
-                    .range(20.0..=20000.0)
-                    .speed(5.0)
-                    .suffix(" Hz"),
-            )
-            .on_hover_text("Frequency the curve is normalized to");
-        }
+        let palette = squiglab::theme::Palette::resolve(ui.visuals().dark_mode);
+        // Both targets are shown, as in the reference, with the one in use
+        // picked out and the other recessive; dragging the other makes it the
+        // one in use.
+        cgui::cluster_label(ui, "Normalize:");
+        let mut phon = self.target_phon;
+        ui.scope(|ui| {
+            if !self.phon_normalization {
+                ui.visuals_mut().override_text_color = Some(palette.text_tertiary);
+            }
+            let response = ui
+                .add(
+                    egui::DragValue::new(&mut phon)
+                        .range(0.0..=100.0)
+                        .speed(1.0)
+                        .suffix(" dB"),
+                )
+                .on_hover_text("Normalize every curve to a target listening level");
+            if response.changed() {
+                self.target_phon = phon;
+            }
+            if response.drag_started() {
+                self.phon_normalization = true;
+            }
+        });
+        let mut frequency = self.target_hz;
+        ui.scope(|ui| {
+            if self.phon_normalization {
+                ui.visuals_mut().override_text_color = Some(palette.text_tertiary);
+            }
+            let response = ui
+                .add(
+                    egui::DragValue::new(&mut frequency)
+                        .range(20.0..=20_000.0)
+                        .speed(5.0)
+                        .suffix(" Hz"),
+                )
+                .on_hover_text("Make every curve match at this frequency");
+            if response.changed() {
+                self.target_hz = frequency;
+            }
+            if response.drag_started() {
+                self.phon_normalization = false;
+            }
+        });
+        cgui::cluster_label(ui, "Smooth:");
         ui.add(
             egui::Slider::new(&mut self.smooth_level, 0..=12)
                 .suffix(" /oct")
@@ -1345,6 +1406,7 @@ impl CrinGraphApp {
         if cgui::action_button(ui, "Share", "Copy a shareable link to this view.") {
             self.share_window_open = true;
             self.share_message = None;
+            self.close_all_overlays_except(Some("share"));
         }
         if cgui::action_button(
             ui,
@@ -1363,6 +1425,9 @@ impl CrinGraphApp {
             "Learn how to read a frequency response curve.",
         ) {
             self.tutorial_segment = self.tutorial_segment.map_or(Some(0), |_| None);
+            if self.tutorial_segment.is_some() {
+                self.close_all_overlays_except(Some("tutorial"));
+            }
         }
     }
 
@@ -1403,7 +1468,7 @@ impl CrinGraphApp {
                         {
                             self.menu_open = true;
                             // One overlay at a time.
-                            self.library_drawer_open = false;
+                            self.close_all_overlays_except(Some("menu"));
                         }
                         ui.add_space(8.0);
                         cgui::wordmark(ui);
@@ -1436,7 +1501,9 @@ impl CrinGraphApp {
                                 .clicked()
                             {
                                 self.library_drawer_open = !self.library_drawer_open;
-                                self.menu_open = false;
+                                if self.library_drawer_open {
+                                    self.close_all_overlays_except(Some("library"));
+                                }
                             }
                             ui.add_space(8.0);
                         }
@@ -1471,11 +1538,15 @@ impl CrinGraphApp {
         // stops at the drawer's right edge so taps inside the drawer column
         // (above or below its rows) never fall through and close it.
         let backdrop = egui::Rect::from_min_max(
-            egui::pos2(screen_rect.left() + MENU_DRAWER_WIDTH, screen_rect.top()),
-            screen_rect.max,
+            egui::pos2(
+                screen_rect.left() + MENU_DRAWER_WIDTH,
+                screen_rect.top() + INSET_TOP,
+            ),
+            egui::pos2(screen_rect.right() - INSET_RIGHT, screen_rect.bottom()),
         );
         egui::Area::new(egui::Id::new("menu_backdrop"))
             .fixed_pos(egui::pos2(0.0, 0.0))
+            .order(egui::Order::Foreground)
             .show(ctx, |ui| {
                 ui.painter()
                     .rect_filled(backdrop, 0.0, egui::Color32::from_black_alpha(120));
@@ -1572,10 +1643,16 @@ impl CrinGraphApp {
         // Dimmed backdrop; clicking it closes the sheet. It deliberately
         // stops at the sheet's top edge so taps inside the sheet (padding,
         // gaps between rows) never fall through and close it.
-        let backdrop =
-            egui::Rect::from_min_max(screen_rect.min, egui::pos2(screen_rect.right(), top));
+        let backdrop = egui::Rect::from_min_max(
+            egui::pos2(
+                screen_rect.left() + INSET_LEFT,
+                screen_rect.top() + INSET_TOP,
+            ),
+            egui::pos2(screen_rect.right() - INSET_LEFT, top),
+        );
         egui::Area::new(egui::Id::new("library_backdrop"))
             .fixed_pos(egui::pos2(0.0, 0.0))
+            .order(egui::Order::Foreground)
             .show(ctx, |ui| {
                 ui.painter().rect_filled(
                     backdrop,
@@ -1590,7 +1667,7 @@ impl CrinGraphApp {
         // The sheet slides between just past the bottom edge and its resting
         // place at the bottom of the screen.
         egui::Area::new(egui::Id::new("library_sheet"))
-            .fixed_pos(egui::pos2(screen_rect.left(), top))
+            .fixed_pos(egui::pos2(screen_rect.left() + INSET_LEFT, top))
             .order(egui::Order::Foreground)
             .show(ctx, |ui| {
                 ui.allocate_ui_with_layout(
@@ -1599,7 +1676,7 @@ impl CrinGraphApp {
                     |ui| {
                         egui::Frame::new()
                             .fill(palette.surface_panel)
-                            .inner_margin(egui::Margin::symmetric(12, 10))
+                            .inner_margin(egui::Margin::symmetric(12, 12))
                             .corner_radius(egui::CornerRadius {
                                 nw: 12,
                                 ne: 12,
@@ -1724,6 +1801,7 @@ impl CrinGraphApp {
             .open(&mut window_open)
             .resizable(true)
             .default_width(480.0)
+            .default_pos(egui::pos2(320.0, 180.0))
             .show(ctx, |ui| {
                 ui.label("Copy this versioned state URI, or paste one to restore a graph.");
                 if ui.button("Copy current state URI").clicked() {
@@ -1770,6 +1848,7 @@ impl CrinGraphApp {
             .resizable(false)
             .collapsible(false)
             .default_width(340.0)
+            .default_pos(egui::pos2(360.0, 220.0))
             .show(ctx, |ui| {
                 let segment = &TUTORIAL_SEGMENTS[selected];
                 ui.heading(segment.title);
@@ -2040,7 +2119,7 @@ impl CrinGraphApp {
                 return;
             }
         };
-        let fitted = equalizer::autoeq(&source, &target_curve, self.eq_max_filters);
+        let fitted = equalizer::autoeq(&source, &target_curve, self.eq_max_filters, self.eq_range);
         self.eq_export_error = None;
         self.eq_export_message = Some(format!(
             "Auto EQ fitted {} filters against {}.",
@@ -2302,6 +2381,7 @@ impl CrinGraphApp {
             .resizable(false)
             .collapsible(false)
             .default_width(420.0)
+            .default_pos(egui::pos2(340.0, 200.0))
             .show(ctx, |ui| {
                 ui.label(
                     RichText::new("How to use the equalizer")
@@ -2354,7 +2434,7 @@ impl CrinGraphApp {
                             // Auto EQ to the chosen target, falling back to the
                             // reference's first active target.
                             0 | 1 => {
-                                if ui.button("Auto EQ now").clicked() {
+                                if ui.button("AutoEQ now").clicked() {
                                     self.run_auto_eq();
                                     finished = true;
                                 }
@@ -2404,6 +2484,7 @@ impl CrinGraphApp {
             .resizable(false)
             .collapsible(false)
             .default_width(460.0)
+            .default_pos(egui::pos2(320.0, 160.0))
             .show(ctx, |ui| {
                 // The reference states this in the upload itself rather than as
                 // a dismissible banner, because a measurement taken on another
@@ -2452,6 +2533,7 @@ impl CrinGraphApp {
         self.upload_open = true;
         self.upload_error = None;
         self.upload_message = None;
+        self.close_all_overlays_except(Some("upload"));
     }
 
     /// The sound tools: a tone generator and pink noise, with the Compare A | B
@@ -2511,10 +2593,45 @@ impl CrinGraphApp {
             };
         }
         if let Source::Tone { freq } = &mut settings.source {
+            // The band the slider sweeps, as the reference tool sets it: the
+            // slider is a position between the two bounds, so a narrow band
+            // gives fine control where it matters.
+            ui.horizontal(|ui| {
+                cgui::cluster_label(ui, "Freq Range");
+                let mut from = self.tone_range.0;
+                let mut to = self.tone_range.1;
+                if ui
+                    .add(
+                        egui::DragValue::new(&mut from)
+                            .range(20.0..=20_000.0)
+                            .speed(10.0)
+                            .suffix(" Hz"),
+                    )
+                    .on_hover_text("Lowest frequency the tone generator reaches")
+                    .changed()
+                {
+                    self.tone_range.0 = from;
+                }
+                if ui
+                    .add(
+                        egui::DragValue::new(&mut to)
+                            .range(20.0..=20_000.0)
+                            .speed(10.0)
+                            .suffix(" Hz"),
+                    )
+                    .on_hover_text("Highest frequency the tone generator reaches")
+                    .changed()
+                {
+                    self.tone_range.1 = to;
+                }
+                // The band keeps a hertz of width: the slider is logarithmic
+                // over it, and a band of one point has no logarithm.
+                self.tone_range.1 = self.tone_range.1.max(self.tone_range.0 + 1.0);
+            });
             // A log slider, because pitch is heard geometrically and a linear
             // one would crowd every low frequency into a corner.
             ui.add(
-                egui::Slider::new(freq, 20.0..=20_000.0)
+                egui::Slider::new(freq, self.tone_range.0..=self.tone_range.1)
                     .logarithmic(true)
                     .suffix(" Hz")
                     .text("Tone"),
@@ -2583,11 +2700,12 @@ impl CrinGraphApp {
                 .clicked()
             {
                 self.onboarding_open = true;
+                self.close_all_overlays_except(Some("onboarding"));
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.menu_button("Settings", |ui| {
                     ui.label(
-                        RichText::new("Auto EQ")
+                        RichText::new("AutoEQ")
                             .size(squiglab::theme::TypeStep::Caption.size())
                             .color(palette.text_secondary),
                     );
@@ -2683,7 +2801,7 @@ impl CrinGraphApp {
                 self.eq_target = selected_target;
             }
             ui.add_space(cgui::Spacing::COMPACT);
-            if ui.button("Auto EQ").clicked() {
+            if ui.button("AutoEQ").clicked() {
                 self.run_auto_eq();
             }
         });
@@ -2836,12 +2954,51 @@ impl CrinGraphApp {
             }
         }
 
+        // --- the band AutoEQ fits within ---
+        // The reference tool exposes this as two numbers beside the band
+        // buttons, and clamps them the same way: the low bound to the audible
+        // range, the high bound to the low one.
+        ui.add_space(cgui::Spacing::TIGHT);
+        ui.horizontal(|ui| {
+            cgui::cluster_label(ui, "AutoEQ Range");
+            let mut from = self.eq_range.0;
+            let mut to = self.eq_range.1;
+            if ui
+                .add(
+                    egui::DragValue::new(&mut from)
+                        .range(20.0..=20_000.0)
+                        .speed(10.0)
+                        .suffix(" Hz"),
+                )
+                .on_hover_text("Lowest frequency AutoEQ may place a filter at")
+                .changed()
+            {
+                self.eq_range.0 = from;
+            }
+            if ui
+                .add(
+                    egui::DragValue::new(&mut to)
+                        .range(20.0..=20_000.0)
+                        .speed(10.0)
+                        .suffix(" Hz"),
+                )
+                .on_hover_text("Highest frequency AutoEQ may place a filter at")
+                .changed()
+            {
+                self.eq_range.1 = to;
+            }
+            // The high bound never falls below the low one, as in the
+            // reference.
+            self.eq_range.1 = self.eq_range.1.max(self.eq_range.0);
+        });
+
         // --- the two export formats ---
         ui.add_space(cgui::Spacing::TIGHT);
         ui.horizontal(|ui| {
             if cgui::action_button(ui, "Import", "Load an Equalizer APO file.") {
                 self.eq_import_open = true;
                 self.eq_import_error = None;
+                self.close_all_overlays_except(Some("eq_import"));
             }
             if cgui::action_button(ui, "Export", "Save an Equalizer APO file.") {
                 let exported = self.parametric_export();
@@ -2851,7 +3008,7 @@ impl CrinGraphApp {
         if ui
             .add_sized(
                 [ui.available_width(), 24.0],
-                egui::Button::new("Export Graphic EQ (Wavelet)"),
+                egui::Button::new("Export Graphic EQ (For Wavelet)"),
             )
             .clicked()
         {
@@ -2881,6 +3038,7 @@ impl CrinGraphApp {
             .resizable(false)
             .collapsible(false)
             .default_width(420.0)
+            .default_pos(egui::pos2(320.0, 240.0))
             .show(ctx, |ui| {
                 ui.label("Path to an Equalizer APO configuration:");
                 ui.add(
@@ -2925,7 +3083,7 @@ impl CrinGraphApp {
         ui.add_space(cgui::Spacing::TIGHT);
 
         if let Some(error) = &self.load_error {
-            ui.colored_label(Color32::LIGHT_RED, error);
+            ui.colored_label(palette.error, error);
             if ui.button("Retry loading").clicked() {
                 self.loaded = false;
                 self.load_error = None;
@@ -3756,6 +3914,7 @@ impl CrinGraphApp {
         egui::Window::new("Deviation from target")
             .open(&mut open)
             .default_size(egui::vec2(760.0, DeltaBar::HEIGHT + 96.0))
+            .default_pos(egui::pos2(400.0, 240.0))
             .show(ctx, |ui| {
                 if productive {
                     DeltaBar {
@@ -3794,20 +3953,29 @@ impl CrinGraphApp {
     /// and the manager: the manager's rows are the selection you are working
     /// with, and the status line is about the app rather than about them.
     fn status_panel(&mut self, ui: &mut Ui) {
+        let palette = squiglab::theme::Palette::resolve(self.dark_mode);
         egui::Panel::bottom("status")
             .resizable(false)
             .default_size(24.0)
             .show(ui, |ui| {
                 ui.horizontal(|ui| {
-                    ui.label(format!(
-                        "{} active · {} total · {} Hz–{} Hz",
-                        self.display_curves.len(),
-                        self.groups.len(),
-                        self.zoom.x_range().0 as u32,
-                        self.zoom.x_range().1 as u32
-                    ));
+                    ui.label(
+                        egui::RichText::new(format!(
+                            "{} active · {} total · {} Hz–{} Hz",
+                            self.display_curves.len(),
+                            self.groups.len(),
+                            self.zoom.x_range().0 as u32,
+                            self.zoom.x_range().1 as u32
+                        ))
+                        .size(squiglab::theme::TypeStep::Micro.size())
+                        .color(palette.text_secondary),
+                    );
                     if let Some(index) = self.baseline {
-                        ui.label(format!("Baseline: {}", self.groups[index].name));
+                        ui.label(
+                            egui::RichText::new(format!("Baseline: {}", self.groups[index].name))
+                                .size(squiglab::theme::TypeStep::Micro.size())
+                                .color(palette.text_secondary),
+                        );
                     }
                     if self.processing_error.is_some()
                         || self.load_error.is_some()
@@ -3816,29 +3984,41 @@ impl CrinGraphApp {
                         || self.svg_error.is_some()
                         || self.curve_export_error.is_some()
                     {
-                        ui.colored_label(Color32::LIGHT_RED, "Some issues need attention.");
+                        ui.colored_label(palette.error, "Some issues need attention.");
                     }
                 });
                 if let Some(error) = &self.settings_error {
-                    ui.colored_label(Color32::LIGHT_RED, error);
+                    ui.colored_label(palette.error, error);
                 }
                 if let Some(error) = &self.screenshot_error {
-                    ui.colored_label(Color32::LIGHT_RED, error);
+                    ui.colored_label(palette.error, error);
                 }
                 if let Some(message) = &self.screenshot_message {
-                    ui.label(message);
+                    ui.label(
+                        egui::RichText::new(message.as_str())
+                            .size(squiglab::theme::TypeStep::Micro.size())
+                            .color(palette.text_secondary),
+                    );
                 }
                 if let Some(error) = &self.svg_error {
-                    ui.colored_label(Color32::LIGHT_RED, error);
+                    ui.colored_label(palette.error, error);
                 }
                 if let Some(message) = &self.svg_message {
-                    ui.label(message);
+                    ui.label(
+                        egui::RichText::new(message.as_str())
+                            .size(squiglab::theme::TypeStep::Micro.size())
+                            .color(palette.text_secondary),
+                    );
                 }
                 if let Some(error) = &self.curve_export_error {
-                    ui.colored_label(Color32::LIGHT_RED, error);
+                    ui.colored_label(palette.error, error);
                 }
                 if let Some(message) = &self.curve_export_message {
-                    ui.label(message);
+                    ui.label(
+                        egui::RichText::new(message.as_str())
+                            .size(squiglab::theme::TypeStep::Micro.size())
+                            .color(palette.text_secondary),
+                    );
                 }
             });
     }

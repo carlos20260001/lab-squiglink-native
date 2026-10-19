@@ -24,8 +24,10 @@ pub const DEFAULT_SAMPLE_RATE: f64 = 48_000.0;
 /// AutoEQ keeps filters below this frequency in its first batch, leaving the
 /// treble to be corrected once the rest of the curve is settled.
 pub const TREBLE_START_FROM: f64 = 7_000.0;
-/// Frequency bounds AutoEQ places filters within. Filters close to Nyquist are
-/// avoided because their behaviour is implementation dependent.
+/// The frequency band AutoEQ places filters within, which is where it starts.
+/// Filters close to Nyquist are avoided because their behaviour is
+/// implementation dependent. The reference tool lets the band be changed
+/// before a run, so this is the starting point rather than a fixed rule.
 pub const AUTO_EQ_RANGE: (f64, f64) = (20.0, 15_000.0);
 /// Bounds the optimizer and the exported filters are clamped to.
 pub const OPTIMIZE_Q_RANGE: (f64, f64) = (0.5, 2.0);
@@ -342,16 +344,18 @@ pub fn as_graphic_eq(filters: &[Filter], sample_rate: f64) -> Vec<ResponsePoint>
 /// Peaking-filter candidates for the regions where a curve deviates from its
 /// target by more than `threshold` dB. Each candidate spans one run of
 /// same-signed deviation, centred on the geometric mean of its bounds. Both
-/// curves must share the same ascending frequency grid.
+/// curves must share the same ascending frequency grid, and `range` is the
+/// frequency band the candidates are drawn from.
 pub fn search_candidates(
     curve: &[ResponsePoint],
     target: &[ResponsePoint],
     threshold: f64,
+    range: (f64, f64),
 ) -> Vec<Filter> {
     let mut state = 0.0; // 1: peak, 0: matched, -1: dip
     let mut start_index: isize = -1;
     let mut candidates = Vec::new();
-    let (min_freq, max_freq) = AUTO_EQ_RANGE;
+    let (min_freq, max_freq) = range;
     for index in 0..curve.len() {
         let freq = curve[index].hz;
         let delta = curve[index].db - target[index].db;
@@ -420,16 +424,17 @@ fn strip(filters: Vec<Filter>) -> Vec<Filter> {
 /// Q, and gain steps around its current value and keeping the first
 /// improvement. The reverse pass additionally sorts, merges adjacent filters
 /// that are close enough to be one, and prunes filters the curve does not
-/// need.
+/// need. `range` is the frequency band the filters are kept within.
 pub fn optimize(
     curve: &[ResponsePoint],
     target: &[ResponsePoint],
     filters: Vec<Filter>,
     iteration: usize,
     reverse: bool,
+    range: (f64, f64),
 ) -> Vec<Filter> {
     let mut filters = strip(filters);
-    let (min_freq, max_freq) = AUTO_EQ_RANGE;
+    let (min_freq, max_freq) = range;
     let (min_q, max_q) = OPTIMIZE_Q_RANGE;
     let (min_gain, max_gain) = OPTIMIZE_GAIN_RANGE;
     let [max_df, max_dq, max_dg, step_df, step_dq, step_dg] = OPTIMIZE_DELTAS[iteration];
@@ -496,7 +501,7 @@ pub fn optimize(
         index += step;
     }
     if !reverse {
-        return optimize(curve, target, filters, iteration, true);
+        return optimize(curve, target, filters, iteration, true, range);
     }
 
     filters.sort_by(|left, right| left.freq.total_cmp(&right.freq));
@@ -543,13 +548,15 @@ pub fn optimize(
 /// target. Two batches: the first corrects everything below the treble start
 /// at a 1 dB threshold, the second spends the remaining budget on whatever is
 /// left at a 0.5 dB threshold, and both are then optimized together.
+/// `range` is the frequency band the fit is confined to.
 pub fn autoeq(
     curve: &[ResponsePoint],
     target: &[ResponsePoint],
     max_filters: usize,
+    range: (f64, f64),
 ) -> Vec<Filter> {
     let first_batch_size = ((max_filters as f64 / 2.0).floor() - 1.0).max(1.0) as usize;
-    let mut first_candidates = search_candidates(curve, target, 1.0)
+    let mut first_candidates = search_candidates(curve, target, 1.0, range)
         .into_iter()
         // The treble is left to the second batch.
         .filter(|candidate| candidate.freq <= TREBLE_START_FROM)
@@ -561,12 +568,12 @@ pub fn autoeq(
         .collect();
     first_filters.sort_by(|left, right| left.freq.total_cmp(&right.freq));
     for iteration in 0..OPTIMIZE_DELTAS.len() {
-        first_filters = optimize(curve, target, first_filters, iteration, false);
+        first_filters = optimize(curve, target, first_filters, iteration, false, range);
     }
 
     let corrected = apply(curve, &first_filters, DEFAULT_SAMPLE_RATE);
     let second_batch_size = max_filters.saturating_sub(first_filters.len());
-    let mut second_candidates = search_candidates(&corrected, target, 0.5);
+    let mut second_candidates = search_candidates(&corrected, target, 0.5, range);
     second_candidates.sort_by(|left, right| left.q.total_cmp(&right.q));
     let mut second_filters: Vec<Filter> = second_candidates
         .into_iter()
@@ -574,13 +581,13 @@ pub fn autoeq(
         .collect();
     second_filters.sort_by(|left, right| left.freq.total_cmp(&right.freq));
     for iteration in 0..OPTIMIZE_DELTAS.len() {
-        second_filters = optimize(&corrected, target, second_filters, iteration, false);
+        second_filters = optimize(&corrected, target, second_filters, iteration, false, range);
     }
 
     let mut all_filters = first_filters;
     all_filters.extend(second_filters);
     for iteration in 0..OPTIMIZE_DELTAS.len() {
-        all_filters = optimize(curve, target, all_filters, iteration, false);
+        all_filters = optimize(curve, target, all_filters, iteration, false, range);
     }
     strip(all_filters)
 }
@@ -732,7 +739,7 @@ mod tests {
     use super::{
         apply, as_graphic_eq, autoeq, calc_distance, calc_gains, calc_preamp, export_graphic_eq,
         export_parametric, highshelf, import_parametric, interp, lowshelf, peaking, Filter,
-        FilterType, ResponsePoint, DEFAULT_SAMPLE_RATE,
+        FilterType, ResponsePoint, AUTO_EQ_RANGE, DEFAULT_SAMPLE_RATE,
     };
     use serde::Deserialize;
 
@@ -1033,13 +1040,40 @@ mod tests {
         let curve = to_curve(&golden.curve);
         let target = to_curve(&golden.target);
         for case in [&golden.autoeq, &golden.autoeq_small] {
-            let filters = autoeq(&curve, &target, case.max_filters);
+            let filters = autoeq(&curve, &target, case.max_filters, AUTO_EQ_RANGE);
             assert_filters_match(
                 &filters,
                 &case.filters,
                 &format!("autoeq with {} filters", case.max_filters),
             );
         }
+    }
+
+    #[test]
+    fn the_autoeq_range_confines_the_fit() {
+        // The reference lets the band AutoEQ searches be set before a run, so
+        // a narrow band must keep every filter inside it.
+        let golden = fixture();
+        let curve = to_curve(&golden.curve);
+        let target = to_curve(&golden.target);
+        let filters = autoeq(&curve, &target, golden.autoeq.max_filters, (200.0, 2_000.0));
+        assert!(
+            !filters.is_empty(),
+            "a fit inside the band still produces filters"
+        );
+        for filter in &filters {
+            assert!(
+                (200.0..=2_000.0).contains(&filter.freq),
+                "filter at {} Hz is outside the band",
+                filter.freq
+            );
+        }
+        // The default band is wider, so it lets the treble through.
+        let wide = autoeq(&curve, &target, golden.autoeq.max_filters, AUTO_EQ_RANGE);
+        assert!(
+            wide.iter().any(|filter| filter.freq > 2_000.0),
+            "the default band reaches past the narrow one"
+        );
     }
 
     #[test]
