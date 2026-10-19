@@ -24,6 +24,7 @@
 
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 pub mod cpal_sink;
+pub mod decode;
 #[cfg(target_os = "linux")]
 pub mod pipewire;
 #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
@@ -61,6 +62,8 @@ pub enum Source {
     /// tools, but the generator that pink noise is filtered from, and the
     /// honest way to hear what the pink filter is doing.
     WhiteNoise,
+    /// A music file, decoded and played through the equalizer.
+    File,
 }
 
 impl Source {
@@ -70,12 +73,21 @@ impl Source {
             Self::Tone { .. } => "Tone generator",
             Self::PinkNoise => "Pink noise",
             Self::WhiteNoise => "White noise",
+            Self::File => "Music file",
         }
     }
 
     /// Whether this source has a frequency to drag.
     pub fn is_tone(self) -> bool {
         matches!(self, Self::Tone { .. })
+    }
+
+    /// The name of the source, when it is a file.
+    pub fn file_name(self) -> &'static str {
+        match self {
+            Self::File => "Music file",
+            _ => "",
+        }
     }
 }
 
@@ -95,6 +107,66 @@ impl Default for Settings {
             source: Source::Tone { freq: 1000.0 },
             volume: 0.2,
         }
+    }
+}
+
+/// A decoded music file, and where the playhead is in it.
+#[derive(Clone, Debug, Default)]
+pub struct FilePlayback {
+    /// The samples, interleaved by channel.
+    pub samples: Vec<f32>,
+    /// How many channels the file has.
+    pub channels: u32,
+    /// The rate the file was recorded at.
+    pub rate: f64,
+    /// The playhead, in samples.
+    pub position: f64,
+    /// Whether the file is to be looped.
+    pub looping: bool,
+}
+
+impl FilePlayback {
+    /// The length of the file, in seconds.
+    pub fn seconds(&self) -> f64 {
+        if self.channels == 0 || self.rate == 0.0 {
+            return 0.0;
+        }
+        self.samples.len() as f64 / self.channels as f64 / self.rate
+    }
+
+    /// The next sample of the file, resampled to the rate asked for.
+    pub fn next_sample(&mut self, rate: f64) -> f32 {
+        if self.samples.is_empty() || self.channels == 0 {
+            return 0.0;
+        }
+        let step = if self.rate > 0.0 {
+            rate / self.rate
+        } else {
+            1.0
+        };
+        let position = self.position;
+        self.position += step;
+        let last = self.samples.len() as f64 - self.channels as f64;
+        if position >= last {
+            if self.looping {
+                self.position = 0.0;
+                return self.next_sample(rate);
+            }
+            self.position = last;
+            return 0.0;
+        }
+        // The sample before and the sample after, so the file is resampled
+        // rather than played at the wrong speed.
+        let index = position as usize;
+        let fraction = (position - index as f64) as f32;
+        let next = (index + self.channels as usize).min(self.samples.len() - 1);
+        let mut out = 0.0;
+        for channel in 0..self.channels as usize {
+            let here = self.samples[index + channel];
+            let after = self.samples[next + channel];
+            out += here + (after - here) * fraction;
+        }
+        out / self.channels as f32
     }
 }
 
@@ -144,6 +216,8 @@ pub struct Generator {
     fade_coefficient: f32,
     /// The filters the source is played through, and their state.
     chain: Chain,
+    /// The music file being played, if a file is the source.
+    file: Option<FilePlayback>,
 }
 
 impl Generator {
@@ -166,6 +240,7 @@ impl Generator {
             glide_coefficient: smoothing(sample_rate, GLIDE_SECONDS),
             fade_coefficient: smoothing(sample_rate, f64::from(FADE_SECONDS)) as f32,
             chain: Chain::default(),
+            file: None,
         }
     }
 
@@ -198,6 +273,11 @@ impl Generator {
         self.chain = chain;
     }
 
+    /// Play a music file.
+    pub fn set_file(&mut self, file: FilePlayback) {
+        self.file = Some(file);
+    }
+
     /// The next sample.
     fn next_sample(&mut self, settings: &Settings) -> f32 {
         let target_gain = if settings.volume > 0.0 { 1.0 } else { 0.0 };
@@ -214,6 +294,10 @@ impl Generator {
             Source::Tone { .. } => (std::f64::consts::TAU * self.phase).sin() as f32,
             Source::PinkNoise => self.pink.next_sample(),
             Source::WhiteNoise => self.white.next_sample(),
+            Source::File => match &mut self.file {
+                Some(file) => file.next_sample(self.sample_rate),
+                None => 0.0,
+            },
         };
         (sample * volume).clamp(-1.0, 1.0)
     }
@@ -224,7 +308,7 @@ impl Generator {
             Source::Tone { freq } => freq.clamp(20.0, 20_000.0).ln(),
             // Noise has no pitch, but the state is kept moving so a switch back
             // to a tone resumes rather than gliding.
-            Source::PinkNoise | Source::WhiteNoise => self.pitch,
+            Source::PinkNoise | Source::WhiteNoise | Source::File => self.pitch,
         };
         self.pitch += (target - self.pitch) * self.glide_coefficient;
         let increment = self.pitch.exp() / self.sample_rate;
@@ -427,6 +511,7 @@ impl SampleRing {
 enum Command {
     Settings(Settings),
     Chain(Chain),
+    File(FilePlayback),
     Stop,
 }
 
@@ -476,6 +561,13 @@ impl Player {
     pub fn set_settings(&self, settings: Settings) {
         if let Some(commands) = &self.commands {
             let _ = commands.send(Command::Settings(settings));
+        }
+    }
+
+    /// Play a music file, decoded and ready.
+    pub fn set_file(&self, file: FilePlayback) {
+        if let Some(commands) = &self.commands {
+            let _ = commands.send(Command::File(file));
         }
     }
 

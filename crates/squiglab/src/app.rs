@@ -62,6 +62,12 @@ pub struct App {
     /// Where the pointer took hold of the graph's scale, so the drag can tell
     /// the mark from the circles.
     pub scale_grab: Option<egui::Pos2>,
+    /// The music player: the file, the search, and what it found.
+    pub music: crate::music::Music,
+    /// The search that is running, if one is.
+    pub pending_search: Option<crate::music::SearchHandle>,
+    /// The preview that is downloading, if one is.
+    pub pending_preview: Option<(crate::music::Track, crate::music::PreviewHandle)>,
     /// Whether a picture of the window was asked for.
     pub screenshot_requested: bool,
     /// Whether the constraints panel is open.
@@ -140,6 +146,9 @@ impl App {
             sound_message: None,
             compare: false,
             scale_grab: None,
+            music: crate::music::Music::default(),
+            pending_search: None,
+            pending_preview: None,
             screenshot_requested: false,
             constraints_open: false,
             upload_path: String::new(),
@@ -177,6 +186,9 @@ impl App {
     pub fn draw(&mut self, ui: &mut Ui) {
         let ctx = ui.ctx().clone();
         theme::apply(&ctx, self.session.theme);
+        // What the music player was doing while the window was busy.
+        crate::music::take_results(self);
+        crate::music::take_preview(self);
 
         egui::CentralPanel::default()
             .frame(

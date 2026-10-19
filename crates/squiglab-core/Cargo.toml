@@ -27,6 +27,9 @@ walkdir = "2.4"
 png = "0.18"
 resvg = "0.48"
 once_cell = "1.19"
+# Decoding the audio files the music player plays: the Apple previews are
+# AAC in an MP4 container, and a local file may be MP3.
+symphonia = { version = "0.6", features = ["mp3", "aac", "isomp4"] }
 dirs = "7"
 toml = "0.8"
 

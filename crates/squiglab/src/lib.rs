@@ -10,6 +10,7 @@ pub mod equalizer;
 pub mod graph;
 pub mod header;
 pub mod icons;
+pub mod music;
 pub mod selector;
 pub mod sound;
 pub mod theme;

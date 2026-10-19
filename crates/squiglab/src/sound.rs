@@ -58,6 +58,10 @@ pub fn show(ui: &mut Ui, app: &mut App) {
     });
     ui.add_space(metrics::GAP);
 
+    // --- the music ---
+    crate::music::show(ui, app);
+    ui.add_space(metrics::GAP);
+
     // --- the sources ---
     card(ui, "Pink Noise", |ui| {
         if play_button(ui, app.source == Source::PinkNoise && app.player.is_some()) {
@@ -151,7 +155,7 @@ pub fn show(ui: &mut Ui, app: &mut App) {
 }
 
 /// A source in its own card, as the reference keeps them.
-fn card(ui: &mut Ui, title: &str, contents: impl FnOnce(&mut Ui)) {
+pub fn card(ui: &mut Ui, title: &str, contents: impl FnOnce(&mut Ui)) {
     let palette = theme::current_palette();
     egui::Frame::group(ui.style())
         .fill(palette.sunken)

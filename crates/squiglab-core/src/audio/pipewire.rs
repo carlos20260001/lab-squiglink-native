@@ -42,6 +42,8 @@ pub fn start(settings: Settings) -> Result<Player, String> {
     // The filters the source is played through. The generator lives in the
     // real-time callback, so the chain is shared the way the settings are.
     let chain = Arc::new(Mutex::new(None::<crate::audio::Chain>));
+    // The music file being played, if a file is the source.
+    let file = Arc::new(Mutex::new(None::<crate::audio::FilePlayback>));
     let played = Arc::new(Played::new(reports_out.clone()));
     let quit_handle = Arc::new(QuitHandle {
         // Filled in by the player thread once the loop exists.
@@ -53,6 +55,7 @@ pub fn start(settings: Settings) -> Result<Player, String> {
         let result = run(
             shared,
             chain,
+            file,
             command_receiver,
             &reports_for_thread,
             played,
@@ -177,6 +180,7 @@ impl QuitHandle {
 fn run(
     shared: Arc<Mutex<Settings>>,
     chain: Arc<Mutex<Option<crate::audio::Chain>>>,
+    file: Arc<Mutex<Option<crate::audio::FilePlayback>>>,
     command_receiver: mpsc::Receiver<Command>,
     reports: &mpsc::Sender<String>,
     played: Arc<Played>,
@@ -214,6 +218,7 @@ fn run(
 
     let callback_shared = Arc::clone(&shared);
     let callback_chain = Arc::clone(&chain);
+    let callback_file = Arc::clone(&file);
     let callback_quit = Arc::clone(quit_handle);
     let mut scratch = vec![0.0_f32; SCRATCH_FRAMES * 2];
     // Counts the buffers the daemon actually handed over, and reports the
@@ -260,6 +265,9 @@ fn run(
                     Command::Chain(next) => {
                         *callback_chain.lock().expect("chain lock") = Some(next);
                     }
+                    Command::File(next) => {
+                        *callback_file.lock().expect("file lock") = Some(next);
+                    }
                     Command::Stop => quit_now = true,
                 }
             }
@@ -278,6 +286,9 @@ fn run(
             // starts its filters again from silence.
             if let Some(next) = callback_chain.lock().expect("chain lock").take() {
                 generator.set_chain(next);
+            }
+            if let Some(next) = callback_file.lock().expect("file lock").take() {
+                generator.set_file(next);
             }
             let settings = *callback_shared.lock().expect("settings lock");
             let Some(mut buffer) = stream.dequeue_buffer() else {
