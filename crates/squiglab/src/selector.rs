@@ -122,39 +122,67 @@ fn brands(ui: &mut Ui, app: &mut App) {
     }
     counts.sort_by_key(|(brand, _)| brand.to_lowercase());
 
-    for (brand, count) in counts {
-        if !app.search.is_empty() && !matches_search(&brand, &app.search) {
-            continue;
-        }
-        let selected = app.brand.as_deref() == Some(brand.as_str());
-        ui.horizontal(|ui| {
-            let response = ui
-                .selectable_label(
-                    selected,
-                    RichText::new(brand.clone())
-                        .font(TypeStep::Body.font())
-                        .color(palette.text_primary),
-                )
-                .on_hover_text("Show this brand's measurements");
-            if response.clicked() {
-                app.brand = Some(brand.clone());
-                app.tab = Tab::Models;
-            }
-            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                ui.label(
-                    RichText::new(count.to_string())
-                        .font(TypeStep::Label.font())
-                        .color(palette.text_tertiary),
-                );
-            });
-        });
-    }
+    // The reference's brands tab: the list of brands, and the models of the
+    // brand that is chosen sliding in from the right, so that a sliver of
+    // them is still showing.
+    let height = ui.available_height();
+    let origin = ui.cursor().min;
+    ui.horizontal_top(|ui| {
+        ui.scope_builder(
+            egui::UiBuilder::new()
+                .max_rect(egui::Rect::from_min_size(
+                    origin,
+                    egui::vec2(BRANDS_WIDTH, height),
+                ))
+                .layout(egui::Layout::top_down(egui::Align::Min)),
+            |ui| {
+                for (brand, _count) in counts {
+                    if !app.search.is_empty() && !matches_search(&brand, &app.search) {
+                        continue;
+                    }
+                    let selected = app.brand.as_deref() == Some(brand.as_str());
+                    // The reference's list of brands carries the names alone.
+                    let response = ui
+                        .selectable_label(
+                            selected,
+                            RichText::new(brand.clone())
+                                .font(TypeStep::Body.font())
+                                .color(if selected {
+                                    palette.on_accent
+                                } else {
+                                    palette.text_primary
+                                }),
+                        )
+                        .on_hover_text("Show this brand's measurements");
+                    if response.clicked() {
+                        app.brand = Some(brand.clone());
+                        // The reference goes to the models of the brand that
+                        // is pressed.
+                        app.tab = Tab::Models;
+                    }
+                }
+            },
+        );
+        ui.scope_builder(
+            egui::UiBuilder::new()
+                .max_rect(egui::Rect::from_min_size(
+                    egui::pos2(origin.x + BRANDS_WIDTH, origin.y),
+                    egui::vec2(BRANDS_WIDTH, height),
+                ))
+                .layout(egui::Layout::top_down(egui::Align::Min)),
+            |ui| model_list(ui, app),
+        );
+    });
 }
+
+/// The width of the reference's list of brands.
+const BRANDS_WIDTH: f32 = 289.0;
 
 /// The list of the chosen brand's measurements.
 fn models(ui: &mut Ui, app: &mut App) {
     // The reference's models tab shows the brands down the left and the
     // measurements of the chosen brand beside them.
+    let palette = theme::current_palette();
     let height = ui.available_height();
     // Where the columns begin: below the tabs and the search.
     let origin = ui.cursor().min;
@@ -171,10 +199,22 @@ fn models(ui: &mut Ui, app: &mut App) {
                 .layout(egui::Layout::top_down(egui::Align::Min)),
             |ui| brand_column(ui, app),
         );
+        // The reference's list of models slides over the list of brands, so
+        // it starts where the reference's starts and covers what is behind
+        // it.
+        let list_x = origin.x + MODELS_LIST_OFFSET;
+        ui.painter().rect_filled(
+            egui::Rect::from_min_size(
+                egui::pos2(list_x, origin.y),
+                egui::vec2(metrics::LIST_WIDTH, height),
+            ),
+            0.0,
+            palette.page,
+        );
         ui.scope_builder(
             egui::UiBuilder::new()
                 .max_rect(egui::Rect::from_min_size(
-                    egui::pos2(origin.x + metrics::BRAND_COLUMN_WIDTH, origin.y),
+                    egui::pos2(list_x, origin.y),
                     egui::vec2(metrics::LIST_WIDTH, height),
                 ))
                 .layout(egui::Layout::top_down(egui::Align::Min)),
@@ -182,6 +222,9 @@ fn models(ui: &mut Ui, app: &mut App) {
         );
     });
 }
+
+/// Where the reference's list of models begins, in the column.
+const MODELS_LIST_OFFSET: f32 = 61.0;
 
 /// The brands down the left of the models tab.
 fn brand_column(ui: &mut Ui, app: &mut App) {
@@ -205,6 +248,9 @@ fn brand_column(ui: &mut Ui, app: &mut App) {
                 if !app.search.is_empty() && !matches_search(&brand, &app.search) {
                     continue;
                 }
+                // The reference's rows are forty tall with six points
+                // between them.
+                ui.add_space(2.0);
                 let selected = app.brand.as_deref() == Some(brand.as_str());
                 // The reference clips the brand names rather than wrapping
                 // them, so the column stays a fixed width.
@@ -228,7 +274,7 @@ fn brand_column(ui: &mut Ui, app: &mut App) {
                         .color(if selected {
                             palette.on_accent
                         } else {
-                            palette.text_primary
+                            palette.text_secondary
                         }),
                     )
                     .truncate(),
@@ -283,44 +329,9 @@ fn model_list(ui: &mut Ui, app: &mut App) {
         .id_salt("model_list")
         .auto_shrink([false, false])
         .show(ui, |ui| {
-            // The measurements that are on the graph lead the list, as chips
-            // the reference's do, and each carries the cross that takes it off.
-            let active: Vec<usize> = app.session.active.iter().copied().collect();
-            for index in active {
-                let name = app.session.groups[index].name.clone();
-                let width = ui.available_width() - 28.0;
-                ui.horizontal_top(|ui| {
-                    ui.add_sized(
-                        [width, 26.0],
-                        egui::Button::new(
-                            RichText::new(name.clone())
-                                .font(TypeStep::Body.font())
-                                .color(palette.on_accent),
-                        )
-                        .fill(palette.text_primary)
-                        .stroke(egui::Stroke::NONE)
-                        .corner_radius(egui::CornerRadius::same(4)),
-                    )
-                    .on_hover_text("This measurement is on the graph");
-                    if ui
-                        .add_sized(
-                            [20.0, 26.0],
-                            egui::Button::new(
-                                RichText::new("⊗")
-                                    .font(TypeStep::Body.font())
-                                    .color(palette.text_secondary),
-                            )
-                            .fill(egui::Color32::TRANSPARENT)
-                            .stroke(egui::Stroke::NONE),
-                        )
-                        .on_hover_text("Take this measurement off the graph")
-                        .clicked()
-                    {
-                        app.session.active.remove(&index);
-                        app.session.rebuild_display_curves();
-                    }
-                });
-            }
+            // The reference's list: every measurement in its place, and the
+            // ones that are on the graph drawn as a black pill with the
+            // cross that takes them off.
             for group in &groups {
                 if !app.search.is_empty() && !matches_search(&group.name, &app.search) {
                     continue;
@@ -332,25 +343,59 @@ fn model_list(ui: &mut Ui, app: &mut App) {
                     .position(|candidate| candidate.name == group.name)
                     .unwrap_or(0);
                 let on = app.session.active.contains(&index);
+                // The reference's rows are forty tall with six points
+                // between them.
+                ui.add_space(2.0);
+                if on {
+                    // The reference's row for a measurement that is on the
+                    // graph: a black pill, and the cross at its right.
+                    let mark = 36.0;
+                    let width = ui.available_width() - mark;
+                    ui.horizontal(|ui| {
+                        // The name is written at the left of the pill, as the
+                        // reference writes it.
+                        let (pill, response) =
+                            ui.allocate_exact_size(egui::vec2(width, 36.0), egui::Sense::click());
+                        ui.painter().rect_filled(pill, 6.0, palette.text_primary);
+                        ui.painter().text(
+                            pill.left_center() + egui::vec2(12.0, 0.0),
+                            egui::Align2::LEFT_CENTER,
+                            group.name.clone(),
+                            TypeStep::Body.font(),
+                            palette.on_accent,
+                        );
+                        response.on_hover_text("This measurement is on the graph");
+                        let (rect, response) =
+                            ui.allocate_exact_size(egui::vec2(mark, 36.0), egui::Sense::click());
+                        let glyph =
+                            egui::Rect::from_center_size(rect.center(), egui::vec2(16.0, 16.0));
+                        crate::icons::draw(
+                            ui.painter(),
+                            glyph,
+                            crate::icons::Icon::Remove,
+                            palette.on_accent,
+                        );
+                        if response
+                            .on_hover_text("Take this measurement off the graph")
+                            .clicked()
+                        {
+                            app.session.active.remove(&index);
+                            app.session.rebuild_display_curves();
+                        }
+                    });
+                    continue;
+                }
                 ui.horizontal(|ui| {
                     let response = ui
                         .selectable_label(
-                            on,
+                            false,
                             RichText::new(group.name.clone())
                                 .font(TypeStep::Body.font())
-                                .color(if on {
-                                    palette.on_accent
-                                } else {
-                                    palette.text_primary
-                                }),
+                                .color(palette.text_primary),
                         )
                         .on_hover_text("Show this measurement on the graph");
                     if response.clicked() {
-                        if on {
-                            app.session.active.remove(&index);
-                        } else {
-                            app.session.active.insert(index);
-                        }
+                        app.session.active.insert(index);
                         app.session.eq_phone = Some(index);
                         app.session.rebuild_display_curves();
                     }
