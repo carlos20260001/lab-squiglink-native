@@ -110,10 +110,13 @@ impl App {
             },
             Err(problem) => status = Some(format!("The preferences could not be found: {problem}")),
         }
-        // The equalizer works on one measurement: the one that is on the
-        // graph, if there is one.
+        // The equalizer works on one measurement and against one target: the
+        // ones that are on the graph, if there are any.
         if session.eq_phone.is_none() {
             session.eq_phone = session.active.iter().next().copied();
+        }
+        if session.eq_target.is_none() {
+            session.eq_target = session.active_targets.iter().next().copied();
         }
         session.rebuild_display_curves();
         let theme = session.theme;
@@ -266,6 +269,21 @@ impl App {
         crate::tools::show(ui, self);
         crate::graph::show(ui, self);
         crate::curves::show(ui, self);
+        self.status_line(ui);
+    }
+
+    /// What the program last said, at the foot of the window.
+    fn status_line(&mut self, ui: &mut Ui) {
+        let Some(message) = self.status.clone() else {
+            return;
+        };
+        let palette = theme::current_palette();
+        ui.add_space(metrics::GAP);
+        ui.label(
+            egui::RichText::new(message)
+                .font(theme::TypeStep::Label.font())
+                .color(palette.text_secondary),
+        );
     }
 }
 

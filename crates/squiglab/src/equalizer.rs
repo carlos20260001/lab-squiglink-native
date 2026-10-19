@@ -156,6 +156,9 @@ pub fn show(ui: &mut Ui, app: &mut App) {
     ui.add_space(metrics::GAP);
 
     // --- the band table ---
+    // The rows are laid out by hand rather than as a grid: the column is
+    // narrow, and a grid would give each column the room its heading needs
+    // rather than the room its figures need.
     let mut rows = app
         .session
         .eq_filters
@@ -163,54 +166,73 @@ pub fn show(ui: &mut Ui, app: &mut App) {
         .cloned()
         .unwrap_or_default();
     let mut changed = false;
-    egui::Grid::new("eq_rows")
-        .num_columns(5)
-        .spacing([metrics::GAP, metrics::GAP])
-        .show(ui, |ui| {
-            for heading in ["Type", "Frequency (Hz)", "Gain (dB)", "Q"] {
-                ui.label(
+
+    ui.horizontal(|ui| {
+        for (heading, width) in [
+            ("", 22.0),
+            ("Type", 52.0),
+            ("Frequency", 62.0),
+            ("Gain", 58.0),
+            ("Q", 46.0),
+        ] {
+            ui.add_sized(
+                [width, 18.0],
+                egui::Label::new(
                     RichText::new(heading)
                         .font(TypeStep::Label.font())
                         .color(palette.text_tertiary),
-                );
+                ),
+            );
+        }
+    });
+    for row in rows.iter_mut() {
+        ui.horizontal(|ui| {
+            let mut enabled = row.enabled;
+            if ui
+                .add_sized([22.0, 20.0], egui::Checkbox::new(&mut enabled, ""))
+                .on_hover_text("Include this band in the response and the exports")
+                .changed()
+            {
+                row.enabled = enabled;
+                changed = true;
             }
-            ui.end_row();
-            for row in rows.iter_mut() {
-                let mut enabled = row.enabled;
-                if ui.checkbox(&mut enabled, "").changed() {
-                    row.enabled = enabled;
-                    changed = true;
+            // A menu rather than a select: the select is wider than the names
+            // it holds, and the column is narrow.
+            ui.add_sized(
+                [52.0, 20.0],
+                egui::Button::new(row.filter.filter_type.short_name())
+                    .min_size(egui::vec2(52.0, 20.0)),
+            )
+            .on_hover_text("The kind of filter this band is")
+            .context_menu(|ui| {
+                for filter_type in [
+                    FilterType::Peaking,
+                    FilterType::LowShelf,
+                    FilterType::HighShelf,
+                ] {
+                    ui.selectable_value(
+                        &mut row.filter.filter_type,
+                        filter_type,
+                        filter_type.short_name(),
+                    );
                 }
-                // A menu rather than a select: the select is wider than the
-                // names it holds, and the column is narrow.
-                ui.menu_button(row.filter.filter_type.short_name(), |ui| {
-                    for filter_type in [
-                        FilterType::Peaking,
-                        FilterType::LowShelf,
-                        FilterType::HighShelf,
-                    ] {
-                        ui.selectable_value(
-                            &mut row.filter.filter_type,
-                            filter_type,
-                            filter_type.short_name(),
-                        );
-                    }
-                });
-                // The numbers are typed rather than dragged: the column is
-                // narrow, and a drag handle would take the room the digits
-                // need.
-                if number(ui, &mut row.filter.freq, 0.0, 20_000.0, 0) {
-                    changed = true;
-                }
-                if number(ui, &mut row.filter.gain, -40.0, 40.0, 1) {
-                    changed = true;
-                }
-                if number(ui, &mut row.filter.q, 0.0, 20.0, 2) {
-                    changed = true;
-                }
-                ui.end_row();
+            });
+            if number(ui, &mut row.filter.freq, 0.0, 20_000.0, 0, 62.0) {
+                changed = true;
+            }
+            if number(ui, &mut row.filter.gain, -40.0, 40.0, 1, 58.0) {
+                changed = true;
+            }
+            if number(ui, &mut row.filter.q, 0.0, 20.0, 2, 46.0) {
+                changed = true;
             }
         });
+    }
+    ui.label(
+        RichText::new("Frequencies in hertz, gains in decibels.")
+            .font(TypeStep::Label.font())
+            .color(palette.text_tertiary),
+    );
     if changed {
         app.session.eq_filters.insert(phone, rows);
         app.history.record(snapshot(app));
@@ -527,15 +549,15 @@ fn snapshot(app: &App) -> Snapshot {
 }
 
 /// A number in the band table, typed rather than dragged.
-fn number(ui: &mut Ui, value: &mut f64, low: f64, high: f64, places: usize) -> bool {
+fn number(ui: &mut Ui, value: &mut f64, low: f64, high: f64, places: usize, width: f32) -> bool {
     let mut text = match places {
         0 => format!("{value:.0}"),
         1 => format!("{value:.1}"),
         _ => format!("{value:.2}"),
     };
     let response = ui.add_sized(
-        [56.0, 20.0],
-        egui::TextEdit::singleline(&mut text).desired_width(56.0),
+        [width, 20.0],
+        egui::TextEdit::singleline(&mut text).desired_width(width),
     );
     if !response.changed() {
         return false;
