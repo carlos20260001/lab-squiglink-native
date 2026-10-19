@@ -30,7 +30,7 @@ fn targets(ui: &mut Ui, app: &mut App) {
     // reference's list comes from its own configuration; here the groups are
     // the ones the core builds from the measurement files.
     let mut first = true;
-    let mut heading = |ui: &mut Ui, label: &str, first: &mut bool| {
+    let heading = |ui: &mut Ui, label: &str, first: &mut bool| {
         if !*first {
             ui.label(
                 RichText::new("|")
