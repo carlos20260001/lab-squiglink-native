@@ -43,7 +43,7 @@ reference's own controls and their help text:
 | `eq-constraint-freq-graphic-list` | The band frequencies of a graphic equalizer, as a list (`32, 64, 125`) | ✓ |
 | `eq-constraint-gain-min` / `-max` | The gain the fit may use (−40–40 dB, 0 = no limit) | ✓ |
 | `eq-constraint-q-min` / `-max` | The Q the fit may use (0–10, 0 = no limit) | ✓ |
-| `eq-constraint-2ch` | Separate left and right filter banks | ✗ — the band table would need a channel column, and the exports a bank each |
+| `eq-constraint-2ch` | Separate left and right filter banks | ✓ — the shared filters shape every channel, and each side may carry filters of its own |
 
 ## The sound tools
 
@@ -52,7 +52,7 @@ reference's own controls and their help text:
 | `Compare A / B`, a settings gear | The same ✓ (no gear) |
 | **Music** — a list of tracks, `+ Add Music`, `Search Apple` | Absent (the music is the reference's own) |
 | **Pink Noise** — a play button | ✓ (a source) |
-| **Tone Generator** — a play button, a slider, the frequency, `+ Add Filter` | ✓ (a frequency and a volume) |
+| **Tone Generator** — a play button, a slider, the frequency, `+ Add Filter` | ✓ (a frequency and a volume), but not yet played through the equalizer |
 | **Range** — `Reset`, and the frequency span the slider covers (`20 Hz`–`20000 Hz`) | **The same** ✓ |
 
 ## Below the sound tools
@@ -66,8 +66,11 @@ reference's own controls and their help text:
 
 ## What the reference has that the native does not
 
-1. **Separate filter banks per channel** — the reference's `eq-constraint-2ch`.
-2. **The music list** — site-specific, and not portable.
+1. **The music list** — site-specific, and not portable.
+2. **The sources played through the equalizer** — the reference plays pink
+   noise, the tone and the music *through* the parametric equalizer, so you
+   hear what the bands do, with an A/B switch between the curve and the
+   curve as shaped. The native plays the sources on their own.
 3. **The rig corrections**, offered on the graph as their own strip.
 4. **The dB scale that can be dragged**, and the curve that follows the pointer
    with its reading.

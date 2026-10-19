@@ -36,6 +36,10 @@ pub struct Constraints {
     /// places its filters on these bands rather than wherever the curve
     /// deviates.
     pub graphic_bands: Vec<f64>,
+    /// Whether the fit may use separate filter banks for the left and the
+    /// right channel. When it may, the shared filters are applied to both
+    /// channels and each channel may carry filters of its own.
+    pub two_channel: bool,
 }
 
 impl Default for Constraints {
@@ -59,6 +63,7 @@ impl Constraints {
             q_min: 0.0,
             q_max: 0.0,
             graphic_bands: Vec::new(),
+            two_channel: false,
         }
     }
 
@@ -137,6 +142,8 @@ pub struct Preset {
     pub q_min: f64,
     pub q_max: f64,
     pub graphic_bands: &'static [f64],
+    /// Whether the preset allows separate filter banks per channel.
+    pub two_channel: bool,
 }
 
 impl Preset {
@@ -154,6 +161,7 @@ impl Preset {
             q_min: self.q_min,
             q_max: self.q_max,
             graphic_bands: self.graphic_bands.to_vec(),
+            two_channel: self.two_channel,
         }
     }
 }
@@ -174,6 +182,7 @@ pub const PRESETS: [Preset; 3] = [
         q_min: 0.1,
         q_max: 10.0,
         graphic_bands: &[],
+        two_channel: false,
     },
     Preset {
         id: "auto-eq",
@@ -189,6 +198,7 @@ pub const PRESETS: [Preset; 3] = [
         q_min: 0.1,
         q_max: 10.0,
         graphic_bands: &[],
+        two_channel: false,
     },
     Preset {
         id: "generic-10-band",
@@ -206,6 +216,7 @@ pub const PRESETS: [Preset; 3] = [
         graphic_bands: &[
             31.0, 62.0, 125.0, 250.0, 500.0, 1000.0, 2000.0, 4000.0, 8000.0, 16000.0,
         ],
+        two_channel: false,
     },
 ];
 

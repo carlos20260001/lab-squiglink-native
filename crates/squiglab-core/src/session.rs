@@ -35,14 +35,55 @@ pub struct DisplayCurve {
     pub target: bool,
 }
 
-/// One row of a curve's equalizer: a filter and whether the row is switched
-/// on. The reference tool keeps a disabled row in place rather than deleting
-/// it, so a filter can be toggled back on without re-entering it.
+/// Which filter bank a row belongs to.
+///
+/// A fit may use separate banks for the left and the right channel: the
+/// shared bank is applied to both, and each side may carry filters of its
+/// own. The reference calls this "two channel support".
+#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum EqBank {
+    /// Applied to every channel.
+    #[default]
+    Both,
+    /// Applied to the left channel only.
+    Left,
+    /// Applied to the right channel only.
+    Right,
+}
+
+impl EqBank {
+    /// The name the reference gives the bank.
+    pub fn label(self) -> &'static str {
+        match self {
+            EqBank::Both => "L + R",
+            EqBank::Left => "L",
+            EqBank::Right => "R",
+        }
+    }
+
+    /// The bank the next and previous bank steps move to.
+    pub fn next(self) -> Self {
+        match self {
+            EqBank::Left => EqBank::Both,
+            EqBank::Both => EqBank::Right,
+            EqBank::Right => EqBank::Left,
+        }
+    }
+}
+
+/// One row of a curve's equalizer: a filter, whether the row is switched on,
+/// and which bank it belongs to. The reference tool keeps a disabled row in
+/// place rather than deleting it, so a filter can be toggled back on without
+/// re-entering it.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct EqRow {
     #[serde(flatten)]
     pub filter: equalizer::Filter,
     pub enabled: bool,
+    /// The bank this row belongs to.
+    #[serde(default)]
+    pub bank: EqBank,
 }
 #[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq, Serialize)]
 pub enum ChannelMode {
@@ -260,6 +301,9 @@ pub struct Session {
     pub eq_phone: Option<usize>,
     /// The target AutoEQ fits against.
     pub eq_target: Option<usize>,
+    /// The filter bank the equalizer panel is editing: the shared one, or
+    /// the left or the right channel's own.
+    pub eq_bank: EqBank,
     /// How many filters AutoEQ may produce.
     pub eq_max_filters: usize,
     /// The frequency band AutoEQ fits within.
@@ -324,6 +368,7 @@ impl Default for Session {
             eq_filters: BTreeMap::new(),
             eq_phone: None,
             eq_target: None,
+            eq_bank: EqBank::Both,
             eq_max_filters: DEFAULT_EQ_MAX_FILTERS,
             eq_range: crate::equalizer::AUTO_EQ_RANGE,
             eq_constraints: crate::constraints::Constraints::none(),
@@ -574,9 +619,17 @@ impl Session {
                         let parent_label =
                             curve_label(&group.name, &variant.name, channel_name.clone());
                         if let Some(rows) = eq_rows {
+                            // The shared filters shape every channel, and a
+                            // channel's own filters shape that channel alone.
+                            let side = match channel_name.as_str() {
+                                "L" => EqBank::Left,
+                                "R" => EqBank::Right,
+                                _ => EqBank::Both,
+                            };
                             let enabled: Vec<equalizer::Filter> = rows
                                 .iter()
                                 .filter(|row| row.enabled)
+                                .filter(|row| row.bank == EqBank::Both || row.bank == side)
                                 .map(|row| row.filter)
                                 .collect();
                             let response: Vec<equalizer::ResponsePoint> = points
@@ -698,12 +751,16 @@ impl Session {
             .collect()
     }
 
+    /// The filters that shape a curve: the shared ones, and the ones of the
+    /// bank being edited.
     pub fn enabled_filters(&self, index: usize) -> Vec<equalizer::Filter> {
+        let bank = self.eq_bank;
         self.eq_filters
             .get(&index)
             .map(|rows| {
                 rows.iter()
                     .filter(|row| row.enabled)
+                    .filter(|row| row.bank == EqBank::Both || row.bank == bank)
                     .map(|row| row.filter)
                     .collect()
             })
@@ -784,6 +841,7 @@ impl Session {
             fitted.len(),
             self.groups[target].name
         );
+        let bank = self.eq_bank;
         self.eq_filters.insert(
             phone,
             fitted
@@ -791,6 +849,7 @@ impl Session {
                 .map(|filter| EqRow {
                     filter,
                     enabled: true,
+                    bank,
                 })
                 .collect(),
         );
@@ -1079,6 +1138,7 @@ impl Session {
                 .map(|(filter, &enabled)| EqRow {
                     filter: *filter,
                     enabled,
+                    bank: EqBank::Both,
                 })
                 .collect(),
         );
@@ -1552,4 +1612,72 @@ pub fn build_groups(
             .then(left.name.cmp(&right.name))
     });
     groups
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_banks_keep_their_own_filters() {
+        let mut session = Session::default();
+        let shared = EqRow {
+            filter: crate::equalizer::Filter::new(
+                crate::equalizer::FilterType::Peaking,
+                1_000.0,
+                1.0,
+                -3.0,
+            ),
+            enabled: true,
+            bank: EqBank::Both,
+        };
+        let left = EqRow {
+            filter: crate::equalizer::Filter::new(
+                crate::equalizer::FilterType::Peaking,
+                2_000.0,
+                1.0,
+                -2.0,
+            ),
+            enabled: true,
+            bank: EqBank::Left,
+        };
+        let right = EqRow {
+            filter: crate::equalizer::Filter::new(
+                crate::equalizer::FilterType::Peaking,
+                3_000.0,
+                1.0,
+                -1.0,
+            ),
+            enabled: true,
+            bank: EqBank::Right,
+        };
+        session
+            .eq_filters
+            .insert(0, vec![shared.clone(), left.clone(), right.clone()]);
+
+        // The shared filters are always in play; the bank being edited adds
+        // its own.
+        session.eq_bank = EqBank::Both;
+        let filters = session.enabled_filters(0);
+        assert_eq!(filters.len(), 1, "only the shared filter");
+        assert_eq!(filters[0].freq, 1_000.0);
+
+        session.eq_bank = EqBank::Left;
+        let filters = session.enabled_filters(0);
+        assert_eq!(filters.len(), 2, "the shared filter and the left one");
+        assert!(filters.iter().any(|filter| filter.freq == 2_000.0));
+
+        session.eq_bank = EqBank::Right;
+        let filters = session.enabled_filters(0);
+        assert_eq!(filters.len(), 2, "the shared filter and the right one");
+        assert!(filters.iter().any(|filter| filter.freq == 3_000.0));
+    }
+
+    #[test]
+    fn the_banks_turn_over() {
+        assert_eq!(EqBank::Left.next(), EqBank::Both);
+        assert_eq!(EqBank::Both.next(), EqBank::Right);
+        assert_eq!(EqBank::Right.next(), EqBank::Left);
+        assert_eq!(EqBank::default(), EqBank::Both);
+    }
 }

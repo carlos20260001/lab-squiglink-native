@@ -155,6 +155,34 @@ pub fn show(ui: &mut Ui, app: &mut App) {
     });
     ui.add_space(metrics::GAP);
 
+    // --- the filter banks ---
+    // Separate banks for the left and the right channel: the shared filters
+    // shape every channel, and each side may carry filters of its own.
+    if app.session.eq_constraints.two_channel {
+        ui.horizontal(|ui| {
+            ui.label(
+                RichText::new("Bank")
+                    .font(TypeStep::Label.font())
+                    .color(palette.text_tertiary),
+            );
+            for bank in [
+                squiglab_core::session::EqBank::Left,
+                squiglab_core::session::EqBank::Both,
+                squiglab_core::session::EqBank::Right,
+            ] {
+                let selected = app.session.eq_bank == bank;
+                if ui
+                    .selectable_label(selected, bank.label())
+                    .on_hover_text("Which channel's filters the table shows")
+                    .clicked()
+                {
+                    app.session.eq_bank = bank;
+                }
+            }
+        });
+        ui.add_space(metrics::GAP);
+    }
+
     // --- the band table ---
     // The rows are laid out by hand rather than as a grid: the column is
     // narrow, and a grid would give each column the room its heading needs
@@ -165,6 +193,9 @@ pub fn show(ui: &mut Ui, app: &mut App) {
         .get(&phone)
         .cloned()
         .unwrap_or_default();
+    // The table edits one bank at a time: the shared one, or a channel's own.
+    let bank = app.session.eq_bank;
+    rows.retain(|row| row.bank == bank);
     let mut changed = false;
 
     ui.horizontal(|ui| {
@@ -234,9 +265,7 @@ pub fn show(ui: &mut Ui, app: &mut App) {
             .color(palette.text_tertiary),
     );
     if changed {
-        app.session.eq_filters.insert(phone, rows);
-        app.history.record(snapshot(app));
-        app.session.rebuild_display_curves();
+        write_bank(app, phone, bank, rows);
     }
 
     // --- the row controls ---
@@ -247,14 +276,16 @@ pub fn show(ui: &mut Ui, app: &mut App) {
                 .eq_filters
                 .get(&phone)
                 .cloned()
-                .unwrap_or_default();
+                .unwrap_or_default()
+                .into_iter()
+                .filter(|row| row.bank == bank)
+                .collect::<Vec<_>>();
             rows.push(EqRow {
                 filter: Filter::new(FilterType::Peaking, 1000.0, 1.0, 0.0),
                 enabled: true,
+                bank,
             });
-            app.session.eq_filters.insert(phone, rows);
-            app.history.record(snapshot(app));
-            app.session.rebuild_display_curves();
+            write_bank(app, phone, bank, rows);
         }
         if ui
             .button("−")
@@ -262,10 +293,9 @@ pub fn show(ui: &mut Ui, app: &mut App) {
             .clicked()
         {
             if let Some(mut rows) = app.session.eq_filters.get(&phone).cloned() {
+                rows.retain(|row| row.bank == bank);
                 rows.pop();
-                app.session.eq_filters.insert(phone, rows);
-                app.history.record(snapshot(app));
-                app.session.rebuild_display_curves();
+                write_bank(app, phone, bank, rows);
             }
         }
         if ui
@@ -274,10 +304,9 @@ pub fn show(ui: &mut Ui, app: &mut App) {
             .clicked()
         {
             if let Some(mut rows) = app.session.eq_filters.get(&phone).cloned() {
+                rows.retain(|row| row.bank == bank);
                 rows.sort_by(|left, right| left.filter.freq.total_cmp(&right.filter.freq));
-                app.session.eq_filters.insert(phone, rows);
-                app.history.record(snapshot(app));
-                app.session.rebuild_display_curves();
+                write_bank(app, phone, bank, rows);
             }
         }
     });
@@ -438,6 +467,16 @@ fn constraints(ui: &mut Ui, app: &mut App) {
         }
     });
     ui.horizontal(|ui| {
+        let mut two_channel = constraints.two_channel;
+        if ui
+            .checkbox(&mut two_channel, "Separate left and right filter banks")
+            .on_hover_text("Let each channel carry filters of its own")
+            .changed()
+        {
+            constraints.two_channel = two_channel;
+        }
+    });
+    ui.horizontal(|ui| {
         ui.label("Q");
         let mut low = constraints.q_min;
         let mut high = constraints.q_max;
@@ -538,6 +577,22 @@ pub fn show_summary(ui: &mut Ui, app: &mut App) {
     if ui.button("Open the equalizer").clicked() {
         app.tab = crate::app::Tab::Equalizer;
     }
+}
+
+/// Put a bank's rows back into a curve's whole set, leaving the other banks
+/// as they were.
+fn write_bank(app: &mut App, phone: usize, bank: squiglab_core::session::EqBank, rows: Vec<EqRow>) {
+    let mut all = app
+        .session
+        .eq_filters
+        .get(&phone)
+        .cloned()
+        .unwrap_or_default();
+    all.retain(|row| row.bank != bank);
+    all.extend(rows);
+    app.session.eq_filters.insert(phone, all);
+    app.history.record(snapshot(app));
+    app.session.rebuild_display_curves();
 }
 
 /// The state the history keeps.
