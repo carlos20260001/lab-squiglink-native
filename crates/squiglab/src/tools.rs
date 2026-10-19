@@ -220,14 +220,14 @@ fn actions(ui: &mut Ui, app: &mut App) {
         }
     }
     if ui
-        .button("PNG")
+        .button("Screenshot")
         .on_hover_text("Save a picture of the window")
         .clicked()
     {
         app.screenshot_requested = true;
     }
     if ui
-        .button("screenshot")
+        .button("SVG")
         .on_hover_text("Save the graph as a vector picture")
         .clicked()
     {
@@ -235,16 +235,6 @@ fn actions(ui: &mut Ui, app: &mut App) {
         match save("graph.svg", &svg) {
             Ok(path) => app.say(format!("The graph was saved to {}", path.display())),
             Err(problem) => app.say(format!("The graph was not saved: {problem}")),
-        }
-    }
-    if ui
-        .button("Share")
-        .on_hover_text("Open a window with this view")
-        .clicked()
-    {
-        match squiglab_core::config::encode_share_uri(&app.session.preferences()) {
-            Ok(uri) => app.say(format!("Share this link: {uri}")),
-            Err(error) => app.say(format!("The link could not be made: {error}")),
         }
     }
 }
