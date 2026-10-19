@@ -25,114 +25,119 @@ pub fn show(ui: &mut Ui, app: &mut App) {
 fn targets(ui: &mut Ui, app: &mut App) {
     let palette = theme::current_palette();
 
-    // The strip lists every target the library knows, grouped as the
-    // reference groups them, and the ones on the graph are picked out. The
-    // reference's list comes from its own configuration; here the groups are
-    // the ones the core builds from the measurement files.
-    let mut first = true;
-    let heading = |ui: &mut Ui, label: &str, first: &mut bool| {
-        if !*first {
-            ui.label(
-                RichText::new("|")
-                    .font(TypeStep::Label.font())
-                    .color(palette.text_tertiary),
-            );
-        }
-        *first = false;
-        ui.label(
-            RichText::new(format!("{label}:"))
-                .font(TypeStep::Label.font())
-                .color(palette.text_tertiary),
-        );
-    };
-
-    // The rig corrections are a group of their own, marked Δ, as the
-    // reference marks them.
-    if !app.session.delta_targets.is_empty() {
-        ui.horizontal_wrapped(|ui| {
-            heading(ui, "Δ", &mut first);
-            for index in 0..app.session.delta_targets.len() {
-                let name = app.session.delta_targets[index].name.clone();
-                let on = app.session.active_deltas.contains(&index);
-                let response = ui
-                    .selectable_label(
-                        on,
-                        RichText::new(name.clone())
+    // The strip is one line, as the reference's is: the categories follow one
+    // another, separated, and the line scrolls sideways when there are more
+    // targets than the width holds. The ones on the graph are picked out.
+    egui::ScrollArea::horizontal()
+        .id_salt("target_strip")
+        .auto_shrink([false, false])
+        .max_height(30.0)
+        .show(ui, |ui| {
+            // One row: the categories follow one another, and the line
+            // scrolls sideways when there are more targets than it holds.
+            ui.horizontal(|ui| {
+                let mut first = true;
+                let mut heading = |ui: &mut Ui, label: &str, first: &mut bool| {
+                    if !*first {
+                        ui.label(
+                            RichText::new("|")
+                                .font(TypeStep::Label.font())
+                                .color(palette.text_tertiary),
+                        );
+                    }
+                    *first = false;
+                    ui.label(
+                        RichText::new(format!("{label}:"))
                             .font(TypeStep::Label.font())
-                            .color(if on {
-                                palette.on_accent
+                            .color(palette.text_tertiary),
+                    );
+                };
+
+                // The rig corrections are a group of their own, marked Δ, as the
+                // reference marks them.
+                if !app.session.delta_targets.is_empty() {
+                    heading(ui, "Δ", &mut first);
+                    for index in 0..app.session.delta_targets.len() {
+                        let name = app.session.delta_targets[index].name.clone();
+                        let on = app.session.active_deltas.contains(&index);
+                        let response = ui
+                            .selectable_label(
+                                on,
+                                RichText::new(name.clone())
+                                    .font(TypeStep::Label.font())
+                                    .color(if on {
+                                        palette.on_accent
+                                    } else {
+                                        palette.text_secondary
+                                    }),
+                            )
+                            .on_hover_text(format!(
+                                "The correction for the {} rig{}",
+                                app.session.delta_targets[index].clone_rig,
+                                match &app.session.delta_targets[index].note {
+                                    Some(note) => format!(": {note}"),
+                                    None => String::new(),
+                                }
+                            ));
+                        if response.clicked() {
+                            if on {
+                                app.session.active_deltas.remove(&index);
                             } else {
-                                palette.text_secondary
-                            }),
-                    )
-                    .on_hover_text(format!(
-                        "The correction for the {} rig{}",
-                        app.session.delta_targets[index].clone_rig,
-                        match &app.session.delta_targets[index].note {
-                            Some(note) => format!(": {note}"),
-                            None => String::new(),
+                                app.session.active_deltas.insert(index);
+                            }
+                            app.session.rebuild_display_curves();
                         }
-                    ));
-                if response.clicked() {
-                    if on {
-                        app.session.active_deltas.remove(&index);
-                    } else {
-                        app.session.active_deltas.insert(index);
                     }
-                    app.session.rebuild_display_curves();
                 }
-            }
-        });
-    }
 
-    // The categories keep their own order, so the strip reads the same way
-    // every time.
-    let order = [
-        "Neutral targets",
-        "Reviewer targets",
-        "Preference targets",
-        "Other targets",
-    ];
-    for category in order {
-        let targets: Vec<usize> = app
-            .session
-            .groups
-            .iter()
-            .enumerate()
-            .filter(|(_, group)| group.target && group.brand == category)
-            .map(|(index, _)| index)
-            .collect();
-        if targets.is_empty() {
-            continue;
-        }
-        ui.horizontal_wrapped(|ui| {
-            heading(ui, category, &mut first);
-            for index in targets {
-                let name = app.session.groups[index].name.clone();
-                let on = app.session.active_targets.contains(&index);
-                let response = ui
-                    .selectable_label(
-                        on,
-                        RichText::new(name.clone())
-                            .font(TypeStep::Label.font())
-                            .color(if on {
-                                palette.on_accent
-                            } else {
-                                palette.text_secondary
-                            }),
-                    )
-                    .on_hover_text("Show this target on the graph");
-                if response.clicked() {
-                    if on {
-                        app.session.active_targets.remove(&index);
-                    } else {
-                        app.session.active_targets.insert(index);
+                // The categories keep their own order, so the strip reads the same
+                // way every time.
+                let order = [
+                    "Neutral targets",
+                    "Reviewer targets",
+                    "Preference targets",
+                    "Other targets",
+                ];
+                for category in order {
+                    let targets: Vec<usize> = app
+                        .session
+                        .groups
+                        .iter()
+                        .enumerate()
+                        .filter(|(_, group)| group.target && group.brand == category)
+                        .map(|(index, _)| index)
+                        .collect();
+                    if targets.is_empty() {
+                        continue;
                     }
-                    app.session.rebuild_display_curves();
+                    heading(ui, category, &mut first);
+                    for index in targets {
+                        let name = app.session.groups[index].name.clone();
+                        let on = app.session.active_targets.contains(&index);
+                        let response = ui
+                            .selectable_label(
+                                on,
+                                RichText::new(name.clone())
+                                    .font(TypeStep::Label.font())
+                                    .color(if on {
+                                        palette.on_accent
+                                    } else {
+                                        palette.text_secondary
+                                    }),
+                            )
+                            .on_hover_text("Show this target on the graph");
+                        if response.clicked() {
+                            if on {
+                                app.session.active_targets.remove(&index);
+                            } else {
+                                app.session.active_targets.insert(index);
+                            }
+                            app.session.rebuild_display_curves();
+                        }
+                    }
                 }
-            }
+            });
         });
-    }
 }
 
 /// The rows of the curves that are on the graph.
