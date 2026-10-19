@@ -175,7 +175,7 @@ pub fn show(ui: &mut Ui, app: &mut App) {
                 );
             }
             ui.end_row();
-            for (row_index, row) in rows.iter_mut().enumerate() {
+            for row in rows.iter_mut() {
                 let mut enabled = row.enabled;
                 if ui.checkbox(&mut enabled, "").changed() {
                     row.enabled = enabled;
