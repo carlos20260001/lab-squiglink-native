@@ -15,7 +15,7 @@ branch of the site repository, and the native is written against it.
 | Reference | Native |
 |---|---|
 | Header: wordmark, a review dropdown, the site navigation, a `+Create` link | Header: the mark, the wordmark, the number of curves, the theme picker. A window has no site to navigate. |
-| Left column with three tabs: **Brands / Models / Equalizer** | The same three tabs ✓ — opening on the models, with the brands down a narrow column beside them, and the measurements on the graph as chips at the head of the list ✓ |
+| Left column with three tabs: **Brands / Models / Equalizer**, and the column's contents sixteen points in from its edge | The same three tabs ✓, joined side by side as the reference joins them, with the rule under them ✓ — opening on the models, with the brands down a narrow column beside them, and the measurements on the graph as chips at the head of the list ✓. The equalizer's panel scrolls under the tabs, as the reference's does ✓ |
 | Graph toolbar: Copy URL, Screenshot, `NORMALIZE: [dB 60] [Hz 500]`, `SMOOTH: 5`, `ZOOM: Bass Mids Treble`, a help button | The same controls, in a row that scrolls sideways when it overflows ✓ — but no help button ✗ |
 | Graph: the dB scale and its drag handle, the frequency axis, the band names, the target label, the curve labels, the watermark | The same ✓ — the scale's mark moves the range, the two circles change how far it reaches, and a double-click puts it back ✓ |
 | Under the graph: the **DELTA** chips, the rig corrections, `REFERENCE TARGETS` / `LEGACY TARGETS` | The target chips, grouped as the reference groups them, with the rig corrections in a group of their own marked Δ ✓, and the active curves below them ✓ |
@@ -25,10 +25,10 @@ branch of the site repository, and the native is written against it.
 
 | Reference | Native |
 |---|---|
-| `Parametric Equalizer`, a help button, `Reset`, a settings gear | `Parametric Equalizer`, `Reset` ✓ — no help button ✗. The reference's `Reset` sets the bands' values back to flat and leaves the rows and the constraints alone; the native's does the same ✓. The reference's gear opens the constraints; the native's heading does ✓ |
+| `Parametric Equalizer`, a help button, `Reset`, a settings gear | `Parametric Equalizer`, `Reset` and the gear, the arrow and the cog being the reference's own marks ✓ — no help button ✗. The reference's `Reset` sets the bands' values back to flat and leaves the rows and the constraints alone; the native's does the same ✓. The gear opens the constraints, as the reference's does ✓ |
 | The model dropdown, the target dropdown, `Auto EQ` | The same ✓ |
-| The band table: `Type / Frequency / Gain / Q` | The same ✓ |
-| `+` `−` `Sort`, `Import` `Export`, `Export Graphic EQ (Wavelet)` | The same ✓ — the import takes a path, as the upload's does ✓. The reference's `−` removes the last band that still says something and never the last row, and `+` stops at twenty bands; the native does both ✓ |
+| The band table: `Type / Frequency / Gain / Q` | The same ✓ — ten bands, empty ones included, as the reference shows them ✓; the kind of filter written in plain words with a caret ✓, the unit inside the field ✓, the figure in the accent ✓, and the fields short, as the reference's are ✓ |
+| `+` `−` `Sort`, `Import` `Export`, `Export Graphic EQ (Wavelet)` | The same ✓ — the import takes a path, as the upload's does ✓. The reference's `−` removes the last band that still says something and never the last row, and `+` stops at twenty bands; the native does both ✓. The Wavelet export sits on a row of its own, in plain words, as the reference writes it ✓ |
 | **The constraints panel** — see below | **The same** ✓ |
 
 ## The constraints panel
@@ -51,10 +51,10 @@ reference's own controls and their help text:
 
 | Reference | Native |
 |---|---|
-| `Compare A / B`, a settings gear | The same ✓ — with the switch on (B) the source is played through the equalizer, and with it off (A) it is played on its own. The native's switch is a labelled choice rather than the reference's A/B slider, and there is no gear ✗ |
-| **Music** — a list of tracks, `+ Add Music`, `Search Apple` | Absent (the music is the reference's own) |
-| **Pink Noise** — a play button | ✓ (a source) |
-| **Tone Generator** — a play button, a slider, the frequency, `+ Add Filter` | ✓ (a frequency and a volume) |
+| `Compare A / B`, a settings gear | The same ✓ — the switch is the reference's own: a track with `A` and `B` in it, and the chosen one on a filled thumb. With B the source is played through the equalizer, and with A it is played on its own ✓. There is no gear ✗ |
+| **Music** — a list of tracks, `+ Add Music`, `Search Apple` | ✓ — the card is the reference's, and the two ways in are plain words, as the reference writes them ✓. The music the reference lists is its own; the native plays a file from this computer and searches the Apple Music catalogue for a preview |
+| **Pink Noise** — a play button | ✓ — a pill with the reference's triangle in it, and no lettering, as the reference draws it ✓ |
+| **Tone Generator** — a play button, a slider, the frequency, `+ Add Filter` | ✓ — the slider is a thin track with a round thumb, as the reference's is ✓. There is no `+ Add Filter`: the native sweeps a band instead ✗ |
 | **Range** — `Reset`, and the frequency span the slider covers (`20 Hz`–`20000 Hz`) | **The same** ✓ |
 
 ## Below the sound tools
@@ -77,22 +77,24 @@ no such button. **Small: it is a window with the instructions in it.**
 
 ### 2. The music list
 
-The reference plays music files and searches the Apple Music catalogue. The
-catalogue is the reference's own and does not travel; a local file list
-would. **Not worth doing: the tone generator and the pink noise already
-cover hearing the equalizer.**
+The reference lists the music it plays. The native plays a file from this
+computer, or a preview from the Apple Music catalogue, and does not keep a
+list of them. **Not worth doing: the tone generator and the pink noise
+already cover hearing the equalizer.**
 
-### 3. The settings gears
+### 3. The sound tools' gear
 
-The reference hides the sound tools' settings and the equalizer's behind a
-gear. The native shows the volume and the reset in the open. **Not worth
-doing: a window has the room, and a gear hides the controls it holds.**
+The reference hides the sound tools' settings behind a gear. The native shows
+the volume in the open, and the equalizer's constraints behind the equalizer's
+own cog ✓. **Not worth doing: a window has the room, and a gear hides the
+controls it holds.**
 
 ## What the native has that the reference does not
 
 - The measurements and the targets in one list, rather than the reference's
   separate list and strip.
-- Pink and white noise, a volume control, and a second sound slot.
+- Pink noise, a volume control, and a music player that reads a file from
+  this computer or a preview from the Apple Music catalogue.
 - A graph that keeps the reference's proportions, and a tools row that scrolls
   rather than clipping.
 - The rig corrections as their own data, with the `data_deltas/` folder
