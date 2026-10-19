@@ -19,6 +19,10 @@ pub fn show(ui: &mut Ui, app: &mut App) {
         .max_height(40.0)
         .show(ui, |ui| {
             ui.horizontal(|ui| {
+                // The reference puts the actions first, then the reading
+                // controls, then the view toggles.
+                actions(ui, app);
+                rule(ui);
                 zoom(ui, app);
                 rule(ui);
                 normalize(ui, app);
@@ -26,8 +30,6 @@ pub fn show(ui: &mut Ui, app: &mut App) {
                 smooth(ui, app);
                 rule(ui);
                 toggles(ui, app);
-                rule(ui);
-                actions(ui, app);
             });
         });
     ui.add_space(metrics::GAP);
@@ -233,9 +235,11 @@ fn save(name: &str, contents: &str) -> anyhow::Result<std::path::PathBuf> {
 
 /// Write a picture of the window into the user's pictures directory, or their
 /// home directory if the operating system does not have one.
-pub fn save_picture(name: &str, image: &egui::ColorImage) -> Option<std::path::PathBuf> {
-    let directory = dirs::picture_dir().or_else(dirs::home_dir)?;
-    std::fs::create_dir_all(&directory).ok()?;
+pub fn save_picture(name: &str, image: &egui::ColorImage) -> anyhow::Result<std::path::PathBuf> {
+    let directory = dirs::picture_dir()
+        .or_else(dirs::home_dir)
+        .ok_or_else(|| anyhow::anyhow!("the operating system did not provide a directory"))?;
+    std::fs::create_dir_all(&directory)?;
     let path = directory.join(name);
     // The toolkit's pixels are premultiplied; a picture on disk is not.
     let pixels: Vec<u8> = image
@@ -255,7 +259,8 @@ pub fn save_picture(name: &str, image: &egui::ColorImage) -> Option<std::path::P
             }
         })
         .collect();
-    let picture = image::RgbaImage::from_raw(image.width() as u32, image.height() as u32, pixels)?;
-    picture.save(&path).ok()?;
-    Some(path)
+    let picture = image::RgbaImage::from_raw(image.width() as u32, image.height() as u32, pixels)
+        .ok_or_else(|| anyhow::anyhow!("the picture has no pixels"))?;
+    picture.save(&path)?;
+    Ok(path)
 }

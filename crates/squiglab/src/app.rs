@@ -41,8 +41,6 @@ pub struct App {
     pub search: String,
     /// The message shown at the foot of the window.
     pub status: Option<String>,
-    /// The message shown in the window, over the graph.
-    pub notice: Option<String>,
     /// Whether the graph's curves carry labels.
     pub show_labels: bool,
     /// Whether the pointer reads the curve under it.
@@ -125,7 +123,6 @@ impl App {
             tab: Tab::Brands,
             search: String::new(),
             status,
-            notice: None,
             show_labels: true,
             inspect: false,
             tone_band: (20.0, 20_000.0),
@@ -185,32 +182,24 @@ impl App {
 
         if self.screenshot_requested {
             self.screenshot_requested = false;
-            // The picture is taken of the next frame, and the closure that
-            // writes it away is carried along with the request.
-            let callback: Box<dyn Fn(&egui::ColorImage) + Send + Sync> = Box::new(|image| {
-                if let Some(path) = crate::tools::save_picture("window.png", image) {
-                    eprintln!("The picture was saved to {}", path.display());
-                }
-            });
-            ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(egui::UserData::new(
-                callback,
-            )));
+            ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(egui::UserData::default()));
         }
-
-        if let Some(notice) = &self.notice {
-            let area = ctx.content_rect();
-            egui::Area::new(egui::Id::new("notice"))
-                .fixed_pos(area.center() - egui::vec2(120.0, 20.0))
-                .order(egui::Order::Foreground)
-                .show(&ctx, |ui| {
-                    egui::Frame::popup(ui.style())
-                        .fill(theme::current_palette().field)
-                        .corner_radius(egui::CornerRadius::same(metrics::RADIUS as u8))
-                        .inner_margin(egui::Margin::same(12))
-                        .show(ui, |ui| {
-                            ui.label(notice);
-                        });
-                });
+        // The picture comes back as an event, a frame later.
+        let mut picture: Option<egui::ColorImage> = None;
+        ctx.input(|input| {
+            for event in &input.raw.events {
+                if let egui::Event::Screenshot { image, .. } = event {
+                    picture = Some((**image).clone());
+                }
+            }
+        });
+        if let Some(image) = picture {
+            match crate::tools::save_picture("window.png", &image) {
+                Ok(path) => {
+                    self.status = Some(format!("The picture was saved to {}", path.display()))
+                }
+                Err(problem) => self.status = Some(format!("The picture was not saved: {problem}")),
+            }
         }
     }
 
