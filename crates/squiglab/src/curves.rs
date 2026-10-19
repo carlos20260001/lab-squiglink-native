@@ -18,7 +18,69 @@ pub fn show(ui: &mut Ui, app: &mut App) {
     targets(ui, app);
     ui.add_space(metrics::GAP);
     manager(ui, app);
+    ui.add_space(metrics::GAP);
+    databases(ui);
 }
+
+/// The other databases' graphs, as the reference lists them under the rows.
+///
+/// They are the reference's own links to other people's tools, so they are
+/// carried as links and not as data.
+fn databases(ui: &mut Ui) {
+    let palette = theme::current_palette();
+    egui::ScrollArea::horizontal()
+        .id_salt("databases")
+        .auto_shrink([false, false])
+        .max_height(40.0)
+        .show(ui, |ui| {
+            ui.horizontal(|ui| {
+                ui.label(
+                    RichText::new("IEM GRAPH DATABASES")
+                        .font(TypeStep::Label.font())
+                        .color(palette.text_tertiary),
+                );
+                for (name, url) in DATABASES {
+                    let response = ui
+                        .add(
+                            egui::Button::new(
+                                RichText::new(*name)
+                                    .font(egui::FontId::new(12.0, egui::FontFamily::Proportional))
+                                    .color(palette.accent_text),
+                            )
+                            .fill(palette.page)
+                            .stroke(egui::Stroke::new(1.0, palette.border))
+                            .corner_radius(egui::CornerRadius::same(6))
+                            .min_size(egui::vec2(0.0, 36.0)),
+                        )
+                        .on_hover_text(format!("Open {url} in the browser"));
+                    if response.clicked() {
+                        crate::links::open(url);
+                    }
+                }
+            });
+        });
+}
+
+/// The other graphs' tools, and where they are.
+const DATABASES: &[(&str, &str)] = &[
+    ("Audio Discourse", "https://iems.audiodiscourse.com/"),
+    ("Bad Guy", "https://hbb.squig.link/"),
+    ("Banbeucmas", "https://banbeu.com/graph/tool/"),
+    ("HypetheSonics", "https://www.hypethesonics.com/iemdbc/"),
+    (
+        "In-Ear Fidelity",
+        "https://crinacle.com/graphs/iems/graphtool/",
+    ),
+    ("Precogvision", "https://precog.squig.link/"),
+    ("Rikudou Goku", "https://rg.squig.link/"),
+    ("Super* Review", "https://squig.link/"),
+    ("Audio Discourse", "https://headphones.audiodiscourse.com/"),
+    (
+        "In-Ear Fidelity",
+        "https://crinacle.com/graphs/headphones/graph",
+    ),
+    ("Super* Review", "https://squig.link/hp.html"),
+];
 
 /// The chips that turn the targets on and off, grouped as the reference groups
 /// them.

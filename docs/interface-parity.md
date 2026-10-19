@@ -20,6 +20,7 @@ branch of the site repository, and the native is written against it.
 | Graph: the dB scale and its drag handle, the frequency axis, the band names, the target label, the curve labels, the watermark | The same ✓ — the scale's mark moves the range, the two circles change how far it reaches, and a double-click puts it back ✓ |
 | Under the graph: the **DELTA** chips, the rig corrections, `REFERENCE TARGETS` / `LEGACY TARGETS` | The target chips, grouped as the reference groups them, with the rig corrections in a group of their own marked Δ ✓, and the active curves below them ✓ |
 | Manager rows: the curve, `L ONLY / R ONLY`, a dB offset, and the row buttons | The same ✓ — the key graphic is the reference's own drawing, and the buttons carry the reference's marks |
+| **IEM GRAPH DATABASES** — the other graphs' tools, as links | The same ✓ — the same eleven links, and they open in the browser the user has ✓ |
 
 ## The equalizer panel
 
@@ -51,11 +52,11 @@ reference's own controls and their help text:
 
 | Reference | Native |
 |---|---|
-| `Compare A / B`, a settings gear | The same ✓ — the switch is the reference's own: a track with `A` and `B` in it, and the chosen one on a filled thumb. With B the source is played through the equalizer, and with A it is played on its own ✓. There is no gear ✗ |
+| `Compare A / B`, a settings gear | The same ✓ — the switch is the reference's own: a track with `A` and `B` in it, and the chosen one on a filled thumb. With B the source is played through the equalizer, and with A it is played on its own ✓. The gear is the reference's cog, and it opens the card the reference opens: the volume, with the speaker beside it and the share it is at on the right ✓ |
 | **Music** — a list of tracks, `+ Add Music`, `Search Apple` | ✓ — the card is the reference's, and the two ways in are plain words, as the reference writes them ✓. The music the reference lists is its own; the native plays a file from this computer and searches the Apple Music catalogue for a preview |
 | **Pink Noise** — a play button | ✓ — a pill with the reference's triangle in it, and no lettering, as the reference draws it ✓ |
-| **Tone Generator** — a play button, a slider, the frequency, `+ Add Filter` | ✓ — the slider is a thin track with a round thumb, as the reference's is ✓. There is no `+ Add Filter`: the native sweeps a band instead ✗ |
-| **Range** — `Reset`, and the frequency span the slider covers (`20 Hz`–`20000 Hz`) | **The same** ✓ |
+| **Tone Generator** — a play button, a slider, the frequency, `+ Add Filter` | The same ✓ — the slider is a thin track with a round thumb, on a log scale as the reference's is ✓, and `+ Add Filter` adds a band at the tone's frequency to the equalizer, as the reference's does ✓ |
+| **Range** — `Reset`, and the frequency span the slider covers (`20 Hz`–`20000 Hz`) | **The same** ✓ — the word and the arrow that bends back, as the reference writes them ✓ |
 
 ## Below the sound tools
 
@@ -70,31 +71,28 @@ reference's own controls and their help text:
 
 The targets, in the order they are worth doing.
 
-### 1. The help button
-
-The reference's equalizer has a `?` that opens its guidance. The native has
-no such button. **Small: it is a window with the instructions in it.**
-
-### 2. The music list
+### 1. The music list
 
 The reference lists the music it plays. The native plays a file from this
 computer, or a preview from the Apple Music catalogue, and does not keep a
 list of them. **Not worth doing: the tone generator and the pink noise
 already cover hearing the equalizer.**
 
-### 3. The sound tools' gear
+### 2. The reference's guidance
 
-The reference hides the sound tools' settings behind a gear. The native shows
-the volume in the open, and the equalizer's constraints behind the equalizer's
-own cog ✓. **Not worth doing: a window has the room, and a gear hides the
-controls it holds.**
+The reference keeps a `?` in its markup beside the normalising control and
+hides it in the stylesheet, so that the script can show the text on hover.
+The native shows the same text as a tooltip on the control itself ✓, which
+is the same guidance without the mark. **Nothing to do.**
 
 ## What the native has that the reference does not
 
 - The measurements and the targets in one list, rather than the reference's
   separate list and strip.
-- Pink noise, a volume control, and a music player that reads a file from
-  this computer or a preview from the Apple Music catalogue.
+- The links to the other graphs' tools open in the browser, where the
+  reference's own pages would have taken the reader.
+- A music player that reads a file from this computer or a preview from the
+  Apple Music catalogue, where the reference lists the music it holds.
 - A graph that keeps the reference's proportions, and a tools row that scrolls
   rather than clipping.
 - The rig corrections as their own data, with the `data_deltas/` folder

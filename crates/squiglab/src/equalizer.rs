@@ -720,6 +720,42 @@ fn write_bank(app: &mut App, phone: usize, bank: squiglab_core::session::EqBank,
     app.session.rebuild_display_curves();
 }
 
+/// Add a band to the curve that is being looked at.
+///
+/// The reference's tone generator adds a band at the frequency it is
+/// playing, so that a tone can be heard at the place a curve needs help.
+pub fn add_band(app: &mut App, freq: f64, gain: f64, q: f64) -> bool {
+    let Some(phone) = app.session.eq_phone else {
+        app.say("Choose a measurement to give it an equalizer.");
+        return false;
+    };
+    let bank = squiglab_core::session::EqBank::Both;
+    let mut rows = app
+        .session
+        .eq_filters
+        .get(&phone)
+        .cloned()
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|row| row.bank == bank)
+        .collect::<Vec<_>>();
+    if rows.len() >= squiglab_core::session::MAX_EQ_ROWS {
+        app.say(format!(
+            "There are already {} bands, which is the most there may be.",
+            squiglab_core::session::MAX_EQ_ROWS
+        ));
+        return false;
+    }
+    rows.push(EqRow {
+        filter: Filter::new(FilterType::Peaking, freq, q, gain),
+        enabled: true,
+        bank,
+    });
+    write_bank(app, phone, bank, rows);
+    crate::sound::push_chain(app);
+    true
+}
+
 /// The state the history keeps.
 fn snapshot(app: &App) -> Snapshot {
     Snapshot {

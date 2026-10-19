@@ -28,6 +28,8 @@ pub enum Icon {
     Settings,
     /// An arrow bending back: the equalizer is cleared.
     Reset,
+    /// A speaker: the volume.
+    Volume,
 }
 
 /// The size a mark is drawn at, in points.
@@ -86,6 +88,12 @@ fn paths_for(icon: Icon) -> Vec<&'static str> {
         ],
         // The arrow that bends back, from the stylesheet's mask.
         Icon::Reset => vec!["M9 14l-4-4l4-4", "M5 10h11a4 4 0 0 1 4 4v1"],
+        // The speaker, from the reference's own markup.
+        Icon::Volume => vec![
+            "M15 8a5 5 0 0 1 0 8",
+            "M17.7 5a9 9 0 0 1 0 14",
+            "M6 15h-2a1 1 0 0 1 -1 -1v-4a1 1 0 0 1 1 -1h2l3.5-4.5a.8 .8 0 0 1 1.5 .5v14a.8 .8 0 0 1 -1.5 .5l-3.5-4.5",
+        ],
         Icon::Baseline | Icon::Remove | Icon::Play => Vec::new(),
     }
 }

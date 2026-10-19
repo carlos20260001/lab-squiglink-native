@@ -24,6 +24,21 @@ pub fn show(ui: &mut Ui, app: &mut App) {
         // the word, the switch, and the gear.
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             ui.add_space(metrics::GAP);
+            let (rect, response) =
+                ui.allocate_exact_size(egui::vec2(20.0, 20.0), egui::Sense::click());
+            crate::icons::draw(
+                ui.painter(),
+                rect,
+                crate::icons::Icon::Settings,
+                palette.text_tertiary,
+            );
+            if response
+                .on_hover_text("The sound tools' settings")
+                .clicked()
+            {
+                app.sound_settings_open = !app.sound_settings_open;
+            }
+            ui.add_space(metrics::GAP);
             compare_switch(ui, app);
             ui.label(
                 RichText::new("Compare")
@@ -34,19 +49,11 @@ pub fn show(ui: &mut Ui, app: &mut App) {
     });
     ui.add_space(metrics::GAP);
 
-    // --- the volume ---
-    ui.horizontal(|ui| {
-        ui.label(
-            RichText::new("Volume")
-                .font(TypeStep::Label.font())
-                .color(palette.text_tertiary),
-        );
-        ui.add_sized(
-            [160.0, 24.0],
-            egui::Slider::new(&mut app.volume, 0.0..=1.0).show_value(false),
-        );
-    });
-    ui.add_space(metrics::GAP);
+    // --- the settings, behind the gear ---
+    if app.sound_settings_open {
+        settings_card(ui, app);
+        ui.add_space(metrics::GAP);
+    }
 
     // --- the music ---
     crate::music::show(ui, app);
@@ -73,7 +80,14 @@ pub fn show(ui: &mut Ui, app: &mut App) {
         let mut frequency = app.frequency;
         let slider_width = (ui.available_width() - 70.0).max(40.0);
         ui.horizontal(|ui| {
-            let (slider, moved) = frequency_slider(ui, slider_width, &mut frequency, app.tone_band);
+            let (slider, moved) = track_slider(
+                ui,
+                slider_width,
+                &mut frequency,
+                app.tone_band.0,
+                app.tone_band.1,
+                true,
+            );
             ui.label(
                 RichText::new(format!("{frequency:.0} Hz"))
                     .font(TypeStep::Label.font())
@@ -92,6 +106,20 @@ pub fn show(ui: &mut Ui, app: &mut App) {
                 }
             }
         });
+        // The reference's way of adding a band at the tone being played.
+        ui.add_space(metrics::GAP);
+        let width = ui.available_width();
+        if crate::music::text_button_in(ui, "+ Add Filter", Some(width))
+            .on_hover_text("Add a band at this frequency to the equalizer")
+            .clicked()
+        {
+            let frequency = f64::from(app.frequency);
+            if crate::equalizer::add_band(app, frequency, 0.1, 1.0) {
+                app.say(format!(
+                    "A band was added at {frequency:.0} Hz to the equalizer."
+                ));
+            }
+        }
     });
     ui.add_space(metrics::GAP);
 
@@ -201,12 +229,59 @@ fn compare_switch(ui: &mut Ui, app: &mut App) {
     }
 }
 
-/// The reference's slider: a thin track with a round thumb on it.
-fn frequency_slider(
+/// The card the gear opens: the volume, with the reference's speaker beside
+/// it and the share it is at on the right.
+fn settings_card(ui: &mut Ui, app: &mut App) {
+    let palette = theme::current_palette();
+    let width = ui.available_width();
+    egui::Frame::new()
+        .fill(palette.graph)
+        .corner_radius(egui::CornerRadius::same(10))
+        .stroke(egui::Stroke::new(1.0, palette.border))
+        .inner_margin(egui::Margin::symmetric(12, 10))
+        .show(ui, |ui| {
+            ui.set_width(width - 24.0);
+            ui.horizontal(|ui| {
+                let (rect, _) =
+                    ui.allocate_exact_size(egui::vec2(20.0, 20.0), egui::Sense::hover());
+                crate::icons::draw(
+                    ui.painter(),
+                    rect,
+                    crate::icons::Icon::Volume,
+                    palette.text_tertiary,
+                );
+                ui.add_space(metrics::GAP);
+                let mut volume = app.volume;
+                let slider_width = (ui.available_width() - 60.0).max(40.0);
+                let (slider, moved) = track_slider(ui, slider_width, &mut volume, 0.0, 1.0, false);
+                slider.on_hover_text("How loud the sources are played");
+                ui.label(
+                    RichText::new(format!("{:.0}%", volume * 100.0))
+                        .font(TypeStep::Label.font())
+                        .color(palette.text_tertiary),
+                );
+                if moved {
+                    app.volume = volume;
+                    if let Some(player) = &app.player {
+                        player.set_settings(Settings {
+                            source: app.source,
+                            volume: app.volume,
+                        });
+                    }
+                }
+            });
+        });
+}
+
+/// The reference's slider: a thin track with a round thumb on it. The
+/// frequency one is on a log scale, as the reference's is.
+fn track_slider(
     ui: &mut Ui,
     width: f32,
     value: &mut f32,
-    band: (f32, f32),
+    low: f32,
+    high: f32,
+    log: bool,
 ) -> (egui::Response, bool) {
     let palette = theme::current_palette();
     let height = 16.0;
@@ -221,10 +296,28 @@ fn frequency_slider(
         egui::Stroke::new(1.0, palette.border),
         egui::StrokeKind::Inside,
     );
-    let span = (band.1 - band.0).max(1.0);
-    let place = ((*value - band.0) / span).clamp(0.0, 1.0);
+    let low = f64::from(low.max(1.0));
+    let high = f64::from(high.max((low * 1.01) as f32));
+    let place = |value: f32| -> f32 {
+        if log {
+            (((f64::from(value.max(low as f32)).ln() - low.ln()) / (high.ln() - low.ln()))
+                .clamp(0.0, 1.0)) as f32
+        } else {
+            ((value - low as f32) / (high as f32 - low as f32).max(f32::EPSILON)).clamp(0.0, 1.0)
+        }
+    };
+    let at = |place: f32| -> f32 {
+        if log {
+            (low.ln() + f64::from(place) * (high.ln() - low.ln())).exp() as f32
+        } else {
+            (low as f32) + place * (high as f32 - low as f32)
+        }
+    };
     let thumb = egui::Rect::from_center_size(
-        egui::pos2(track.left() + place * track.width(), track.center().y),
+        egui::pos2(
+            track.left() + place(*value) * track.width(),
+            track.center().y,
+        ),
         egui::vec2(12.0, 12.0),
     );
     ui.painter()
@@ -232,7 +325,7 @@ fn frequency_slider(
     if response.dragged() || response.clicked() {
         if let Some(pointer) = response.interact_pointer_pos() {
             let place = ((pointer.x - track.left()) / track.width()).clamp(0.0, 1.0);
-            *value = band.0 + place * span;
+            *value = at(place).clamp(low as f32, high as f32);
             changed = true;
         }
     }

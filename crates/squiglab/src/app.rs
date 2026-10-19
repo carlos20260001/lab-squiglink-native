@@ -72,6 +72,8 @@ pub struct App {
     pub screenshot_requested: bool,
     /// Whether the constraints panel is open.
     pub constraints_open: bool,
+    /// Whether the sound tools' settings are open, behind their gear.
+    pub sound_settings_open: bool,
     /// The file the upload panel is waiting to load.
     pub upload_path: String,
     /// The file the equalizer's import is waiting to load.
@@ -151,6 +153,7 @@ impl App {
             pending_preview: None,
             screenshot_requested: false,
             constraints_open: false,
+            sound_settings_open: false,
             upload_path: String::new(),
             import_path: String::new(),
             upload_message: None,
