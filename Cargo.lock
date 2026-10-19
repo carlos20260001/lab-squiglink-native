@@ -3835,6 +3835,8 @@ dependencies = [
  "egui",
  "egui_extras",
  "image",
+ "jni 0.21.1",
+ "ndk-context",
  "objc2 0.5.3",
  "objc2-foundation 0.2.2",
  "objc2-ui-kit 0.2.2",

@@ -42,6 +42,25 @@ pub enum Pick {
     Music,
 }
 
+/// The kind of file the device is asked for, as the system's own tables
+/// name it.
+#[cfg(target_os = "android")]
+fn mime_for(extensions: &[&str]) -> &'static str {
+    if extensions
+        .iter()
+        .any(|one| matches!(*one, "mp3" | "flac" | "wav" | "ogg" | "m4a"))
+    {
+        "audio/%"
+    } else if extensions
+        .iter()
+        .any(|one| matches!(*one, "txt" | "csv" | "fr" | "cfg" | "apo"))
+    {
+        "text/%"
+    } else {
+        "%"
+    }
+}
+
 /// The application: the state, and the frame it draws.
 pub struct App {
     /// The program: what is loaded, what is selected, and what has changed.
@@ -85,6 +104,9 @@ pub struct App {
     pub constraints_open: bool,
     /// Whether the sound tools' settings are open, behind their gear.
     pub sound_settings_open: bool,
+    /// The files the device holds, when the phone is the one being asked.
+    #[cfg(target_os = "android")]
+    pub android_files: Option<(Pick, String, Vec<crate::filepick::android::File>)>,
     /// What the pointer is doing on the graph.
     pub graph_drag: Option<crate::graph::GraphDrag>,
     /// The file the user is being asked for, and the dialog that is asking.
@@ -172,6 +194,8 @@ impl App {
             screenshot_requested: false,
             constraints_open: false,
             sound_settings_open: false,
+            #[cfg(target_os = "android")]
+            android_files: None,
             graph_drag: None,
             picker: None,
             pending_upload: None,
@@ -215,6 +239,9 @@ impl App {
         crate::music::take_preview(self);
         // What the file picker has come back with.
         self.take_chosen_file();
+        // The phone's own list of files.
+        #[cfg(target_os = "android")]
+        self.show_android_files(&ctx);
 
         egui::CentralPanel::default()
             .frame(
@@ -330,7 +357,51 @@ impl App {
         if self.picker.is_some() {
             return;
         }
-        self.picker = Some((what, crate::filepick::Picker::start(title, extensions)));
+        #[cfg(target_os = "android")]
+        {
+            // The phone lists its own files: the system's picker hands its
+            // answer back through the activity, which the game's activity
+            // does not pass on.
+            let mime = mime_for(extensions);
+            let files = crate::filepick::android::list(&[mime]);
+            self.android_files = Some((what, title.to_owned(), files));
+        }
+        #[cfg(not(target_os = "android"))]
+        {
+            self.picker = Some((what, crate::filepick::Picker::start(title, extensions)));
+        }
+    }
+
+    /// The window that lists the device's files, where the phone is the one
+    /// being asked.
+    #[cfg(target_os = "android")]
+    fn show_android_files(&mut self, ctx: &egui::Context) {
+        let Some((what, title, files)) = self.android_files.clone() else {
+            return;
+        };
+        let mut chosen: Option<usize> = None;
+        egui::Window::new(title)
+            .collapsible(false)
+            .resizable(true)
+            .show(ctx, |ui| {
+                if files.is_empty() {
+                    ui.label("There are no files of that kind on this device.");
+                }
+                for (index, file) in files.iter().enumerate() {
+                    if ui
+                        .selectable_label(false, format!("{}  ({} bytes)", file.name, file.size))
+                        .clicked()
+                    {
+                        chosen = Some(index);
+                    }
+                }
+            });
+        if let Some(index) = chosen {
+            let file = files[index].clone();
+            self.android_files = None;
+            let chosen = crate::filepick::android::chosen(&file);
+            self.take_chosen(what, chosen);
+        }
     }
 
     /// Take the file the user chose, and do what it was wanted for.
@@ -343,6 +414,11 @@ impl App {
         };
         let what = *what;
         self.picker = None;
+        self.take_chosen(what, chosen);
+    }
+
+    /// Do what a file was wanted for.
+    fn take_chosen(&mut self, what: Pick, chosen: crate::filepick::Chosen) {
         match what {
             Pick::Upload => {
                 self.pending_upload = Some(chosen);

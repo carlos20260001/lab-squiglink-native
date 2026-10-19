@@ -14,6 +14,10 @@ use std::path::PathBuf;
 #[path = "filepick_ios.rs"]
 mod ios;
 
+#[cfg(target_os = "android")]
+#[path = "filepick_android.rs"]
+pub mod android;
+
 /// A file the user has chosen.
 #[derive(Clone, Debug)]
 pub struct Chosen {
@@ -219,12 +223,36 @@ mod imp {
     }
 }
 
+/// The phone lists its own files, so there is no dialog to open.
+#[cfg(target_os = "android")]
+mod imp {
+    use super::Chosen;
+
+    /// There is nothing to wait for: the program shows the list itself.
+    pub struct Inner;
+
+    impl Inner {
+        pub fn start(_title: &str, _extensions: &[&str]) -> Self {
+            Self
+        }
+
+        pub fn take(&mut self) -> Option<Chosen> {
+            None
+        }
+
+        pub fn waiting(&self) -> bool {
+            false
+        }
+    }
+}
+
 /// Anywhere else there is no dialog, and the path is typed as it always was.
 #[cfg(not(any(
     target_os = "linux",
     target_os = "macos",
     target_os = "windows",
     target_os = "ios",
+    target_os = "linux",
     target_arch = "wasm32"
 )))]
 mod imp {

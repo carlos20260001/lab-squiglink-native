@@ -69,9 +69,19 @@ driven by `xdotool` — and the two were looked at side by side.
 | The volume | Behind a cog, in a card with a speaker | The same | ✓ |
 | Music | A file from the computer, or a search of the Apple Music catalogue | The same, and the catalogue is searched in the background | ✓ |
 | Upload | A file chosen with the system's dialog | The same, and the path can still be typed where there is no dialog | ✓ |
+| Choosing a file | The browser's own file input | The desktop's own dialog, the browser's file input, the phone's document picker, and on the other phone the system's own file table. Where there is a filesystem the file is named by its path, and where there is not the bytes come back instead | ✓ |
 | The row's marks | Hide, pin, the baseline, the download, the cross | The same, and each is the reference's own vector | ✓ |
 | The other graphs' tools | A row of links to other people's tools | The same eleven links, opening in the browser | ✓ |
 | Closing and opening again | The view is in the link | The view is in the preferences file, and the link carries it too | ✓ |
+
+## The file picker, and where it comes from
+
+| Where | What asks for the file |
+|---|---|
+| Windows, macOS, Linux | The system's own dialog, through `rfd` — the one every other program on those systems uses |
+| The browser | The file input the web has always had, through `rfd`'s browser backend |
+| The phone | The system's own document picker, written against the system's own libraries (`objc2`), because there is no third party between the program and the phone |
+| The other phone | The system's own file table, read through the JNI, because the system picker hands its answer back through the activity, which the activity the game runs in does not pass on |
 
 ## What the native has that the reference does not
 
