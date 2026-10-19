@@ -2718,6 +2718,7 @@ impl CrinGraphApp {
                         row.enabled = enabled;
                         changed = true;
                     }
+                    let type_before = row.filter.filter_type;
                     egui::ComboBox::from_id_salt(("eq_type", row_index))
                         .selected_text(row.filter.filter_type.short_name())
                         .show_ui(ui, |ui| {
@@ -2733,6 +2734,11 @@ impl CrinGraphApp {
                                 );
                             }
                         });
+                    // The type has to mark the set as changed, or the selection
+                    // is dropped with the clone the table edits.
+                    if row.filter.filter_type != type_before {
+                        changed = true;
+                    }
                     let mut frequency = row.filter.freq;
                     let mut gain = row.filter.gain;
                     let mut q = row.filter.q;

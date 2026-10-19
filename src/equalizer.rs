@@ -895,6 +895,54 @@ mod tests {
     }
 
     #[test]
+    fn shelves_shape_the_curve_the_way_the_reference_does() {
+        // A shelf is not a bump: it lifts or drops everything past its corner
+        // and leaves the other end alone. The numbers come from the reference
+        // implementation itself, run against the same grid.
+        let grid: Vec<ResponsePoint> = (0..200)
+            .map(|index| ResponsePoint::new(20.0 * 1000f64.powf(index as f64 / 199.0), 60.0))
+            .collect();
+        let at = |curve: &[ResponsePoint], hz: f64| {
+            curve
+                .iter()
+                .min_by(|a, b| (a.hz - hz).abs().total_cmp(&(b.hz - hz).abs()))
+                .map(|point| point.db)
+                .expect("the curve has points")
+        };
+        let low = apply(
+            &grid,
+            &[Filter::new(FilterType::LowShelf, 100.0, 0.7, 6.0)],
+            DEFAULT_SAMPLE_RATE,
+        );
+        assert_close(at(&low, 20.0), 65.98467998291021, "low shelf at 20 Hz");
+        assert_close(
+            at(&low, 100.0),
+            63.07174434156552,
+            "low shelf at its corner",
+        );
+        assert_close(at(&low, 1000.0), 60.0018372359005, "low shelf at 1 kHz");
+        assert_close(at(&low, 20000.0), 60.00000038420207, "low shelf at 20 kHz");
+
+        let high = apply(
+            &grid,
+            &[Filter::new(FilterType::HighShelf, 8000.0, 0.7, -6.0)],
+            DEFAULT_SAMPLE_RATE,
+        );
+        assert_close(at(&high, 20.0), 59.99999935779945, "high shelf at 20 Hz");
+        assert_close(at(&high, 1000.0), 59.99723435877088, "high shelf at 1 kHz");
+        assert_close(
+            at(&high, 8000.0),
+            56.90547384279836,
+            "high shelf at its corner",
+        );
+        assert_close(
+            at(&high, 20000.0),
+            54.00669378981191,
+            "high shelf at 20 kHz",
+        );
+    }
+
+    #[test]
     fn summed_magnitudes_match_the_reference() {
         let golden = fixture();
         let curve = to_curve(&golden.curve);
