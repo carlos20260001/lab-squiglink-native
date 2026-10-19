@@ -176,6 +176,9 @@ pub struct Palette {
 
     // Accent: reserved for primary actions, current selection, and focus.
     pub accent: Color32,
+    /// The accent as text: darkened for a light page, lightened for a dark
+    /// one, so that an outlined chip's label clears 4.5:1 on either.
+    pub accent_text: Color32,
     pub accent_hover: Color32,
     pub accent_active: Color32,
     pub on_accent: Color32,
@@ -224,6 +227,7 @@ impl Palette {
             // on an accent fill clears 4.5:1; the colour is otherwise the
             // reference's own.
             accent: hsl(210, 53, 46),
+            accent_text: hsl(210, 50, 40),
             accent_hover: hsl(210, 53, 40),
             accent_active: hsl(210, 53, 34),
             on_accent: hsl(0, 0, 100),
@@ -257,6 +261,7 @@ impl Palette {
             text_disabled: hsl(215, 14, 30),
 
             accent: Color32::from_rgb(0x38, 0x70, 0xA6),
+            accent_text: Color32::from_rgb(0x6B, 0x9F, 0xD2),
             accent_hover: Color32::from_rgb(0x42, 0x7F, 0xB9),
             accent_active: Color32::from_rgb(0x2E, 0x5F, 0x8D),
             on_accent: Color32::from_rgb(0xFF, 0xFF, 0xFF),
@@ -289,6 +294,7 @@ impl Palette {
             text_disabled: Color32::from_rgb(0x60, 0x60, 0x60),
 
             accent: Color32::BLACK,
+            accent_text: Color32::BLACK,
             accent_hover: Color32::BLACK,
             accent_active: Color32::BLACK,
             on_accent: Color32::WHITE,
@@ -613,6 +619,27 @@ mod tests {
         assert_eq!(hsl(210, 53, 49), Color32::from_rgb(59, 125, 191));
         // The reference's page, hsl(54, 5%, 96%).
         assert_eq!(hsl(54, 5, 96), Color32::from_rgb(245, 245, 244));
+    }
+
+    #[test]
+    fn a_chip_is_legible_on_the_page() {
+        // The target chips are outlined boxes: the page's fill, the accent's
+        // darker text, and the accent's fill with chalk text when the target
+        // is on the graph.
+        for palette in [Palette::light(), Palette::dark(), Palette::contrast()] {
+            let outline = contrast(palette.accent_text, palette.page);
+            assert!(
+                outline >= 4.5,
+                "a chip's text on the page fell to {outline} (dark: {})",
+                palette.is_dark()
+            );
+            let selected = contrast(palette.on_accent, palette.accent);
+            assert!(
+                selected >= 4.5,
+                "a selected chip's text fell to {selected} (dark: {})",
+                palette.is_dark()
+            );
+        }
     }
 
     #[test]

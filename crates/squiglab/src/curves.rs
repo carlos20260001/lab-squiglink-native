@@ -114,18 +114,8 @@ fn targets(ui: &mut Ui, app: &mut App) {
                     for index in targets {
                         let name = app.session.groups[index].name.clone();
                         let on = app.session.active_targets.contains(&index);
-                        let response = ui
-                            .selectable_label(
-                                on,
-                                RichText::new(name.clone())
-                                    .font(TypeStep::Label.font())
-                                    .color(if on {
-                                        palette.on_accent
-                                    } else {
-                                        palette.text_secondary
-                                    }),
-                            )
-                            .on_hover_text("Show this target on the graph");
+                        let response =
+                            chip(ui, &name, on).on_hover_text("Show this target on the graph");
                         if response.clicked() {
                             if on {
                                 app.session.active_targets.remove(&index);
@@ -163,54 +153,84 @@ fn row(ui: &mut Ui, app: &mut App, index: usize) {
     let group = &app.session.groups[index];
     let name = group.name.clone();
     let color = theme::color(crate::graph::curve_color(app, index));
+    let target = group.target;
+
+    // The hairline that separates one row from the next.
+    let (line, _) =
+        ui.allocate_exact_size(egui::vec2(ui.available_width(), 1.0), egui::Sense::hover());
+    ui.painter().hline(
+        line.min.x..=line.max.x,
+        line.center().y,
+        egui::Stroke::new(1.0, palette.border),
+    );
 
     ui.horizontal(|ui| {
         // The curve's colour, as a dot.
-        let (rect, _) = ui.allocate_exact_size(egui::vec2(10.0, 10.0), egui::Sense::hover());
-        ui.painter().circle_filled(rect.center(), 5.0, color);
+        let (rect, _) = ui.allocate_exact_size(egui::vec2(16.0, 16.0), egui::Sense::hover());
+        ui.painter().circle_filled(rect.center(), 7.0, color);
+
+        // The name. A target is a reference, and is written in the quieter
+        // grey; the measurement is the subject.
         ui.label(
             RichText::new(name.clone())
-                .font(TypeStep::Body.font())
-                .color(palette.text_primary),
+                .font(egui::FontId::new(14.0, egui::FontFamily::Proportional))
+                .strong()
+                .color(if target {
+                    palette.text_tertiary
+                } else {
+                    palette.text_primary
+                }),
         );
 
-        // The channels: the reference offers left, right and both.
+        // The key: the reading of the curve, and the control that chooses the
+        // channel. It is the reference's own drawing.
         let mode = app
             .session
             .channel_modes
             .get(&index)
             .copied()
             .unwrap_or(ChannelMode::Both);
-        for (option, name) in [
-            (ChannelMode::Left, "L"),
-            (ChannelMode::Right, "R"),
-            (ChannelMode::Both, "Both"),
-        ] {
-            let selected = mode == option;
-            if ui
-                .selectable_label(selected, RichText::new(name).font(TypeStep::Label.font()))
-                .on_hover_text("Which channels of the measurement to show")
-                .clicked()
-            {
-                app.session.channel_modes.insert(index, option);
+        let (key_rect, key_response) =
+            ui.allocate_exact_size(egui::vec2(65.0, 24.0), egui::Sense::click());
+        draw_key(ui, key_rect, color, mode, target);
+        if key_response.clicked() {
+            let pointer = key_response
+                .interact_pointer_pos()
+                .unwrap_or(key_rect.center());
+            let chosen = if pointer.x < key_rect.left() + 12.0 {
+                ChannelMode::Left
+            } else if pointer.x > key_rect.right() - 12.0 {
+                ChannelMode::Right
+            } else {
+                ChannelMode::Both
+            };
+            if chosen != mode {
+                app.session.channel_modes.insert(index, chosen);
                 app.session.rebuild_display_curves();
             }
         }
+        if key_response.hovered() {
+            key_response.on_hover_text("Show the left, the right, or both channels");
+        }
 
         // The offset: the curve moved up or down, in decibels.
-        let mut offset = app.session.offsets.get(&index).copied().unwrap_or(0.0);
+        let offset = app.session.offsets.get(&index).copied().unwrap_or(0.0);
+        let mut text = format!("{offset:.0}");
         if ui
-            .add(
-                egui::DragValue::new(&mut offset)
-                    .range(-20.0..=20.0)
-                    .speed(0.1)
-                    .suffix(" dB"),
+            .add_sized(
+                [70.0, 36.0],
+                egui::TextEdit::singleline(&mut text)
+                    .desired_width(70.0)
+                    .font(egui::FontId::new(12.0, egui::FontFamily::Proportional)),
             )
-            .on_hover_text("Move this curve up or down")
+            .on_hover_text("Move this curve up or down, in decibels")
             .changed()
         {
-            app.session.offsets.insert(index, offset);
-            app.session.rebuild_display_curves();
+            if let Ok(parsed) = text.trim().parse::<f32>() {
+                let parsed = parsed.clamp(-20.0, 20.0);
+                app.session.offsets.insert(index, parsed);
+                app.session.rebuild_display_curves();
+            }
         }
 
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
@@ -275,6 +295,135 @@ fn row(ui: &mut Ui, app: &mut App, index: usize) {
             }
         });
     });
+}
+
+/// A target's chip: an outlined box, filled with the accent when the target is
+/// on the graph.
+fn chip(ui: &mut Ui, label: &str, on: bool) -> egui::Response {
+    let palette = theme::current_palette();
+    let (fill, text, border) = if on {
+        (palette.accent, palette.on_accent, palette.accent)
+    } else {
+        (palette.page, palette.accent_text, palette.border_strong)
+    };
+    ui.add(
+        egui::Button::new(
+            RichText::new(label)
+                .font(egui::FontId::new(12.0, egui::FontFamily::Proportional))
+                .color(text),
+        )
+        .fill(fill)
+        .stroke(egui::Stroke::new(1.0, border))
+        .corner_radius(egui::CornerRadius::same(6))
+        .min_size(egui::vec2(0.0, 36.0)),
+    )
+}
+
+/// The key: the reading of the curve, and the control that chooses the channel.
+///
+/// The reference draws it as a pair of tapered strokes meeting in a point on
+/// the left and opening to the right, one per channel, in the curve's colour.
+/// A single channel is a straight line, and a target's is a straight line with
+/// the word "Target" beside it.
+fn draw_key(ui: &Ui, rect: egui::Rect, color: egui::Color32, mode: ChannelMode, target: bool) {
+    let painter = ui.painter();
+    // The reference's box is 65 by 24, with its origin 19 to the left of the
+    // point the strokes meet at.
+    let origin = rect.left() + 19.0;
+    let middle = rect.center().y;
+    let stroke = egui::Stroke::new(2.0, color);
+    let stroke_to = |x: f32, y: f32| egui::Pos2::new(origin + x, middle + y);
+
+    match mode {
+        ChannelMode::Left => {
+            painter.add(egui::Shape::line(
+                vec![
+                    stroke_to(15.0, -6.0),
+                    stroke_to(9.0, -6.0),
+                    stroke_to(-9.0, 0.0),
+                    stroke_to(-17.0, 0.0),
+                ],
+                stroke,
+            ));
+        }
+        ChannelMode::Right => {
+            painter.add(egui::Shape::line(
+                vec![
+                    stroke_to(-17.0, 0.0),
+                    stroke_to(-9.0, 0.0),
+                    stroke_to(9.0, 6.0),
+                    stroke_to(15.0, 6.0),
+                ],
+                stroke,
+            ));
+        }
+        _ => {
+            painter.add(egui::Shape::line(
+                vec![
+                    stroke_to(15.0, -6.0),
+                    stroke_to(9.0, -6.0),
+                    stroke_to(-9.0, 0.0),
+                    stroke_to(-17.0, 0.0),
+                ],
+                stroke,
+            ));
+            painter.add(egui::Shape::line(
+                vec![
+                    stroke_to(-17.0, 0.0),
+                    stroke_to(-9.0, 0.0),
+                    stroke_to(9.0, 6.0),
+                    stroke_to(15.0, 6.0),
+                ],
+                stroke,
+            ));
+        }
+    }
+
+    // The channel labels, and the word under the one that is alone.
+    let font = egui::FontId::new(10.5, egui::FontFamily::Proportional);
+    let small = || egui::FontId::new(7.5, egui::FontFamily::Proportional);
+    if target {
+        painter.text(
+            egui::Pos2::new(rect.left() + 26.0, middle),
+            egui::Align2::LEFT_CENTER,
+            "Target",
+            egui::FontId::new(8.0, egui::FontFamily::Proportional),
+            color,
+        );
+        return;
+    }
+    painter.text(
+        egui::Pos2::new(origin + 17.0, middle - 6.0),
+        egui::Align2::LEFT_CENTER,
+        "L",
+        font.clone(),
+        color,
+    );
+    painter.text(
+        egui::Pos2::new(origin + 17.0, middle + 6.0),
+        egui::Align2::LEFT_CENTER,
+        "R",
+        font,
+        color,
+    );
+    if mode == ChannelMode::Left {
+        painter.text(
+            egui::Pos2::new(origin + 17.0, middle - 6.0),
+            egui::Align2::LEFT_CENTER,
+            "only",
+            small(),
+            color,
+        );
+    }
+    if mode == ChannelMode::Right {
+        painter.text(
+            egui::Pos2::new(origin + 17.0, middle + 6.0),
+            egui::Align2::LEFT_CENTER,
+            "only",
+            small(),
+            color,
+        );
+    }
 }
 
 /// The bank a row belongs to, for the panels that ask.
