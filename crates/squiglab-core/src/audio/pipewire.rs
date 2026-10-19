@@ -82,15 +82,16 @@ pub fn start(settings: Settings) -> Result<Player, String> {
 /// which is how the callback knows not to write yet.
 #[derive(Default)]
 struct Negotiated {
-    state: Mutex<(usize, usize)>,
+    state: Mutex<(usize, usize, u32)>,
 }
 
 impl Negotiated {
-    fn store(&self, sample_bytes: usize, channels: usize) {
-        *self.state.lock().expect("format lock") = (sample_bytes, channels);
+    /// The bytes per sample, the channels, and the rate the daemon settled on.
+    fn store(&self, sample_bytes: usize, channels: usize, rate: u32) {
+        *self.state.lock().expect("format lock") = (sample_bytes, channels, rate);
     }
 
-    fn get(&self) -> (usize, usize) {
+    fn get(&self) -> (usize, usize, u32) {
         *self.state.lock().expect("format lock")
     }
 }
@@ -251,7 +252,7 @@ fn run(
                 | spa::param::audio::AudioFormat::S24BE => 4,
                 _ => 0,
             };
-            negotiated_param.store(sample_bytes, info.channels() as usize);
+            negotiated_param.store(sample_bytes, info.channels() as usize, info.rate());
             for_param_report.negotiated(sample_bytes, info.channels() as usize);
         })
         .process(move |stream, generator| {
@@ -275,12 +276,19 @@ fn run(
                 callback_quit.quit();
                 return;
             }
-            let (sample_bytes, channels) = negotiated_process.get();
+            let (sample_bytes, channels, rate) = negotiated_process.get();
             for_process_report.played();
             if sample_bytes == 0 || channels == 0 {
                 // The format has not been negotiated yet, or is one this code
                 // cannot write. Leave the buffer as the daemon set it.
                 return;
+            }
+            // The daemon may run the stream at a rate other than the one
+            // that was asked for, and the generator has to render at the rate
+            // the device is running at: a tone an octave sharp is worse than
+            // a tone that is merely loud.
+            if rate != 0 && generator.sample_rate() != rate {
+                generator.set_sample_rate(rate);
             }
             // A chain that has changed is handed to the generator, which
             // starts its filters again from silence.
@@ -302,7 +310,14 @@ fn run(
                     generator.render(&mut scratch[..frames * 2], &settings);
                     for frame_index in 0..frames {
                         for channel in 0..channels {
-                            let value = scratch[frame_index * 2];
+                            // The generator renders interleaved stereo, so
+                            // the right channel is the second sample of the
+                            // frame and not a copy of the first.
+                            let value = if channel < 2 {
+                                scratch[frame_index * 2 + channel]
+                            } else {
+                                scratch[frame_index * 2]
+                            };
                             let start = frame_index * stride + channel * sample_bytes;
                             write_sample(
                                 &mut slice[start..start + sample_bytes],

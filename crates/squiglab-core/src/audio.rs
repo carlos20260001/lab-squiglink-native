@@ -139,8 +139,11 @@ impl FilePlayback {
         if self.samples.is_empty() || self.channels == 0 {
             return 0.0;
         }
-        let step = if self.rate > 0.0 {
-            rate / self.rate
+        // How far through the file the playhead moves for each sample that
+        // comes out: a file recorded at 44.1 kHz played on a 48 kHz device
+        // gives up its samples more slowly, or the music plays fast.
+        let step = if self.rate > 0.0 && rate > 0.0 {
+            self.rate / rate
         } else {
             1.0
         };
@@ -271,6 +274,27 @@ impl Generator {
     /// Change the filters the source is played through.
     pub fn set_chain(&mut self, chain: Chain) {
         self.chain = chain;
+    }
+
+    /// The rate the generator is running at.
+    pub fn sample_rate(&self) -> u32 {
+        self.sample_rate as u32
+    }
+
+    /// Run at another rate.
+    ///
+    /// The device may not run at the rate that was asked for, and a generator
+    /// that renders at the wrong rate plays everything fast and sharp. The
+    /// coefficients of the filters follow, because they are computed for the
+    /// rate the samples are at.
+    pub fn set_sample_rate(&mut self, rate: u32) {
+        let rate = f64::from(rate);
+        if rate <= 0.0 || (self.sample_rate - rate).abs() < f64::EPSILON {
+            return;
+        }
+        self.sample_rate = rate;
+        self.glide_coefficient = smoothing(rate, GLIDE_SECONDS);
+        self.fade_coefficient = smoothing(rate, f64::from(FADE_SECONDS)) as f32;
     }
 
     /// Play a music file.
@@ -640,9 +664,65 @@ mod tests {
         buffer
     }
 
+    /// The frequency of a tone played at another rate must not change: a file
+    /// recorded at 44.1 kHz and played on a 48 kHz device is resampled, and
+    /// the pitch is the pitch of the recording.
+    #[test]
+    fn a_file_keeps_its_pitch_at_another_rate() {
+        let file_rate = 44_100.0_f64;
+        let frequency = 1_000.0_f64;
+        let mut samples = Vec::new();
+        for index in 0..(file_rate as usize * 2) {
+            let time = index as f64 / file_rate;
+            samples.push((std::f64::consts::TAU * frequency * time).sin() as f32);
+        }
+        let mut file = FilePlayback {
+            samples: samples.clone(),
+            channels: 1,
+            rate: file_rate,
+            position: 0.0,
+            looping: false,
+        };
+        // Played at 48 kHz: the playhead moves faster through the file, and
+        // the pitch must still be the recording's.
+        let mut out = Vec::new();
+        for _ in 0..88_200 {
+            out.push(file.next_sample(48_000.0));
+        }
+        let measured = measure_frequency(&out);
+        assert!(
+            (measured - frequency).abs() < 5.0,
+            "the file played at {measured:.1} Hz where the recording is {frequency} Hz"
+        );
+    }
+
+    /// A generator that is told the device's rate must render at that rate:
+    /// otherwise everything sounds fast and sharp.
+    #[test]
+    fn a_generator_renders_at_the_rate_it_is_told() {
+        let mut generator = Generator::new(48_000);
+        generator.set_sample_rate(44_100);
+        let settings = Settings {
+            source: Source::Tone { freq: 1_000.0 },
+            volume: 1.0,
+        };
+        let buffer = render(&mut generator, &settings, 44_100);
+        let left: Vec<f32> = buffer.iter().step_by(2).copied().collect();
+        let measured = measure_frequency_at(&left, 44_100.0);
+        assert!(
+            (measured - 1_000.0).abs() < 5.0,
+            "the tone came out at {measured:.1} Hz rather than 1000"
+        );
+    }
+
     /// The frequency of a rendered tone, counted by upward zero crossings,
     /// which is how the ear tracks a sine.
     fn measure_frequency(samples: &[f32]) -> f64 {
+        measure_frequency_at(samples, f64::from(SAMPLE_RATE))
+    }
+
+    /// The frequency of samples rendered at a given rate.
+    fn measure_frequency_at(samples: &[f32], rate: f64) -> f64 {
         let mut crossings = 0usize;
         let mut previous = samples[0];
         for &sample in &samples[1..] {
@@ -651,7 +731,7 @@ mod tests {
             }
             previous = sample;
         }
-        crossings as f64 * f64::from(SAMPLE_RATE) / samples.len() as f64
+        crossings as f64 * rate / samples.len() as f64
     }
 
     /// The ratio of high-frequency energy to low-frequency energy in a signal,
