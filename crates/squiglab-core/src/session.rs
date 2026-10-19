@@ -91,7 +91,14 @@ pub struct Preferences {
     pub smooth_level: usize,
     pub show_labels: bool,
     pub inspect_mode: bool,
-    pub dark_mode: bool,
+    /// The theme the user chose.
+    #[serde(default)]
+    pub theme: crate::theme::Theme,
+    /// The theme flag the preferences used to carry, read for the files
+    /// written before the theme was a choice of three. It is never written
+    /// back: the theme is the theme now.
+    #[serde(default, skip_serializing)]
+    pub dark_mode: Option<bool>,
     pub color_offset: usize,
     pub show_measurements: bool,
     /// Whether the deviation window is open. The deviation is a second reading
@@ -125,7 +132,8 @@ impl Default for Preferences {
             smooth_level: 5,
             show_labels: false,
             inspect_mode: false,
-            dark_mode: true,
+            theme: crate::theme::Theme::default(),
+            dark_mode: None,
             color_offset: 0,
             show_measurements: true,
             show_delta: false,
@@ -216,7 +224,8 @@ pub struct Session {
     /// Whether the inspector follows the pointer.
     pub inspect_mode: bool,
     /// Whether the interface is dark.
-    pub dark_mode: bool,
+    /// The theme the user chose.
+    pub theme: crate::theme::Theme,
     /// The rotation applied to the curve colours.
     pub color_offset: usize,
     /// Whether the library column is shown.
@@ -295,7 +304,7 @@ impl Default for Session {
             smooth_level: 5,
             show_labels: false,
             inspect_mode: false,
-            dark_mode: true,
+            theme: crate::theme::Theme::default(),
             color_offset: 0,
             show_measurements: true,
             show_delta: false,
@@ -835,7 +844,8 @@ impl Session {
             smooth_level: self.smooth_level,
             show_labels: self.show_labels,
             inspect_mode: self.inspect_mode,
-            dark_mode: self.dark_mode,
+            theme: self.theme,
+            dark_mode: None,
             color_offset: self.color_offset,
             show_measurements: self.show_measurements,
             label_positions: self.label_positions.clone(),
@@ -963,7 +973,10 @@ impl Session {
         self.smooth_level = preferences.smooth_level;
         self.show_labels = preferences.show_labels;
         self.inspect_mode = preferences.inspect_mode;
-        self.dark_mode = preferences.dark_mode;
+        self.theme = preferences
+            .dark_mode
+            .map(crate::theme::Theme::from_dark)
+            .unwrap_or(preferences.theme);
         self.color_offset = preferences.color_offset;
         self.show_measurements = preferences.show_measurements;
         Ok(true)

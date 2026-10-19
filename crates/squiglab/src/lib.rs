@@ -4,4 +4,7 @@
 //! rules, the state and the data are in `squiglab-core`, which does not depend
 //! on egui and could be drawn by anything.
 
+pub mod app;
+pub mod graph;
 pub mod theme;
+pub mod ui;

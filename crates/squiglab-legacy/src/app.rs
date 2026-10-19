@@ -837,7 +837,7 @@ impl CrinGraphApp {
         if !self.menu_open {
             return;
         }
-        let palette = squiglab_legacy::theme::Palette::resolve(self.session.dark_mode);
+        let palette = squiglab_legacy::theme::Palette::resolve(self.session.theme.is_dark());
 
         // Dimmed backdrop; clicking it closes the drawer. It deliberately
         // stops at the drawer's right edge so taps inside the drawer column
@@ -941,7 +941,7 @@ impl CrinGraphApp {
         if !self.library_drawer_open && opening <= 0.0 {
             return;
         }
-        let palette = squiglab_legacy::theme::Palette::resolve(self.session.dark_mode);
+        let palette = squiglab_legacy::theme::Palette::resolve(self.session.theme.is_dark());
         let height =
             (screen_rect.height() * 0.70).clamp(LIBRARY_SHEET_MIN_HEIGHT, LIBRARY_SHEET_MAX_HEIGHT);
         let top = screen_rect.bottom() - height * opening;
@@ -1053,7 +1053,7 @@ impl CrinGraphApp {
                                 if !density.shows_theme()
                                     && cgui::action_button(
                                         ui,
-                                        if self.session.dark_mode {
+                                        if self.session.theme.is_dark() {
                                             "Light"
                                         } else {
                                             "Dark"
@@ -1061,7 +1061,9 @@ impl CrinGraphApp {
                                         "Switch between the dark and light themes",
                                     )
                                 {
-                                    self.session.dark_mode = !self.session.dark_mode;
+                                    self.session.theme = squiglab_core::theme::Theme::from_dark(
+                                        !self.session.theme.is_dark(),
+                                    );
                                 }
                             })
                             .response
@@ -1073,14 +1075,16 @@ impl CrinGraphApp {
                         if density.shows_theme() {
                             if cgui::action_button(
                                 ui,
-                                if self.session.dark_mode {
+                                if self.session.theme.is_dark() {
                                     "Light"
                                 } else {
                                     "Dark"
                                 },
                                 "Switch between the dark and light themes",
                             ) {
-                                self.session.dark_mode = !self.session.dark_mode;
+                                self.session.theme = squiglab_core::theme::Theme::from_dark(
+                                    !self.session.theme.is_dark(),
+                                );
                             }
                             cgui::cluster_rule(ui);
                         }
@@ -1388,7 +1392,7 @@ impl CrinGraphApp {
         }
         let mut open = true;
         let mut finished = false;
-        let palette = squiglab_legacy::theme::Palette::resolve(self.session.dark_mode);
+        let palette = squiglab_legacy::theme::Palette::resolve(self.session.theme.is_dark());
         egui::Window::new("How to use the equalizer")
             .open(&mut open)
             .resizable(false)
@@ -1492,7 +1496,7 @@ impl CrinGraphApp {
         }
         let mut open = true;
         let mut cancelled = false;
-        let palette = squiglab_legacy::theme::Palette::resolve(self.session.dark_mode);
+        let palette = squiglab_legacy::theme::Palette::resolve(self.session.theme.is_dark());
         egui::Window::new("Upload measurement")
             .open(&mut open)
             .resizable(false)
@@ -3016,7 +3020,7 @@ impl CrinGraphApp {
     /// and the manager: the manager's rows are the selection you are working
     /// with, and the status line is about the app rather than about them.
     fn status_panel(&mut self, ui: &mut Ui) {
-        let palette = squiglab_legacy::theme::Palette::resolve(self.session.dark_mode);
+        let palette = squiglab_legacy::theme::Palette::resolve(self.session.theme.is_dark());
         egui::Panel::bottom("status")
             .resizable(false)
             .default_size(24.0)
@@ -3278,7 +3282,8 @@ impl CrinGraphApp {
     fn central_panel(&mut self, ui: &mut Ui) {
         egui::CentralPanel::default().show(ui, |ui| {
             if let Some(error) = &self.processing_error {
-                let palette = squiglab_legacy::theme::Palette::resolve(self.session.dark_mode);
+                let palette =
+                    squiglab_legacy::theme::Palette::resolve(self.session.theme.is_dark());
                 ui.colored_label(palette.error, error);
             }
             if self.session.display_curves.is_empty() {
@@ -3369,7 +3374,7 @@ impl CrinGraphApp {
             self.session.zoom,
             self.session.smooth_level,
             &self.session.label_positions,
-            self.session.dark_mode,
+            self.session.theme.is_dark(),
             self.session.y_scale,
             Provenance {
                 watermark: self.watermark(),
@@ -3394,7 +3399,7 @@ impl eframe::App for CrinGraphApp {
         let ctx = ui.ctx().clone();
         #[cfg(debug_assertions)]
         ctx.set_debug_on_hover(self.debug_hooks);
-        squiglab_legacy::theme::apply(&ctx, self.session.dark_mode);
+        squiglab_legacy::theme::apply(&ctx, self.session.theme.is_dark());
         if self.screenshot_pending {
             ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(egui::UserData::default()));
             self.screenshot_pending = false;
@@ -5493,7 +5498,8 @@ smoothing_octaves = 3
             smooth_level: 3,
             show_labels: true,
             inspect_mode: true,
-            dark_mode: false,
+            theme: squiglab_core::theme::Theme::Light,
+            dark_mode: None,
             color_offset: 7,
             show_measurements: false,
             show_delta: true,

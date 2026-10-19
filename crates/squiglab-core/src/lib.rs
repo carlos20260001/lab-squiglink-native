@@ -18,3 +18,4 @@ pub mod processing;
 pub mod product;
 pub mod session;
 pub mod state;
+pub mod theme;
