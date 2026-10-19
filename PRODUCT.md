@@ -12,11 +12,11 @@ Audio engineers and in-ear monitor reviewers who compare frequency-response meas
 
 ## Product Purpose
 
-CrinGraph is a native desktop tool for comparing frequency-response measurements of in-ear monitors. Users select measurements and reference targets, adjust processing (normalization, smoothing, zoom, channels), and read the resulting curves against each other. Success means accurate, scannable comparison at a glance with no visual interference from the interface.
+SquigLab is a native desktop tool for comparing frequency-response measurements against reference targets. Users select measurements and targets, adjust processing (normalization, smoothing, zoom, channels), fit an equalizer to a target, and read the resulting curves against each other. Success means accurate, scannable comparison at a glance with no visual interference from the interface.
 
 ## Positioning
 
-The same measurement-comparison logic as the web reference at squig.link, rebuilt in a dense native Rust/egui layout where the measurement palette—not the chrome—owns the visual attention. The dark default, tight spacing, and monospace data columns are first-class design choices, not port artifacts.
+The same measurement-comparison logic as the web reference at squig.link, rebuilt in the reference's own arrangement: the header, the fixed column of brands and measurements, the graph and what belongs to it. The measurement palette—not the chrome—owns the visual attention.
 
 ## Operating Context
 
@@ -29,19 +29,25 @@ The same measurement-comparison logic as the web reference at squig.link, rebuil
 
 - Curve comparison with selectable measurements and reference targets.
 - Processing controls: normalization, smoothing, zoom, channels.
-- Dense native layout with measurement palette as the hero visual.
+- A parametric equalizer: the band table, a fit to a target, and the constraints that say
+  what the fit may produce — which filter kinds, how many, over what frequency, gain and Q,
+  and whether the left and right channels may carry filter banks of their own.
+- Undo and redo of the equalizer's changes.
+- The sound tools: pink noise and a tone generator whose slider sweeps a band of frequencies.
+- Measurements may be uploaded, with the warning that another rig's measurements do not mix.
+- The model list carries the review, the price and the shop link, where the phone book knows them.
 - Design authority: the web reference at squig.link, extracted into `docs/design-system.md`.
   The interface matches its chrome, layout, scaling, spacing and themes.
-- Fonts: Open Sans (Regular/Bold) vendored at `assets/fonts/`; Hack for monospace data.
+- Fonts: Open Sans (Regular/Bold), vendored at `crates/squiglab-core/assets/fonts/`.
 - Theme: the reference's three — light, dark and high contrast. The dark theme keeps the
   native's blue accent rather than the reference's yellow, because the curves are the
   native's own coloured palette.
-- Technical constraint: egui 0.36/0.37 + eframe; immediate-mode UI rebuilt per frame.
+- Technical constraint: egui 0.36 + eframe; immediate-mode UI rebuilt per frame.
 - No accessibility mandate stated; AccessKit enabled by default on eframe.
 
 ## Brand Commitments
 
-- Product name: CrinGraph.
+- Product name: SquigLab.
 - Reference identity: squig.link (same measurement product, web reference).
 - Visual authority: squig.link, extracted into `docs/design-system.md`.
 - Voice: precise, technical, measurement-focused; no marketing or emotional copy.
@@ -50,8 +56,11 @@ The same measurement-comparison logic as the web reference at squig.link, rebuil
 
 - `docs/design-system.md`: the reference's tokens, type scale, spacing, metrics and themes,
   read from the reference's own stylesheet.
-- Assets: `assets/fonts/` (Open Sans, Hack, OFL license), measurement data samples.
-- Source: `src/` (Rust/egui app), `Cargo.toml` (egui 0.36/0.37 + eframe).
+- `docs/interface-parity.md`: what the reference has, what the native has, and what it does not.
+- `web/`: the reference's own source, kept whole so the native can be checked against it.
+- Assets: Open Sans with its OFL licence, the product's mark, measurement data samples.
+- Source: `crates/squiglab-core/` (the program, with no egui in it) and `crates/squiglab/`
+  (the interface that draws it).
 - No testimonials, case studies, or external press recorded.
 
 ## Product Principles

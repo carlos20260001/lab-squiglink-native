@@ -110,10 +110,16 @@ The reference's breakpoints:
 
 ## The parts
 
-The header, the three tabs (Brands, Models, Equalizer), the graph with its
-toolbar, the manager, the target strip, and the equalizer panel with its
-constraints, the sound tools with their band, the upload panel, the change
-history, and the augment card on a model row.
+The header, the three tabs (Brands, Models, Equalizer), the list of brands
+and measurements, the graph with its tools, the target strip, the active
+curves, the equalizer panel with its constraints, the sound tools with their
+band, the upload panel, the change history, and the augment card on a model
+row.
+
+The window has the same parts in the same places, with the exception of the
+reference's page-scrolling arrangement: the window has a fixed column down
+the left and a scrolling one on the right, so a narrow window gives the
+column to the graph rather than stacking the page.
 
 `docs/interface-parity.md` says which of these the native has and which it
 has still to build.

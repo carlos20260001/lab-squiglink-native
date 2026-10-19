@@ -1,8 +1,21 @@
 # UI Parity: SquigLab → squig.link, Full Replica
 
-A roadmap for making SquigLab's interface a faithful replica of the squig.link
-web interface. This supersedes the earlier `ui-parity.md` task list, which
-covered only visual polish; its remaining visual items are folded in below.
+The record of the work that made SquigLab's interface a faithful replica of
+the squig.link web interface, and of the measurements of the live site the
+work was done against. Every item below is done.
+
+**This is a record, not a plan.** The interface has since been rebuilt
+against the reference's own arrangement — the header, the fixed column of
+brands and measurements, the graph and what belongs to it — and what it still
+lacks is written down in
+[`docs/interface-parity.md`](docs/interface-parity.md), which is the document
+to read for that. The items below are kept because the measurements of the
+live site in them are the reason for the tokens in
+[`docs/design-system.md`](docs/design-system.md), and because the commits they
+name are the ones that did the work.
+
+This supersedes the earlier `ui-parity.md` task list, which covered only
+visual polish; its remaining visual items are folded in below.
 
 **Reference captures** (regenerate before acting — the site changes):
 `docs/design-reference/squig-desktop.png`, `squig-dark.png`, `squig-mobile.png`,
@@ -62,9 +75,12 @@ authoritative source for the filter maths.
 2. **One concern per commit**, in this file's granularity. Repository convention
    is an atomic commit with a terse imperative summary and a prose body wrapped
    near 78 columns.
-3. **All UI resolves to `src/theme.rs`.** No raw hex or ad-hoc sizes outside it.
-4. **The DSP is ported, not reimplemented.** `web/equalizer.js` is the source of
-   truth; port it numerically and test against the JS output, not by feel.
+3. **All UI resolves to the theme.** No raw hex or ad-hoc sizes outside
+   `crates/squiglab/src/theme.rs`.
+4. **The DSP is ported, not reimplemented.** `web/equalizer.js` is the source
+   of truth; port it numerically and test against the JS output, not by feel.
+   The fixture the test uses is captured from that file by
+   `scripts/equalizer_golden.mjs`, never written by hand.
 5. **The graph palette wins.** EQ curve colours must come from the existing
    palette, not new hues.
 6. **Verify in both themes**, and at 430px, 900px, 1100px, and 1600px wide.

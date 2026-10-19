@@ -47,14 +47,17 @@ before they're adopted on Crin's site.
 
 [View some sample graphs.](https://mlochbaum.github.io/CrinGraph/old/graph.html)
 
-This repository contains two applications. The **native Rust/egui app is the
-default** — it is what `cargo run`, `build.sh`, `build.cmd` and the release
-workflow build:
+This repository contains the native application and the reference it follows.
+The **native Rust/egui app is the default** — it is what `cargo run`,
+`build.sh`, `build.cmd` and the release workflow build:
 
-- **Native (default).** Built from `Cargo.toml` and `src/`. Actively maintained.
-- **Web app.** The original JavaScript/HTML implementation, kept in
-  [`web/`](web/) and retained for reference and for deployments that still
-  serve the web version. Serve the repository root over HTTP and open
+- **Native (default).** The program is in [`crates/squiglab-core/`](crates/squiglab-core),
+  which has no egui in it, and the interface that draws it is in
+  [`crates/squiglab/`](crates/squiglab). Actively maintained.
+- **Web reference.** The JavaScript/HTML implementation, kept in
+  [`web/`](web/) and retained as the reference the native is checked against:
+  the source of the measurement processing, the equalizer and the interface's
+  own appearance. Serve the repository root over HTTP and open
   [`web/index.html`](web/index.html); it reads measurement data from the shared
   `data/` directory at the repository root.
 
@@ -181,11 +184,11 @@ architecture, ask for the cross-compilation explicitly:
 
 #### App identity and bundles
 
-`packaging/app.toml` is the shared application manifest. It supplies the
-display name, application identifier, desktop metadata, and path to the master
-SVG icon in `assets/`. Cargo's build script rasterizes that SVG into density
-specific PNGs and Windows ICO/macOS ICNS files; the native window uses the
-same app name, application ID, and icon.
+`crates/squiglab-core/packaging/app.toml` is the shared application manifest.
+It supplies the display name, application identifier, desktop metadata, and
+path to the master SVG icon in `crates/squiglab-core/assets/`. Cargo's build
+script rasterizes that SVG into density specific PNGs and Windows ICO/macOS
+ICNS files; the native window uses the same app name, application ID, and icon.
 
 Use the platform build scripts to create distributable app folders in `dist/`:
 
@@ -282,7 +285,7 @@ scheme still open.
 
 ### Native app screenshot
 
-![SquigLab showing a frequency response graph](assets/Screenshots/Cringraph-native-screenshot-1.png)
+![SquigLab showing a frequency response graph](crates/squiglab-core/assets/Screenshots/Cringraph-native-screenshot-1.png)
 
 *Screenshot captured on GNU/Linux.*
 
@@ -298,51 +301,61 @@ Asian county is purely coincidental.
 If you want one that's not here, just ask so I can explain why it's a
 bad idea.
 
+The interface is the reference's own arrangement, described in
+[`docs/design-system.md`](docs/design-system.md) and checked against the
+reference in [`docs/interface-parity.md`](docs/interface-parity.md).
+
 ### Layout
 
-The graph tool displays:
-* A **graph window** at the top
-* The **toolbar** just below it
-* The **selector** at the bottom left, or below the toolbar for narrow windows
-* A **target selector**
-* The **manager** for active curves
+The window displays:
+* A **header** across the top, with the mark, the name and the theme
+* A **column** down the left, of the brands and the measurements under them,
+  with the panels for the equalizer and the sound tools beneath
+* The **tools** over the graph on the right, which scroll sideways rather than clip
+* The **graph**, and under it the **target chips** and the **active curves**
 
-### Graph window
+### Graph
 
 * Standard logarithmic frequency (Hz) and sound pressure level (dB) [axes](Documentation.md#axes)
 * [Colors](Documentation.md#colors) are persistent and algorithmically generated to ensure contrast
-* Use the slider at the left to rescale and adjust the y axis
-* [Hover](Documentation.md#highlight-on-mouseover) over or click a curve to see its name and highlight it in the manager
+* The graph keeps the reference's proportions: it is at most 2.2 units across for every
+  unit of the window's height, less the chrome around it, and it is centred
+* [Hover](Documentation.md#highlight-on-mouseover) over a curve to see its name
 
-### Toolbar
+### Tools
 
 * Zoom into bass, mid, or treble frequencies
 * [Normalize](Documentation.md#normalization) with a target loudness or a normalization frequency
 * [Smooth](Documentation.md#smoothing) graphs with a configurable parameter
 * Toggle inspect mode to see the numeric response values when you mouse over the graph
-* [Label](Documentation.md#labelling) curves inside the graph window
-* Save a png [screenshot](Documentation.md#screenshot) of the graph (with labels)
+* [Label](Documentation.md#labelling) curves inside the graph
+* Save a picture of the window, or the graph as a vector image
+* Copy a link to the view, or share it
 * Recolor the active curves in case there is a color conflict
-* Toolbar collapses and expands, along with the target selector, when the screen is small
+* Three themes: light, dark and high contrast
 
-### Headphone and target selectors
+### Brands and measurements
 
-* Headphones are grouped by brand: select brands to narrow them down
-* Click to select one headphone or brand and unselect others; middle or ctrl-click for non-exclusive select
-* [Search](Documentation.md#searching) all brands or headphones by name
-* Targets are selected the same way but are independent from headphones
+* Measurements are grouped by brand: choose a brand to see the measurements under it
+* Click a measurement to put it on the graph, and again to take it off
+* [Search](Documentation.md#searching) the brands and measurements by name
+* The model rows carry the review, the price and the shop link, where the phone book knows them
+* Targets are chosen the same way, and are independent of the measurements
 
-### Headphone manager
+### The equalizer
 
-* Curve names and colors are displayed here
-* Choose and compare variant measurements of the same model with a dropdown
-* Use the wishbone-shaped selector to see left and/or right channels or [average](Documentation.md#averaging) them together
-* A red exclamation mark indicates that channels are [imbalanced](Documentation.md#channel-imbalance-marker)
-* Change the offset to move graphs up and down (after [normalization](Documentation.md#normalization))
-* Select [BASELINE](Documentation.md#baseline) to adjust all curves so the chosen one is flat
-* Temporarily hide or unhide a graph
-* PIN a headphone to avoid losing it while adding others
-* Click the little dots at the bottom left to change a single headphone's [color](Documentation.md#colors)
+* A band table of type, frequency, gain and Q, with the bands typed rather than dragged
+* A fit to the chosen target, and the band it may use
+* The constraints that say what a fit may produce: which filter kinds, how many, over what
+  frequency, gain and Q, and the bands of a graphic fit
+* Separate filter banks for the left and the right channel, when the constraints allow them
+* Undo and redo
+* Export as an Equalizer APO file, or as a graphic equalizer for Wavelet
+
+### Sound tools
+
+* Pink noise, and a tone generator whose slider sweeps a band of frequencies you choose
+* A volume control
 
 ## Trademarks
 

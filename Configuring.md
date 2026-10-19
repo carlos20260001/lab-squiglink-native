@@ -1,5 +1,14 @@
 # CrinGraph on your own site
 
+**This page is about the reference's configuration** — the `config.js` it
+reads, and the shape of the measurement folders it expects. The native
+application is configured differently: it reads a single `config.toml` from
+the user's application configuration directory, and the
+[readme's configuration section](README.md#configuration) says where that
+file is, what it holds, and what the starter files in `config-examples/`
+look like. The measurement folders themselves are the same in both, and are
+described below.
+
 This guide explains the steps required to make CrinGraph display your
 own FR graphs, for example if by some remarkable circumstance you have
 managed to measure IEMs not yet on crinacle.com. If you have any trouble
@@ -35,8 +44,8 @@ page works and isn't claiming it's crinacle.com.
 * Remove or change the watermark.
 * Remove the `targets`, replace them with your own, or get permission
   from Crinacle to use the ones in the CrinGraph repository.
-* If you are using a free/premium model, change `premium_html` in
-  `config_free.js` to point to your own site(s).
+* If you are using a free/premium model, change `premium_html` to point to
+  your own site(s).
 
 ## Configuring CrinGraph
 
@@ -82,9 +91,8 @@ Here are the current configuration parameters:
   of smoothing.
 
 The following parameters can be set to configure a restricted version
-of the graph tool. They are only present in
-[config_free.js](config_free.js). If you don't set them the tool will
-be unrestricted.
+of the graph tool. They are set in the block `graph_free.html` carries
+inline. If you don't set them the tool will be unrestricted.
 
 * `max_compare` is the maximum number of graphs allowed at a time.
 * `disallow_target` prevents target FRs from ever being loaded.

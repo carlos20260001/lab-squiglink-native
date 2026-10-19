@@ -1,27 +1,43 @@
 # Documentation
 
-This page describes in detail what CrinGraph does, and sometimes how it
-is implemented. It is not intended to explain how to use CrinGraph—if
-you're just trying to figure out how to do some simple things with the
+This page describes in detail what the frequency-response tool does, and
+sometimes how it is implemented. It is not intended to explain how to use
+it—if you're just trying to figure out how to do some simple things with the
 tool, the [readme](README.md) is more likely to help.
+
+**This is the reference's own documentation**, kept here because the native
+implements the same algorithms and the same ideas, and this is where they are
+explained: the axes, the smoothing, the two normalizations, the averaging, the
+baseline, the colouring and the labelling. Where the native differs — it
+draws with egui rather than d3, and it lays itself out as a window rather
+than a page — the difference is noted as it comes up. The readme describes
+the native; this page explains the thinking behind what it draws.
 
 ## Technologies
 
-CrinGraph is written using the Javascript framework
+The reference is written using the Javascript framework
 [d3.js](https://d3js.org/). Otherwise the technology used is the
 standard web stack: HTML/SVG, CSS, and Javascript. Files are written
 directly with no build step.
 
-CrinGraph targets browsers that support ES6, because d3 requires it. In
+The reference targets browsers that support ES6, because d3 requires it. In
 particular, the
 [fetch API](https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API)
-is used to load frequency response data, so CrinGraph will not work in
+is used to load frequency response data, so it will not work in
 Internet Explorer.
+
+The native application is written in Rust, and draws with
+[egui](https://github.com/emilk/egui) rather than d3: the graph is painted
+with egui's painter instead of written as SVG. The measurements, the
+processing and the equalizer are the same in both, and the equalizer is
+checked against the reference's own code by a fixture captured from it.
 
 ### Layout
 
-Most parts of the interface are arranged using flexboxes, and rearranged
-with CSS media queries to detect screen width and aspect ratio.
+Most parts of the reference's interface are arranged using flexboxes, and
+rearranged with CSS media queries to detect screen width and aspect ratio.
+The native keeps the arrangement but not the mechanism: it has a fixed column
+and a scrolling one, rather than a page that reflows.
 
 There are three main layouts:
 * The desktop layout places the graph window at the top with the selector and manager side by side below it.
@@ -46,11 +62,15 @@ are filtered to show only those with a high enough total matching score.
 
 Okay, it's really an export and not a screenshot. The graph is an
 [SVG](https://en.wikipedia.org/wiki/Scalable_Vector_Graphics) image
-drawn with d3; CrinGraph uses a lightly modified version of the
+drawn with d3; the reference uses a lightly modified version of the
 Javascript library
 [saveSvgAsPng](https://github.com/exupero/saveSvgAsPng) to allow your
 browser to convert it to a uniformly sized PNG image for convenient
 sharing.
+
+The native writes the vectors itself, from the same geometry the graph is
+drawn from, and takes the picture of the window with the toolkit's own
+screenshot.
 
 ## Graph display
 
