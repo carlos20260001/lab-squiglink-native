@@ -133,7 +133,7 @@ impl App {
         let theme = session.theme;
         Self {
             session,
-            tab: Tab::Brands,
+            tab: Tab::Models,
             search: String::new(),
             status,
             tone_band: (20.0, 20_000.0),
@@ -232,7 +232,7 @@ impl App {
             .resizable(false)
             .frame(
                 egui::Frame::new()
-                    .fill(theme::current_palette().page)
+                    .fill(theme::current_palette().header)
                     .inner_margin(egui::Margin::symmetric(metrics::PADDING as i8, 0)),
             )
             .show(ui, |ui| {

@@ -23,11 +23,11 @@ pub fn show(ui: &mut Ui, app: &mut App) {
                 // controls, then the view toggles.
                 actions(ui, app);
                 rule(ui);
-                zoom(ui, app);
-                rule(ui);
                 normalize(ui, app);
                 rule(ui);
                 smooth(ui, app);
+                rule(ui);
+                zoom(ui, app);
                 rule(ui);
                 toggles(ui, app);
                 rule(ui);

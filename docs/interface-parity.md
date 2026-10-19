@@ -15,11 +15,11 @@ branch of the site repository, and the native is written against it.
 | Reference | Native |
 |---|---|
 | Header: wordmark, a review dropdown, the site navigation, a `+Create` link | Header: the mark, the wordmark, the number of curves, the theme picker. A window has no site to navigate. |
-| Left column with three tabs: **Brands / Models / Equalizer** | The same three tabs ✓ |
+| Left column with three tabs: **Brands / Models / Equalizer** | The same three tabs ✓ — opening on the models, with the brands down a narrow column beside them, and the measurements on the graph as chips at the head of the list ✓ |
 | Graph toolbar: Copy URL, Screenshot, `NORMALIZE: [dB 60] [Hz 500]`, `SMOOTH: 5`, `ZOOM: Bass Mids Treble`, a help button | The same controls, in a row that scrolls sideways when it overflows ✓ — but no help button ✗ |
 | Graph: the dB scale and its drag handle, the frequency axis, the band names, the target label, the curve labels, the watermark | The same ✓ — the scale's mark moves the range, the two circles change how far it reaches, and a double-click puts it back ✓ |
 | Under the graph: the **DELTA** chips, the rig corrections, `REFERENCE TARGETS` / `LEGACY TARGETS` | The target chips, grouped as the reference groups them, with the rig corrections in a group of their own marked Δ ✓, and the active curves below them ✓ |
-| Manager rows: the curve, `L ONLY / R ONLY`, a dB offset, and the row buttons | The same ✓ |
+| Manager rows: the curve, `L ONLY / R ONLY`, a dB offset, and the row buttons | The same ✓ — the key graphic is the reference's own drawing, and the buttons carry the reference's marks |
 
 ## The equalizer panel
 
@@ -51,7 +51,7 @@ reference's own controls and their help text:
 
 | Reference | Native |
 |---|---|
-| `Compare A / B`, a settings gear | The same ✓ — with the switch on (B) the source is played through the equalizer, and with it off (A) it is played on its own. No gear ✗ |
+| `Compare A / B`, a settings gear | The same ✓ — with the switch on (B) the source is played through the equalizer, and with it off (A) it is played on its own. The native's switch is a labelled choice rather than the reference's A/B slider, and there is no gear ✗ |
 | **Music** — a list of tracks, `+ Add Music`, `Search Apple` | Absent (the music is the reference's own) |
 | **Pink Noise** — a play button | ✓ (a source) |
 | **Tone Generator** — a play button, a slider, the frequency, `+ Add Filter` | ✓ (a frequency and a volume) |

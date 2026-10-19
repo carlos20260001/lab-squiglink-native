@@ -84,8 +84,10 @@ pub mod metrics {
     pub const PADDING: f32 = 16.0;
     /// The padding inside a field.
     pub const PADDING_FIELD: f32 = 10.0;
-    /// The graph's proportion: its width for every unit of its height.
-    pub const PLOT_ASPECT_RATIO: f32 = 3.4;
+    /// The graph's proportion: its width for every unit of its height. The
+    /// reference's own plot is 800 by 360, and its sizing rule caps the width
+    /// at 2.2 for every unit of height, so the two agree.
+    pub const PLOT_ASPECT_RATIO: f32 = 800.0 / 360.0;
     /// The chrome the graph's width is measured against: the window's height
     /// less this is what the graph may be wide by.
     pub const GRAPH_CHROME_HEIGHT: f32 = 300.0;
@@ -168,6 +170,9 @@ pub struct Palette {
     /// The sunken surfaces: the quiet fills and the code.
     pub sunken: Color32,
 
+    /// The header's bar, which the reference keeps dark in every theme.
+    pub header: Color32,
+
     // Text.
     pub text_primary: Color32,
     pub text_secondary: Color32,
@@ -217,6 +222,7 @@ impl Palette {
             field: hsl(210, 10, 98),
             sunken: hsl(54, 5, 90),
 
+            header: hsl(215, 20, 10),
             text_primary: hsl(210, 20, 10),
             text_secondary: hsl(210, 20, 40),
             text_tertiary: hsl(210, 20, 55),
@@ -255,6 +261,7 @@ impl Palette {
             field: hsl(215, 14, 5),
             sunken: hsl(215, 14, 10),
 
+            header: Color32::BLACK,
             text_primary: hsl(54, 11, 87),
             text_secondary: hsl(215, 14, 60),
             text_tertiary: hsl(215, 14, 45),
@@ -288,6 +295,7 @@ impl Palette {
             field: Color32::WHITE,
             sunken: Color32::BLACK,
 
+            header: hsl(215, 20, 10),
             text_primary: Color32::BLACK,
             text_secondary: Color32::BLACK,
             text_tertiary: Color32::BLACK,
@@ -698,6 +706,6 @@ mod tests {
         assert_eq!(metrics::BRAND_COLUMN_WIDTH, 94.0);
         assert_eq!(metrics::LIST_WIDTH, 256.0);
         assert_eq!(metrics::ROW_HEIGHT, 36.0);
-        assert_eq!(metrics::PLOT_ASPECT_RATIO, 3.4);
+        assert_eq!(metrics::PLOT_ASPECT_RATIO, 800.0 / 360.0);
     }
 }

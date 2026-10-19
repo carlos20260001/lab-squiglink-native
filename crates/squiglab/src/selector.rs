@@ -20,7 +20,7 @@ pub fn show(ui: &mut Ui, app: &mut App) {
     ui.horizontal(|ui| {
         ui.add(
             egui::TextEdit::singleline(&mut search)
-                .hint_text("Search")
+                .hint_text("SEARCH")
                 .desired_width(ui.available_width() - metrics::PADDING * 2.0),
         );
     });
@@ -104,7 +104,6 @@ fn brands(ui: &mut Ui, app: &mut App) {
                 );
             });
         });
-        ui.separator();
     }
 }
 
@@ -191,12 +190,29 @@ fn brand_column(ui: &mut Ui, app: &mut App) {
 fn model_list(ui: &mut Ui, app: &mut App) {
     let palette = theme::current_palette();
     let Some(brand) = app.brand.clone() else {
-        ui.label(
-            RichText::new("Choose a brand to see its measurements.")
-                .font(TypeStep::Body.font())
-                .color(palette.text_secondary),
-        );
-        return;
+        // The reference opens on the models of a brand, not on an empty
+        // column, so the first brand is chosen.
+        let first = app
+            .session
+            .groups
+            .iter()
+            .find(|group| !group.target)
+            .map(|group| group.brand.clone());
+        match first {
+            Some(brand) => {
+                app.brand = Some(brand.clone());
+                model_list(ui, app);
+                return;
+            }
+            None => {
+                ui.label(
+                    RichText::new("There are no measurements to show.")
+                        .font(TypeStep::Body.font())
+                        .color(palette.text_secondary),
+                );
+                return;
+            }
+        }
     };
     let groups: Vec<MeasurementGroup> = app
         .session
@@ -209,6 +225,44 @@ fn model_list(ui: &mut Ui, app: &mut App) {
         .id_salt("model_list")
         .auto_shrink([false, false])
         .show(ui, |ui| {
+            // The measurements that are on the graph lead the list, as chips
+            // the reference's do, and each carries the cross that takes it off.
+            let active: Vec<usize> = app.session.active.iter().copied().collect();
+            for index in active {
+                let name = app.session.groups[index].name.clone();
+                let width = ui.available_width() - 28.0;
+                ui.horizontal_top(|ui| {
+                    ui.add_sized(
+                        [width, 26.0],
+                        egui::Button::new(
+                            RichText::new(name.clone())
+                                .font(TypeStep::Body.font())
+                                .color(palette.on_accent),
+                        )
+                        .fill(palette.text_primary)
+                        .stroke(egui::Stroke::NONE)
+                        .corner_radius(egui::CornerRadius::same(4)),
+                    )
+                    .on_hover_text("This measurement is on the graph");
+                    if ui
+                        .add_sized(
+                            [20.0, 26.0],
+                            egui::Button::new(
+                                RichText::new("×")
+                                    .font(TypeStep::Body.font())
+                                    .color(palette.text_secondary),
+                            )
+                            .fill(egui::Color32::TRANSPARENT)
+                            .stroke(egui::Stroke::NONE),
+                        )
+                        .on_hover_text("Take this measurement off the graph")
+                        .clicked()
+                    {
+                        app.session.active.remove(&index);
+                        app.session.rebuild_display_curves();
+                    }
+                });
+            }
             for group in &groups {
                 if !app.search.is_empty() && !matches_search(&group.name, &app.search) {
                     continue;
@@ -220,29 +274,53 @@ fn model_list(ui: &mut Ui, app: &mut App) {
                     .position(|candidate| candidate.name == group.name)
                     .unwrap_or(0);
                 let on = app.session.active.contains(&index);
-                let response = ui
-                    .selectable_label(
-                        on,
-                        RichText::new(group.name.clone())
-                            .font(TypeStep::Body.font())
-                            .color(if on {
-                                palette.on_accent
-                            } else {
-                                palette.text_primary
-                            }),
-                    )
-                    .on_hover_text("Show this measurement on the graph");
-                if response.clicked() {
-                    if on {
-                        app.session.active.remove(&index);
-                    } else {
-                        app.session.active.insert(index);
+                ui.horizontal(|ui| {
+                    let response = ui
+                        .selectable_label(
+                            on,
+                            RichText::new(group.name.clone())
+                                .font(TypeStep::Body.font())
+                                .color(if on {
+                                    palette.on_accent
+                                } else {
+                                    palette.text_primary
+                                }),
+                        )
+                        .on_hover_text("Show this measurement on the graph");
+                    if response.clicked() {
+                        if on {
+                            app.session.active.remove(&index);
+                        } else {
+                            app.session.active.insert(index);
+                        }
+                        app.session.eq_phone = Some(index);
+                        app.session.rebuild_display_curves();
                     }
-                    app.session.eq_phone = Some(index);
-                    app.session.rebuild_display_curves();
-                }
+                    // The reference's rows carry a plus at their end, which
+                    // puts the measurement on the graph.
+                    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                        if ui
+                            .add_sized(
+                                [20.0, 20.0],
+                                egui::Button::new(
+                                    RichText::new("+")
+                                        .font(TypeStep::Body.font())
+                                        .color(palette.text_tertiary),
+                                )
+                                .fill(egui::Color32::TRANSPARENT)
+                                .stroke(egui::Stroke::NONE),
+                            )
+                            .on_hover_text("Put this measurement on the graph")
+                            .clicked()
+                            && !on
+                        {
+                            app.session.active.insert(index);
+                            app.session.eq_phone = Some(index);
+                            app.session.rebuild_display_curves();
+                        }
+                    });
+                });
                 augment(ui, group);
-                ui.separator();
             }
         });
 }

@@ -10,10 +10,10 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Theme {
-    /// A light theme, for a bright room.
+    /// A light theme, for a bright room. The reference's default.
+    #[default]
     Light,
     /// The dark theme, for a dim one.
-    #[default]
     Dark,
     /// A high contrast theme, for a screen that is hard to read.
     Contrast,

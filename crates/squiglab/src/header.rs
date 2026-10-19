@@ -25,14 +25,14 @@ pub fn show(ui: &mut Ui, app: &mut App) {
     ui.label(
         RichText::new(squiglab_core::product::APP_NAME)
             .font(TypeStep::Logo.font_bold())
-            .color(palette.text_primary),
+            .color(palette.on_accent),
     );
 
     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
         ui.label(
             RichText::new(format!("{} curves", app.session.display_curves.len()))
                 .font(TypeStep::Label.font())
-                .color(palette.text_tertiary),
+                .color(palette.text_secondary),
         );
     });
 }

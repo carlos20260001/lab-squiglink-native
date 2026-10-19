@@ -32,9 +32,9 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
     let window_height = ui.ctx().content_rect().height();
     let by_height =
         (window_height - metrics::GRAPH_CHROME_HEIGHT).max(120.0) * metrics::GRAPH_ASPECT;
-    // The graph leaves room for the target strip and the rows under it, so
-    // they are not pushed off the bottom of the window.
-    let height = (ui.available_height() - 240.0)
+    // The graph is as tall as the reference's rule says, and the column
+    // scrolls under it, as the reference's page does.
+    let height = (ui.available_height() - 40.0)
         .min(by_height / metrics::GRAPH_ASPECT)
         .max(160.0);
     let width = (height * metrics::PLOT_ASPECT_RATIO).min(ui.available_width());
