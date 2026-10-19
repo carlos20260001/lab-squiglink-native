@@ -62,9 +62,10 @@ impl Constraints {
         }
     }
 
-    /// The preset the reference ships, by its identifier.
+    /// One of the generic presets, by its identifier.
     ///
-    /// The values are the reference's own, from the file it loads them from.
+    /// These are the reference's own defaults. Its presets for particular
+    /// devices are its data about those devices, and are not carried here.
     pub fn preset(id: &str) -> Option<Self> {
         PRESETS
             .iter()
@@ -158,7 +159,7 @@ impl Preset {
 }
 
 /// The presets the reference ships, in the order it lists them.
-pub const PRESETS: [Preset; 6] = [
+pub const PRESETS: [Preset; 3] = [
     Preset {
         id: "default",
         label: "Default",
@@ -206,53 +207,6 @@ pub const PRESETS: [Preset; 6] = [
             31.0, 62.0, 125.0, 250.0, 500.0, 1000.0, 2000.0, 4000.0, 8000.0, 16000.0,
         ],
     },
-    Preset {
-        id: "fiio-eh11",
-        label: "Fiio EH11",
-        max_filters: 10,
-        allow_peaking: true,
-        allow_low_shelf: true,
-        allow_high_shelf: true,
-        freq_min: 20.0,
-        freq_max: 20000.0,
-        gain_min: -12.0,
-        gain_max: 12.0,
-        q_min: 0.25,
-        q_max: 8.0,
-        graphic_bands: &[],
-    },
-    Preset {
-        id: "sennheiser-hdb-630",
-        label: "Sennheiser HDB 630",
-        max_filters: 5,
-        allow_peaking: true,
-        allow_low_shelf: true,
-        allow_high_shelf: true,
-        freq_min: 20.0,
-        freq_max: 20000.0,
-        gain_min: -6.0,
-        gain_max: 6.0,
-        q_min: 0.25,
-        q_max: 8.0,
-        graphic_bands: &[],
-    },
-    Preset {
-        id: "sony-wh-1000xm6",
-        label: "Sony WH-1000XM6",
-        max_filters: 10,
-        allow_peaking: true,
-        allow_low_shelf: false,
-        allow_high_shelf: false,
-        freq_min: 0.0,
-        freq_max: 0.0,
-        gain_min: -6.0,
-        gain_max: 6.0,
-        q_min: 0.0,
-        q_max: 1.0,
-        graphic_bands: &[
-            31.0, 63.0, 125.0, 250.0, 500.0, 1000.0, 2000.0, 4000.0, 8000.0, 16000.0,
-        ],
-    },
 ];
 
 #[cfg(test)]
@@ -280,10 +234,13 @@ mod tests {
         assert_eq!(graphic.graphic_bands[0], 31.0);
         assert_eq!(graphic.q_max, 1.4);
 
-        let sony = Constraints::preset("sony-wh-1000xm6").expect("the Sony preset exists");
-        assert_eq!(sony.graphic_bands[1], 63.0, "the Sony's second band");
-        assert_eq!((sony.gain_min, sony.gain_max), (-6.0, 6.0));
-        assert_eq!((sony.q_min, sony.q_max), (0.0, 1.0));
+        // Only the generic presets travel: the reference's presets for
+        // particular devices are its data about those devices.
+        assert_eq!(PRESETS.len(), 3, "only the generic presets");
+        assert!(
+            Constraints::preset("no-such-preset").is_none(),
+            "an unknown preset should not resolve"
+        );
     }
 
     #[test]

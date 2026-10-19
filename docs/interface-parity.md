@@ -35,7 +35,7 @@ reference's own controls and their help text:
 
 | Control | Meaning |
 |---|---|
-| `eq-constraint-preset-input` | A preset: `default`, `auto-eq`, `generic-10-band`, `fiio-eh11`, `sennheiser-hdb-630`, `sony-wh-1000xm6`, or none |
+| `eq-constraint-preset-input` | A preset, or none. The reference also ships presets for particular devices; those are its data about those devices and are not carried over. |
 | `eq-constraint-type-toggle` ×3 | Whether the fit may use `PK`, `LSQ` or `HSQ` filters |
 | `eq-constraint-max-bands` | How many filters the fit may produce (0–20, 0 = no cap) |
 | `eq-constraint-freq-min` / `-max` | The frequency band the fit may use (0 = no limit) |
