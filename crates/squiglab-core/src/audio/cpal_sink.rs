@@ -84,6 +84,7 @@ pub fn start(settings: Settings) -> Result<Player, String> {
             loop {
                 match receiver.try_recv() {
                     Ok(Command::Settings(next)) => settings = next,
+                    Ok(Command::Chain(next)) => generator.set_chain(next),
                     Ok(Command::Stop) | Err(TryRecvError::Disconnected) => return,
                     Err(TryRecvError::Empty) => break,
                 }

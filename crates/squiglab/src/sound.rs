@@ -20,9 +20,27 @@ pub fn show(ui: &mut Ui, app: &mut App) {
                 .font(TypeStep::Title.font_bold())
                 .color(palette.text_primary),
         );
-        // The reference's Compare switch, which plays the source through the
-        // equalizer or not. The native plays the source on its own, so the
-        // switch is not offered.
+        ui.add_space(metrics::GAP);
+        // The reference's Compare switch: with it on (B) the source is played
+        // through the equalizer, and with it off (A) it is played on its own.
+        let mut compare = app.compare;
+        let letter = if compare { "B" } else { "A" };
+        if ui
+            .checkbox(&mut compare, letter)
+            .on_hover_text(
+                "With B the source is played through the equalizer, and with A it is played \
+                 on its own.",
+            )
+            .changed()
+        {
+            app.compare = compare;
+            push_chain(app);
+        }
+        ui.label(
+            RichText::new("Compare")
+                .font(TypeStep::Label.font())
+                .color(palette.text_tertiary),
+        );
     });
     ui.add_space(metrics::GAP);
 
@@ -167,6 +185,43 @@ fn play_button(ui: &mut Ui, playing: bool) -> bool {
     .clicked()
 }
 
+/// The filters the source is played through: the shared ones, and the ones
+/// the side banks hold.
+fn chain(app: &App) -> squiglab_core::audio::Chain {
+    use squiglab_core::equalizer::Biquad;
+    use squiglab_core::session::EqBank;
+    let rate = squiglab_core::equalizer::DEFAULT_SAMPLE_RATE;
+    let mut built = squiglab_core::audio::Chain::default();
+    let Some(phone) = app.session.eq_phone else {
+        return built;
+    };
+    let Some(rows) = app.session.eq_filters.get(&phone) else {
+        return built;
+    };
+    for row in rows.iter().filter(|row| row.enabled) {
+        let filter = Biquad::from_filter(&row.filter, rate);
+        match row.bank {
+            EqBank::Both => built.shared.push(filter),
+            EqBank::Left => built.left.push(filter),
+            EqBank::Right => built.right.push(filter),
+        }
+    }
+    built
+}
+
+/// Hand the filters to the player, so the sound runs through them.
+pub fn push_chain(app: &mut App) {
+    let Some(player) = &app.player else {
+        return;
+    };
+    let chain = if app.compare {
+        chain(app)
+    } else {
+        squiglab_core::audio::Chain::default()
+    };
+    player.set_chain(chain);
+}
+
 /// Start a source playing.
 fn play(app: &mut App, source: Source) {
     if source.is_tone() {
@@ -183,6 +238,7 @@ fn play(app: &mut App, source: Source) {
     match Player::start(settings) {
         Ok(player) => {
             app.player = Some(player);
+            push_chain(app);
             app.sound_message = Some(format!("{} is playing.", source.name()));
         }
         Err(problem) => {

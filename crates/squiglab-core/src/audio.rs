@@ -98,6 +98,29 @@ impl Default for Settings {
     }
 }
 
+/// The filters a source is played through.
+///
+/// The reference plays its sound through the parametric equalizer, so the
+/// bands can be heard doing what they say, and a switch chooses between the
+/// curve as it is and the curve as the bands shape it. The shared filters
+/// shape both channels; the left and right banks shape one side each.
+#[derive(Clone, Debug, Default)]
+pub struct Chain {
+    /// Applied to every channel.
+    pub shared: Vec<crate::equalizer::Biquad>,
+    /// Applied to the left channel only.
+    pub left: Vec<crate::equalizer::Biquad>,
+    /// Applied to the right channel only.
+    pub right: Vec<crate::equalizer::Biquad>,
+}
+
+impl Chain {
+    /// Whether anything runs through.
+    pub fn is_empty(&self) -> bool {
+        self.shared.is_empty() && self.left.is_empty() && self.right.is_empty()
+    }
+}
+
 /// Renders the generators into interleaved stereo sample buffers.
 ///
 /// One generator runs for the life of a playback session: its oscillator
@@ -119,6 +142,8 @@ pub struct Generator {
     /// Per-sample smoothing coefficients, derived from the time constants.
     glide_coefficient: f64,
     fade_coefficient: f32,
+    /// The filters the source is played through, and their state.
+    chain: Chain,
 }
 
 impl Generator {
@@ -140,17 +165,37 @@ impl Generator {
             white: White::new(seed),
             glide_coefficient: smoothing(sample_rate, GLIDE_SECONDS),
             fade_coefficient: smoothing(sample_rate, f64::from(FADE_SECONDS)) as f32,
+            chain: Chain::default(),
         }
     }
 
     /// Fill `buffer` with interleaved stereo frames, advancing the generator by
-    /// its length. The source is mono: both channels carry the same sample.
+    /// its length. The source is mono, so both channels start with the same
+    /// sample, and the filters then shape each side as the reference's do.
     pub fn render(&mut self, buffer: &mut [f32], settings: &Settings) {
         for frame in buffer.as_chunks_mut::<2>().0 {
             let sample = self.next_sample(settings);
-            frame[0] = sample;
-            frame[1] = sample;
+            let mut left = f64::from(sample);
+            let mut right = f64::from(sample);
+            let chain = &mut self.chain;
+            for filter in &mut chain.shared {
+                left = filter.process(left);
+                right = filter.process(right);
+            }
+            for filter in &mut chain.left {
+                left = filter.process(left);
+            }
+            for filter in &mut chain.right {
+                right = filter.process(right);
+            }
+            frame[0] = left as f32;
+            frame[1] = right as f32;
         }
+    }
+
+    /// Change the filters the source is played through.
+    pub fn set_chain(&mut self, chain: Chain) {
+        self.chain = chain;
     }
 
     /// The next sample.
@@ -381,6 +426,7 @@ impl SampleRing {
 /// What the player thread is told to do.
 enum Command {
     Settings(Settings),
+    Chain(Chain),
     Stop,
 }
 
@@ -430,6 +476,17 @@ impl Player {
     pub fn set_settings(&self, settings: Settings) {
         if let Some(commands) = &self.commands {
             let _ = commands.send(Command::Settings(settings));
+        }
+    }
+
+    /// Change the filters the source is played through.
+    ///
+    /// The chain carries the state of the filters, so it is sent whole: the
+    /// filters start again from silence, which is a click the reference's
+    /// live equalizer also has when the bands are changed under it.
+    pub fn set_chain(&self, chain: Chain) {
+        if let Some(commands) = &self.commands {
+            let _ = commands.send(Command::Chain(chain));
         }
     }
 

@@ -137,6 +137,66 @@ pub fn interp(frequencies: &[f64], curve: &[ResponsePoint]) -> Vec<ResponsePoint
 
 /// RBJ low-shelf coefficients as `(a0, a1, a2, b0, b1, b2)` with `a0`
 /// normalised to one, matching the order the JavaScript original returns.
+/// A filter that runs over a stream of samples.
+///
+/// The equalizer's coefficients describe a filter's shape; this is that filter
+/// running, sample by sample, so a sound can be heard through it.
+#[derive(Clone, Debug, Default)]
+pub struct Biquad {
+    /// The feed-forward coefficients, normalised.
+    b: [f64; 3],
+    /// The feedback coefficients, normalised.
+    a: [f64; 2],
+    /// The last two samples in.
+    x: [f64; 2],
+    /// The last two samples out.
+    y: [f64; 2],
+}
+
+impl Biquad {
+    /// A filter of the given kind, at the given frequency, Q and gain.
+    pub fn new(filter_type: FilterType, freq: f64, q: f64, gain: f64, sample_rate: f64) -> Self {
+        let [a0, a1, a2, b0, b1, b2] = match filter_type {
+            FilterType::Peaking => peaking(freq, q, gain, sample_rate),
+            FilterType::LowShelf => lowshelf(freq, q, gain, sample_rate),
+            FilterType::HighShelf => highshelf(freq, q, gain, sample_rate),
+        };
+        let _ = a0;
+        Self {
+            b: [b0, b1, b2],
+            a: [a1, a2],
+            x: [0.0, 0.0],
+            y: [0.0, 0.0],
+        }
+    }
+
+    /// A filter of the given kind, with the equalizer's own description.
+    pub fn from_filter(filter: &Filter, sample_rate: f64) -> Self {
+        Self::new(
+            filter.filter_type,
+            filter.freq,
+            filter.q,
+            filter.gain,
+            sample_rate,
+        )
+    }
+
+    /// Run one sample through the filter.
+    ///
+    /// Direct form one: the shape is the same as the coefficients the
+    /// equalizer computes for its curves, so what is heard is what is drawn.
+    pub fn process(&mut self, sample: f64) -> f64 {
+        let out = self.b[0] * sample + self.b[1] * self.x[0] + self.b[2] * self.x[1]
+            - self.a[0] * self.y[0]
+            - self.a[1] * self.y[1];
+        self.x[1] = self.x[0];
+        self.x[0] = sample;
+        self.y[1] = self.y[0];
+        self.y[0] = out;
+        out
+    }
+}
+
 pub fn lowshelf(freq: f64, q: f64, gain: f64, sample_rate: f64) -> [f64; 6] {
     let freq = (freq / sample_rate).clamp(1e-6, 1.0);
     let q = q.clamp(1e-4, 1000.0);
@@ -1143,6 +1203,41 @@ mod tests {
             );
         }
         assert_close(bands[0].db, 0.0, "the loudest band is normalised to zero");
+    }
+
+    #[test]
+    fn a_live_filter_shapes_a_signal_as_its_curve_says() {
+        // The filter that runs over the sound has to be the filter the curve
+        // is drawn from: a sweep through a peaking filter's centre frequency
+        // must come out with the gain the filter asked for.
+        let rate = DEFAULT_SAMPLE_RATE;
+        let filter = Filter::new(FilterType::Peaking, 1000.0, 1.0, 6.0);
+        let mut live = super::Biquad::from_filter(&filter, rate);
+
+        // A sine at the filter's centre frequency, run through it.
+        let frequency = 1000.0_f64;
+        let samples = 48_000;
+        let mut out = Vec::with_capacity(samples);
+        let mut phase = 0.0_f64;
+        for _ in 0..samples {
+            let sample = (std::f64::consts::TAU * frequency / rate * phase).sin();
+            phase += 1.0;
+            out.push(live.process(sample));
+        }
+        // The last cycle, once the filter has settled.
+        let measured = (out[samples - 480..]
+            .iter()
+            .map(|value| value * value)
+            .sum::<f64>()
+            / 480.0)
+            .sqrt();
+        let input = 1.0 / 2.0_f64.sqrt();
+        let measured_db: f64 = 20.0 * (measured / input).log10();
+        // A peaking filter at its own centre frequency gives its gain.
+        assert!(
+            (measured_db - 6.0).abs() < 0.2,
+            "the live filter gave {measured_db:.2} dB where the curve says 6"
+        );
     }
 
     #[test]

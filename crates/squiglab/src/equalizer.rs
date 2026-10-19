@@ -261,6 +261,7 @@ pub fn show(ui: &mut Ui, app: &mut App) {
     }
     if changed {
         write_bank(app, phone, bank, rows);
+        crate::sound::push_chain(app);
     }
 
     // --- the row controls ---

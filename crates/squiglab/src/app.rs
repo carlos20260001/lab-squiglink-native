@@ -57,6 +57,8 @@ pub struct App {
     pub frequency: f32,
     /// What the sound tools last said.
     pub sound_message: Option<String>,
+    /// Whether the sound is played through the equalizer.
+    pub compare: bool,
     /// Whether a picture of the window was asked for.
     pub screenshot_requested: bool,
     /// Whether the constraints panel is open.
@@ -133,6 +135,7 @@ impl App {
             volume: 0.2,
             frequency: 1000.0,
             sound_message: None,
+            compare: false,
             screenshot_requested: false,
             constraints_open: false,
             upload_path: String::new(),

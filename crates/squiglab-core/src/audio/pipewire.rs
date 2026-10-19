@@ -39,6 +39,9 @@ pub fn start(settings: Settings) -> Result<Player, String> {
     let (reports_out, reports) = mpsc::channel::<String>();
     let (done_out, done) = mpsc::channel::<()>();
     let shared = Arc::new(Mutex::new(settings));
+    // The filters the source is played through. The generator lives in the
+    // real-time callback, so the chain is shared the way the settings are.
+    let chain = Arc::new(Mutex::new(None::<crate::audio::Chain>));
     let played = Arc::new(Played::new(reports_out.clone()));
     let quit_handle = Arc::new(QuitHandle {
         // Filled in by the player thread once the loop exists.
@@ -49,6 +52,7 @@ pub fn start(settings: Settings) -> Result<Player, String> {
     let thread = std::thread::spawn(move || {
         let result = run(
             shared,
+            chain,
             command_receiver,
             &reports_for_thread,
             played,
@@ -172,6 +176,7 @@ impl QuitHandle {
 
 fn run(
     shared: Arc<Mutex<Settings>>,
+    chain: Arc<Mutex<Option<crate::audio::Chain>>>,
     command_receiver: mpsc::Receiver<Command>,
     reports: &mpsc::Sender<String>,
     played: Arc<Played>,
@@ -208,6 +213,7 @@ fn run(
     let negotiated_process = Arc::clone(&negotiated);
 
     let callback_shared = Arc::clone(&shared);
+    let callback_chain = Arc::clone(&chain);
     let callback_quit = Arc::clone(quit_handle);
     let mut scratch = vec![0.0_f32; SCRATCH_FRAMES * 2];
     // Counts the buffers the daemon actually handed over, and reports the
@@ -251,6 +257,9 @@ fn run(
                     Command::Settings(next) => {
                         *callback_shared.lock().expect("settings lock") = next;
                     }
+                    Command::Chain(next) => {
+                        *callback_chain.lock().expect("chain lock") = Some(next);
+                    }
                     Command::Stop => quit_now = true,
                 }
             }
@@ -264,6 +273,11 @@ fn run(
                 // The format has not been negotiated yet, or is one this code
                 // cannot write. Leave the buffer as the daemon set it.
                 return;
+            }
+            // A chain that has changed is handed to the generator, which
+            // starts its filters again from silence.
+            if let Some(next) = callback_chain.lock().expect("chain lock").take() {
+                generator.set_chain(next);
             }
             let settings = *callback_shared.lock().expect("settings lock");
             let Some(mut buffer) = stream.dequeue_buffer() else {
