@@ -215,25 +215,14 @@ fn row(ui: &mut Ui, app: &mut App, index: usize) {
 
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
             // Remove.
-            if crate::icons::button(
-                ui,
-                crate::icons::Icon::Close,
-                "Take this curve off the graph",
-                false,
-            )
-            .clicked()
+            if crate::icons::button(ui, crate::icons::Icon::Remove, "Remove graph", false).clicked()
             {
                 app.session.toggle_curve(index);
                 app.session.rebuild_display_curves();
             }
             // Export.
-            if crate::icons::button(
-                ui,
-                crate::icons::Icon::Save,
-                "Save this curve as a text file",
-                false,
-            )
-            .clicked()
+            if crate::icons::button(ui, crate::icons::Icon::Download, "Export graph", false)
+                .clicked()
             {
                 match app.session.export_curve_text(index) {
                     Ok(text) => app.say(format!("The curve is ready to save: {text}")),
@@ -242,18 +231,7 @@ fn row(ui: &mut Ui, app: &mut App, index: usize) {
             }
             // Pin.
             let pinned = app.session.pinned.contains(&index);
-            if crate::icons::button(
-                ui,
-                if pinned {
-                    crate::icons::Icon::Pin
-                } else {
-                    crate::icons::Icon::PinOutline
-                },
-                "Pin the curve so it stays when the others are taken off",
-                pinned,
-            )
-            .clicked()
-            {
+            if crate::icons::button(ui, crate::icons::Icon::Pin, "Pin graph", pinned).clicked() {
                 if pinned {
                     app.session.pinned.remove(&index);
                 } else {
@@ -266,7 +244,7 @@ fn row(ui: &mut Ui, app: &mut App, index: usize) {
             if crate::icons::button(
                 ui,
                 crate::icons::Icon::Baseline,
-                "Read the other curves against this one",
+                "Set as baseline",
                 baseline,
             )
             .clicked()
@@ -283,7 +261,7 @@ fn row(ui: &mut Ui, app: &mut App, index: usize) {
                 } else {
                     crate::icons::Icon::Eye
                 },
-                "Hide the curve without taking it off the graph",
+                "Hide graph",
                 hidden,
             )
             .clicked()
