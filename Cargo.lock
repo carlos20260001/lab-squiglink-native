@@ -3556,6 +3556,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "squiglab"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "dirs",
+ "eframe",
+ "egui",
+ "egui_extras",
+ "image",
+ "serde",
+ "serde_json",
+ "squiglab-core",
+ "toml 0.8.23",
+ "winresource",
+]
+
+[[package]]
 name = "squiglab-core"
 version = "0.1.0"
 dependencies = [

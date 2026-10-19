@@ -1,8 +1,9 @@
 [workspace]
-members = ["crates/squiglab-core", "crates/squiglab-legacy"]
+members = ["crates/squiglab-core", "crates/squiglab", "crates/squiglab-legacy"]
 resolver = "2"
 
-# The program's own crate, and the interface that draws it, are members of
-# this workspace. The application itself is the legacy interface, kept whole so
-# that a new one can be written beside it; the rules of the program live in
-# squiglab-core and know nothing about how anything is drawn.
+# The program's own crate, and the interfaces that draw it, are members of
+# this workspace. The rules of the program live in squiglab-core and know
+# nothing about how anything is drawn; squiglab is the new interface and
+# squiglab-legacy the old one, kept whole beside it until the new one has
+# taken over.
