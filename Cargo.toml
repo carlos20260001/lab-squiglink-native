@@ -1,39 +1,8 @@
 [workspace]
-members = ["crates/squiglab-core"]
+members = ["crates/squiglab-core", "crates/squiglab-legacy"]
+resolver = "2"
 
-[package]
-name = "squiglab"
-version = "0.1.0"
-edition = "2021"
-default-run = "squiglab"
-
-[dependencies]
-# The program core: the measurements, the filter maths, the audio, and the
-# rules that turn one into another. It does not know about the interface, so
-# the interface can be rewritten without touching it.
-squiglab-core = { path = "crates/squiglab-core" }
-eframe = "0.36"
-egui = "0.36"
-egui_extras = "0.36"
-image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
-anyhow = "1.0"
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-walkdir = "2.4"
-once_cell = "1.19"
-rgb = "0.8"
-dirs = "7"
-toml = "0.8"
-png = "0.18"
-resvg = "0.48"
-
-[[bin]]
-name = "app-bundle"
-path = "tools/app_bundle.rs"
-
-[build-dependencies]
-png = "0.18"
-resvg = "0.48"
-serde = { version = "1.0", features = ["derive"] }
-toml = "0.8"
-winresource = "0.1"
+# The program's own crate, and the interface that draws it, are members of
+# this workspace. The application itself is the legacy interface, kept whole so
+# that a new one can be written beside it; the rules of the program live in
+# squiglab-core and know nothing about how anything is drawn.

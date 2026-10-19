@@ -9,6 +9,16 @@ use std::{
     process::Command,
 };
 
+/// The repository's root: the data, the example configurations, the licence
+/// and the shortcut script live there, whatever the crate's own directory is.
+fn repository_root(crate_root: &Path) -> PathBuf {
+    crate_root
+        .parent()
+        .and_then(Path::parent)
+        .expect("the application crate sits inside the repository")
+        .to_path_buf()
+}
+
 fn main() -> Result<()> {
     let args = env::args().skip(1).collect::<Vec<_>>();
     if args.len() != 4 || args[0] != "package" {
@@ -16,6 +26,8 @@ fn main() -> Result<()> {
         std::process::exit(2);
     }
 
+    // The crate holds the manifest and the icons; the data, the example
+    // configurations and the licence live at the repository's root.
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let manifest_path = root.join("packaging/app.toml");
     let manifest = branding::load_manifest(&manifest_path)?;
@@ -66,14 +78,16 @@ fn remove_icon_containers(icons: &IconSet) -> Result<()> {
 fn copy_app_files(root: &Path, binary: &Path, destination: &Path, binary_name: &str) -> Result<()> {
     fs::create_dir_all(destination)?;
     fs::copy(binary, destination.join(binary_name))?;
-    copy_directory(&root.join("data"), &destination.join("data"))?;
-    copy_directory(&root.join("data_hp"), &destination.join("data_hp"))?;
+    let repository = repository_root(root);
+    copy_directory(&repository.join("data"), &destination.join("data"))?;
+    let repository = repository_root(root);
+    copy_directory(&repository.join("data_hp"), &destination.join("data_hp"))?;
     copy_directory(
-        &root.join("config-examples"),
+        &repository.join("config-examples"),
         &destination.join("config-examples"),
     )?;
-    fs::copy(root.join("README.md"), destination.join("README.md"))?;
-    fs::copy(root.join("LICENSE"), destination.join("LICENSE"))?;
+    fs::copy(repository.join("README.md"), destination.join("README.md"))?;
+    fs::copy(repository.join("LICENSE"), destination.join("LICENSE"))?;
     Ok(())
 }
 
@@ -152,7 +166,7 @@ fn package_windows(
         app_dir.join(format!("{}.ico", manifest.application.binary_name)),
     )?;
     remove_icon_containers(&icons)?;
-    let script = root.join("scripts/create_shortcut.ps1");
+    let script = repository_root(root).join("scripts/create_shortcut.ps1");
     let status = Command::new("powershell.exe")
         .args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-File"])
         .arg(script)
@@ -186,14 +200,16 @@ fn package_macos(
     fs::create_dir_all(&macos)?;
     fs::create_dir_all(&resources)?;
     fs::copy(binary, macos.join(&manifest.application.binary_name))?;
-    copy_directory(&root.join("data"), &resources.join("data"))?;
-    copy_directory(&root.join("data_hp"), &resources.join("data_hp"))?;
+    let repository = repository_root(root);
+    copy_directory(&repository.join("data"), &resources.join("data"))?;
+    let repository = repository_root(root);
+    copy_directory(&repository.join("data_hp"), &resources.join("data_hp"))?;
     copy_directory(
-        &root.join("config-examples"),
+        &repository.join("config-examples"),
         &resources.join("config-examples"),
     )?;
-    fs::copy(root.join("README.md"), resources.join("README.md"))?;
-    fs::copy(root.join("LICENSE"), resources.join("LICENSE"))?;
+    fs::copy(repository.join("README.md"), resources.join("README.md"))?;
+    fs::copy(repository.join("LICENSE"), resources.join("LICENSE"))?;
     let icons = prepare_package(icon_path, &resources)?;
     let icns_name = format!("{}.icns", manifest.application.name);
     fs::copy(&icons.icns, resources.join(&icns_name))?;

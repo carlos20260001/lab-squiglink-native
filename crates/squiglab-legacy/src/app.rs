@@ -1,6 +1,5 @@
 use egui::{Color32, Context, RichText, Ui};
 use serde::{Deserialize, Serialize};
-use squiglab::graph::{export_svg as render_svg, DeltaBar, GraphCanvas, Provenance, Watermark};
 use squiglab_core::audio::Player;
 use squiglab_core::color::target_color;
 use squiglab_core::data::{self, CurveInfo, FRPoint, PhoneBook};
@@ -11,6 +10,9 @@ use squiglab_core::processing;
 use squiglab_core::session::{
     ChannelMode, CurveSource, DisplayCurve, EqRow, MeasurementGroup, MeasurementVariant,
     Preferences,
+};
+use squiglab_legacy::graph::{
+    export_svg as render_svg, DeltaBar, GraphCanvas, Provenance, Watermark,
 };
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
@@ -271,8 +273,8 @@ const TUTORIAL_SEGMENTS: [TutorialSegment; 7] = [
 
 /// The frequency regions drawn beneath the axis, derived from the tutorial so
 /// the two can never disagree about where a band starts or ends.
-const FREQUENCY_BANDS: [squiglab::graph::FrequencyBand; 7] = {
-    use squiglab::graph::FrequencyBand;
+const FREQUENCY_BANDS: [squiglab_legacy::graph::FrequencyBand; 7] = {
+    use squiglab_legacy::graph::FrequencyBand;
     [
         FrequencyBand {
             title: TUTORIAL_SEGMENTS[0].title,
@@ -584,7 +586,7 @@ impl CrinGraphApp {
 
         let database_dir = resolve_measurement_dir(
             config.measurements.database_dir.as_deref(),
-            Path::new("data"),
+            &repository_root().join("data"),
             &config_path,
         );
         let (mut curves, grid) = data::load_data(&database_dir)?;
@@ -596,7 +598,7 @@ impl CrinGraphApp {
 
         let headphone_database_dir = resolve_measurement_dir(
             config.measurements.headphone_database_dir.as_deref(),
-            Path::new("data_hp"),
+            &repository_root().join("data_hp"),
             &config_path,
         );
         if config.measurements.headphone_database_dir.is_some() || headphone_database_dir.is_dir() {
@@ -620,7 +622,7 @@ impl CrinGraphApp {
         self.session.delta_error = None;
         let delta_dir = resolve_measurement_dir(
             config.measurements.delta_dir.as_deref(),
-            Path::new("data_deltas"),
+            &repository_root().join("data_deltas"),
             &config_path,
         );
         self.session.delta_targets = if delta_dir.is_dir() {
@@ -760,8 +762,8 @@ impl CrinGraphApp {
     /// and the two view toggles. Drawn inline on wide viewports and inside the
     /// overflow menu on narrow ones, so the two layouts cannot drift apart.
     fn toolbar_processing(&mut self, ui: &mut Ui) {
-        use squiglab::ui as cgui;
-        let palette = squiglab::theme::Palette::resolve(ui.visuals().dark_mode);
+        use squiglab_legacy::ui as cgui;
+        let palette = squiglab_legacy::theme::Palette::resolve(ui.visuals().dark_mode);
         // Both targets are shown, as in the reference, with the one in use
         // picked out and the other recessive; dragging the other makes it the
         // one in use.
@@ -837,7 +839,7 @@ impl CrinGraphApp {
     /// frequency-guide toggle. Also shared between the inline row and the
     /// overflow menu.
     fn toolbar_actions(&mut self, ui: &mut Ui) {
-        use squiglab::ui as cgui;
+        use squiglab_legacy::ui as cgui;
         if cgui::action_button(ui, "Recolor", "Cycle the measurement curve colors.") {
             self.session.color_offset = self.session.color_offset.wrapping_add(1);
         }
@@ -885,8 +887,8 @@ impl CrinGraphApp {
     /// wordmark no longer lives in the toolbar, so the toolbar keeps processing /
     // actions only.
     fn header_panel(&mut self, ui: &mut Ui, desktop: bool) {
-        use squiglab::ui as cgui;
-        let palette = squiglab::theme::Palette::resolve(ui.visuals().dark_mode);
+        use squiglab_legacy::ui as cgui;
+        let palette = squiglab_legacy::theme::Palette::resolve(ui.visuals().dark_mode);
         egui::Panel::top("header")
             .exact_size(48.0)
             .frame(
@@ -903,8 +905,8 @@ impl CrinGraphApp {
                             .add(
                                 egui::Button::new(
                                     egui::RichText::new("≡")
-                                        .font(squiglab::theme::font_bold(
-                                            squiglab::theme::TypeStep::Subtitle,
+                                        .font(squiglab_legacy::theme::font_bold(
+                                            squiglab_legacy::theme::TypeStep::Subtitle,
                                         ))
                                         .color(palette.text_primary),
                                 )
@@ -937,8 +939,8 @@ impl CrinGraphApp {
                                 .add(
                                     egui::Button::new(
                                         egui::RichText::new("▤")
-                                            .font(squiglab::theme::font_bold(
-                                                squiglab::theme::TypeStep::Subtitle,
+                                            .font(squiglab_legacy::theme::font_bold(
+                                                squiglab_legacy::theme::TypeStep::Subtitle,
                                             ))
                                             .color(palette.text_primary),
                                     )
@@ -981,7 +983,7 @@ impl CrinGraphApp {
         if !self.menu_open {
             return;
         }
-        let palette = squiglab::theme::Palette::resolve(self.session.dark_mode);
+        let palette = squiglab_legacy::theme::Palette::resolve(self.session.dark_mode);
 
         // Dimmed backdrop; clicking it closes the drawer. It deliberately
         // stops at the drawer's right edge so taps inside the drawer column
@@ -1022,8 +1024,9 @@ impl CrinGraphApp {
                                     MENU_DRAWER_WIDTH - 32.0,
                                     screen_rect.height() - 24.0,
                                 ));
-                                ui.spacing_mut().item_spacing.y = squiglab::ui::Spacing::TIGHT;
-                                ui.add_space(squiglab::ui::Spacing::SECTION);
+                                ui.spacing_mut().item_spacing.y =
+                                    squiglab_legacy::ui::Spacing::TIGHT;
+                                ui.add_space(squiglab_legacy::ui::Spacing::SECTION);
 
                                 let rows = [
                                     (Category::Iems, "IEMS"),
@@ -1048,7 +1051,7 @@ impl CrinGraphApp {
                                         self.menu_open = false;
                                     }
                                 }
-                                ui.add_space(squiglab::ui::Spacing::SECTION);
+                                ui.add_space(squiglab_legacy::ui::Spacing::SECTION);
                                 ui.separator();
                                 if ui
                                     .add(
@@ -1084,7 +1087,7 @@ impl CrinGraphApp {
         if !self.library_drawer_open && opening <= 0.0 {
             return;
         }
-        let palette = squiglab::theme::Palette::resolve(self.session.dark_mode);
+        let palette = squiglab_legacy::theme::Palette::resolve(self.session.dark_mode);
         let height =
             (screen_rect.height() * 0.70).clamp(LIBRARY_SHEET_MIN_HEIGHT, LIBRARY_SHEET_MAX_HEIGHT);
         let top = screen_rect.bottom() - height * opening;
@@ -1145,7 +1148,7 @@ impl CrinGraphApp {
     }
 
     fn toolbar(&mut self, ui: &mut Ui) {
-        use squiglab::ui as cgui;
+        use squiglab_legacy::ui as cgui;
         let previous_processing_settings = (
             self.session.phon_normalization,
             self.session.target_phon,
@@ -1403,7 +1406,7 @@ impl CrinGraphApp {
     /// equalizer share one slot, matching the reference tool's column.
     fn library_column(&mut self, ui: &mut Ui) {
         let mut tab = self.library_tab;
-        squiglab::ui::tab_strip(
+        squiglab_legacy::ui::tab_strip(
             ui,
             &mut tab,
             &[
@@ -1423,8 +1426,8 @@ impl CrinGraphApp {
     /// Every brand in the database, each showing how many models it has, with
     /// the chosen one narrowing the model list.
     fn brand_list(&mut self, ui: &mut Ui) {
-        use squiglab::ui as cgui;
-        squiglab::ui::section_header(ui, "Brands", None);
+        use squiglab_legacy::ui as cgui;
+        squiglab_legacy::ui::section_header(ui, "Brands", None);
         ui.add_space(cgui::Spacing::TIGHT);
         let counts = self.brand_model_counts();
         egui::ScrollArea::vertical()
@@ -1439,7 +1442,7 @@ impl CrinGraphApp {
                     let selected = self.brand_filter.as_deref() == Some(brand.as_str());
                     let label = RichText::new(format!("{brand} ({count})"))
                         .strong()
-                        .size(squiglab::theme::TypeStep::Body.size());
+                        .size(squiglab_legacy::theme::TypeStep::Body.size());
                     if ui.selectable_label(selected, label).clicked() {
                         // Choosing the brand already showing clears the filter.
                         self.brand_filter = (!selected).then(|| brand.clone());
@@ -1694,7 +1697,7 @@ impl CrinGraphApp {
         }
         let mut open = true;
         let mut finished = false;
-        let palette = squiglab::theme::Palette::resolve(self.session.dark_mode);
+        let palette = squiglab_legacy::theme::Palette::resolve(self.session.dark_mode);
         egui::Window::new("How to use the equalizer")
             .open(&mut open)
             .resizable(false)
@@ -1704,17 +1707,17 @@ impl CrinGraphApp {
             .show(ctx, |ui| {
                 ui.label(
                     RichText::new("How to use the equalizer")
-                        .font(squiglab::theme::font_bold(squiglab::theme::TypeStep::Heading))
+                        .font(squiglab_legacy::theme::font_bold(squiglab_legacy::theme::TypeStep::Heading))
                         .color(palette.text_primary),
                 );
-                ui.add_space(squiglab::ui::Spacing::COMPACT);
+                ui.add_space(squiglab_legacy::ui::Spacing::COMPACT);
                 ui.label(
                     RichText::new(
                         "The equalizer customises the sound of any headphone. What do you want to do?",
                     )
                     .color(palette.text_secondary),
                 );
-                ui.add_space(squiglab::ui::Spacing::COMPACT);
+                ui.add_space(squiglab_legacy::ui::Spacing::COMPACT);
 
                 // Each path is collapsible, as the reference's are, so the
                 // window can be read without committing to anything.
@@ -1792,13 +1795,13 @@ impl CrinGraphApp {
     /// picker without a new dependency, so the path is typed, as it is for
     /// importing a parametric configuration.
     fn upload_window(&mut self, ctx: &Context) {
-        use squiglab::ui as cgui;
+        use squiglab_legacy::ui as cgui;
         if !self.upload_open {
             return;
         }
         let mut open = true;
         let mut cancelled = false;
-        let palette = squiglab::theme::Palette::resolve(self.session.dark_mode);
+        let palette = squiglab_legacy::theme::Palette::resolve(self.session.dark_mode);
         egui::Window::new("Upload measurement")
             .open(&mut open)
             .resizable(false)
@@ -1862,9 +1865,9 @@ impl CrinGraphApp {
     /// The player is created on the first play and dropped on stop, so nothing
     /// is held open while the sound is not wanted.
     fn sound_tools(&mut self, ui: &mut Ui) {
-        use squiglab::ui as cgui;
         use squiglab_core::audio::Source;
-        let palette = squiglab::theme::Palette::resolve(ui.visuals().dark_mode);
+        use squiglab_legacy::ui as cgui;
+        let palette = squiglab_legacy::theme::Palette::resolve(ui.visuals().dark_mode);
         ui.add_space(cgui::Spacing::RELAXED);
         cgui::section_header(ui, "Sound Tools", None);
         ui.add_space(cgui::Spacing::TIGHT);
@@ -1998,15 +2001,15 @@ impl CrinGraphApp {
     /// table, Auto EQ, and the two export formats, laid out as the reference
     /// arranges them.
     fn equalizer_panel(&mut self, ui: &mut Ui) {
-        use squiglab::ui as cgui;
-        let palette = squiglab::theme::Palette::resolve(ui.visuals().dark_mode);
+        use squiglab_legacy::ui as cgui;
+        let palette = squiglab_legacy::theme::Palette::resolve(ui.visuals().dark_mode);
 
         // --- title, reset, and the Auto EQ budget ---
         ui.horizontal(|ui| {
             ui.label(
                 RichText::new("Parametric Equalizer")
-                    .font(squiglab::theme::font_bold(
-                        squiglab::theme::TypeStep::Subtitle,
+                    .font(squiglab_legacy::theme::font_bold(
+                        squiglab_legacy::theme::TypeStep::Subtitle,
                     ))
                     .color(palette.text_primary),
             );
@@ -2026,7 +2029,7 @@ impl CrinGraphApp {
                 ui.menu_button("Settings", |ui| {
                     ui.label(
                         RichText::new("AutoEQ")
-                            .size(squiglab::theme::TypeStep::Caption.size())
+                            .size(squiglab_legacy::theme::TypeStep::Caption.size())
                             .color(palette.text_secondary),
                     );
                     let mut budget = self.session.eq_max_filters as f64;
@@ -2136,7 +2139,7 @@ impl CrinGraphApp {
         let header = |ui: &mut Ui, text: &str| {
             ui.label(
                 RichText::new(text)
-                    .size(squiglab::theme::TypeStep::Micro.size())
+                    .size(squiglab_legacy::theme::TypeStep::Micro.size())
                     .color(palette.text_tertiary),
             );
         };
@@ -2390,7 +2393,7 @@ impl CrinGraphApp {
                 });
                 if let Some(error) = &self.eq_import_error {
                     ui.colored_label(
-                        squiglab::theme::Palette::resolve(ui.visuals().dark_mode).error,
+                        squiglab_legacy::theme::Palette::resolve(ui.visuals().dark_mode).error,
                         error,
                     );
                 }
@@ -2401,9 +2404,9 @@ impl CrinGraphApp {
     /// The library body, shared by both viewports so the two layouts cannot
     /// drift apart.
     fn library_contents(&mut self, ui: &mut Ui) {
-        use squiglab::ui as cgui;
-        let palette = squiglab::theme::Palette::resolve(ui.visuals().dark_mode);
-        squiglab::ui::section_header(
+        use squiglab_legacy::ui as cgui;
+        let palette = squiglab_legacy::theme::Palette::resolve(ui.visuals().dark_mode);
+        squiglab_legacy::ui::section_header(
             ui,
             "Library",
             Some(&format!(
@@ -2416,7 +2419,9 @@ impl CrinGraphApp {
         ui.add(
             egui::TextEdit::singleline(&mut self.search)
                 .hint_text("Search models")
-                .font(squiglab::theme::font(squiglab::theme::TypeStep::Body))
+                .font(squiglab_legacy::theme::font(
+                    squiglab_legacy::theme::TypeStep::Body,
+                ))
                 .text_color(palette.text_primary),
         );
         ui.add_space(cgui::Spacing::TIGHT);
@@ -2504,7 +2509,7 @@ impl CrinGraphApp {
     /// Read-only: it reports the brand the user clicked rather than mutating
     /// state, so it can run side by side with the model column.
     fn brand_column(&self, ui: &mut Ui, counts: &[(String, usize)]) -> Option<Option<String>> {
-        use squiglab::ui as cgui;
+        use squiglab_legacy::ui as cgui;
         ui.spacing_mut().item_spacing.y = cgui::Spacing::TIGHT;
         if self.brand_filter.is_some() && ui.selectable_label(false, "All brands").clicked() {
             return Some(None);
@@ -2513,7 +2518,7 @@ impl CrinGraphApp {
             let selected = self.brand_filter.as_deref() == Some(brand.as_str());
             let label = RichText::new(format!("{brand} ({count})"))
                 .strong()
-                .size(squiglab::theme::TypeStep::Body.size());
+                .size(squiglab_legacy::theme::TypeStep::Body.size());
             if ui.selectable_label(selected, label).clicked() {
                 return Some(Some(brand.clone()));
             }
@@ -2533,13 +2538,15 @@ impl CrinGraphApp {
         models: &[(usize, String)],
         section: &mut LibrarySection,
     ) -> Vec<usize> {
-        use squiglab::ui as cgui;
+        use squiglab_legacy::ui as cgui;
         let mut toggles = Vec::new();
         ui.spacing_mut().item_spacing.y = cgui::Spacing::TIGHT;
         for (index, model_name) in models {
             let selected = self.session.active.contains(index);
             let response = ui.horizontal(|ui| {
-                ui.label(RichText::new(model_name).size(squiglab::theme::TypeStep::Body.size()));
+                ui.label(
+                    RichText::new(model_name).size(squiglab_legacy::theme::TypeStep::Body.size()),
+                );
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if ui.button("+").clicked() {
                         toggles.push(*index);
@@ -2570,11 +2577,11 @@ impl CrinGraphApp {
     /// Rendered inside `lower_strip` rather than owning its own panel, so the
     /// strip never spans under the library column.
     fn manager_content(&mut self, ui: &mut Ui) {
-        use squiglab::ui as cgui;
+        use squiglab_legacy::ui as cgui;
         let count = self.session.active.len()
             + self.session.active_targets.len()
             + self.session.active_deltas.len();
-        squiglab::ui::section_header(
+        squiglab_legacy::ui::section_header(
             ui,
             "Active curves",
             (count > 0).then_some(&count.to_string()),
@@ -2638,18 +2645,18 @@ impl CrinGraphApp {
         stack_controls: bool,
         removals: &mut Vec<usize>,
     ) {
-        use squiglab::ui as cgui;
-        let palette = squiglab::theme::Palette::resolve(ui.visuals().dark_mode);
+        use squiglab_legacy::ui as cgui;
+        let palette = squiglab_legacy::theme::Palette::resolve(ui.visuals().dark_mode);
         let identity = |ui: &mut Ui| {
             ui.label(
                 egui::RichText::new(&target.name)
                     .strong()
-                    .size(squiglab::theme::TypeStep::Body.size())
+                    .size(squiglab_legacy::theme::TypeStep::Body.size())
                     .color(palette.text_secondary),
             );
             ui.label(
                 egui::RichText::new(format!("{} → {}", target.clone_rig, target.original_rig))
-                    .size(squiglab::theme::TypeStep::Micro.size())
+                    .size(squiglab_legacy::theme::TypeStep::Micro.size())
                     .color(palette.text_tertiary),
             );
             if target.is_placeholder() {
@@ -2698,16 +2705,16 @@ impl CrinGraphApp {
                 ui.horizontal(|ui| self.manager_row_identity(ui, index, group));
                 // Wrapped, so a long control list flows rather than clipping.
                 ui.horizontal_wrapped(|ui| {
-                    ui.spacing_mut().item_spacing.x = squiglab::ui::Spacing::COMPACT;
+                    ui.spacing_mut().item_spacing.x = squiglab_legacy::ui::Spacing::COMPACT;
                     self.manager_row_controls(ui, index, group, false, removals);
                 });
             });
         } else {
             ui.horizontal(|ui| {
-                ui.spacing_mut().item_spacing.x = squiglab::ui::Spacing::COMPACT;
+                ui.spacing_mut().item_spacing.x = squiglab_legacy::ui::Spacing::COMPACT;
                 self.manager_row_identity(ui, index, group);
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    ui.spacing_mut().item_spacing.x = squiglab::ui::Spacing::COMPACT;
+                    ui.spacing_mut().item_spacing.x = squiglab_legacy::ui::Spacing::COMPACT;
                     self.manager_row_controls(ui, index, group, true, removals);
                 });
             });
@@ -2716,14 +2723,14 @@ impl CrinGraphApp {
 
     /// A row's identity: its colour swatch, its name, and the variant chooser.
     fn manager_row_identity(&mut self, ui: &mut Ui, index: usize, group: &MeasurementGroup) {
-        use squiglab::ui as cgui;
-        let palette = squiglab::theme::Palette::resolve(ui.visuals().dark_mode);
+        use squiglab_legacy::ui as cgui;
+        let palette = squiglab_legacy::theme::Palette::resolve(ui.visuals().dark_mode);
         let color = self.curve_color(index);
         // A filled disc rather than a square: the reference tool marks a curve
         // with one, and a disc reads as a swatch of ink rather than a chip of UI.
         let (swatch, _) = ui.allocate_exact_size(egui::vec2(11.0, 11.0), egui::Sense::hover());
         ui.painter()
-            .circle_filled(swatch.center(), 5.5, squiglab::theme::color(color));
+            .circle_filled(swatch.center(), 5.5, squiglab_legacy::theme::color(color));
         if group.target {
             // A target says so, because the row is the reference the other rows
             // are read against rather than a curve in its own right, and
@@ -2731,21 +2738,21 @@ impl CrinGraphApp {
             ui.label(
                 egui::RichText::new(format!("Target: {}", group.name))
                     .strong()
-                    .size(squiglab::theme::TypeStep::Body.size())
+                    .size(squiglab_legacy::theme::TypeStep::Body.size())
                     .color(palette.text_secondary),
             );
         } else {
             ui.label(
                 egui::RichText::new(&group.name)
                     .strong()
-                    .size(squiglab::theme::TypeStep::Body.size())
-                    .color(squiglab::theme::color(color)),
+                    .size(squiglab_legacy::theme::TypeStep::Body.size())
+                    .color(squiglab_legacy::theme::color(color)),
             );
         }
         if !group.brand.is_empty() {
             ui.label(
                 egui::RichText::new(&group.brand)
-                    .size(squiglab::theme::TypeStep::Micro.size())
+                    .size(squiglab_legacy::theme::TypeStep::Micro.size())
                     .color(palette.text_tertiary),
             );
         }
@@ -2811,7 +2818,7 @@ impl CrinGraphApp {
         group_index: usize,
         color: egui::Color32,
     ) -> egui::Response {
-        let palette = squiglab::theme::Palette::resolve(ui.visuals().dark_mode);
+        let palette = squiglab_legacy::theme::Palette::resolve(ui.visuals().dark_mode);
         let is_target = self.session.groups[group_index].target;
         let (rect, response) = ui.allocate_exact_size(
             egui::vec2(PREVIEW_WIDTH, PREVIEW_HEIGHT),
@@ -2886,8 +2893,8 @@ impl CrinGraphApp {
         right_to_left: bool,
         removals: &mut Vec<usize>,
     ) {
-        use squiglab::ui as cgui;
-        let palette = squiglab::theme::Palette::resolve(ui.visuals().dark_mode);
+        use squiglab_legacy::ui as cgui;
+        let palette = squiglab_legacy::theme::Palette::resolve(ui.visuals().dark_mode);
         let pinned = self.session.pinned.contains(&index);
         let hidden = self.session.hidden.contains(&index);
         let baseline = self.session.baseline == Some(index);
@@ -3031,7 +3038,8 @@ impl CrinGraphApp {
                 if ui
                     .selectable_label(
                         channel_mode == mode,
-                        egui::RichText::new(label).size(squiglab::theme::TypeStep::Micro.size()),
+                        egui::RichText::new(label)
+                            .size(squiglab_legacy::theme::TypeStep::Micro.size()),
                     )
                     .on_hover_text("Which channel of this curve to show.")
                     .clicked()
@@ -3042,7 +3050,11 @@ impl CrinGraphApp {
                     self.dirty = true;
                 }
             }
-            self.curve_preview(ui, index, squiglab::theme::color(self.curve_color(index)));
+            self.curve_preview(
+                ui,
+                index,
+                squiglab_legacy::theme::color(self.curve_color(index)),
+            );
             let variant_index = self
                 .session
                 .variant_choices
@@ -3139,7 +3151,7 @@ impl CrinGraphApp {
                 .collect();
             // The deviation strip is drawn by the interface, so the core's
             // colour is turned into the interface's here.
-            let color = squiglab::theme::color(self.display_curve_color(curve));
+            let color = squiglab_legacy::theme::color(self.display_curve_color(curve));
             if corrections.is_empty() {
                 deviations.push(DeviationCurve {
                     label: curve.label.clone(),
@@ -3177,7 +3189,7 @@ impl CrinGraphApp {
             deviations.push(DeviationCurve {
                 label: correction.name.clone(),
                 points: correction.points.clone(),
-                color: squiglab::theme::Palette::resolve(true).text_secondary,
+                color: squiglab_legacy::theme::Palette::resolve(true).text_secondary,
                 dashed: true,
             });
         }
@@ -3227,7 +3239,7 @@ impl CrinGraphApp {
                 label: &deviation.label,
                 label_key: &deviation.label,
                 points: &deviation.points,
-                color: squiglab::theme::core_color(deviation.color),
+                color: squiglab_legacy::theme::core_color(deviation.color),
                 dashed: deviation.dashed,
                 target: true,
             })
@@ -3257,7 +3269,9 @@ impl CrinGraphApp {
                 } else {
                     "Select a target and at least one measurement."
                 };
-                ui.label(RichText::new(message).size(squiglab::theme::TypeStep::Body.size()));
+                ui.label(
+                    RichText::new(message).size(squiglab_legacy::theme::TypeStep::Body.size()),
+                );
             });
         self.session.show_delta = open;
     }
@@ -3279,7 +3293,7 @@ impl CrinGraphApp {
     /// and the manager: the manager's rows are the selection you are working
     /// with, and the status line is about the app rather than about them.
     fn status_panel(&mut self, ui: &mut Ui) {
-        let palette = squiglab::theme::Palette::resolve(self.session.dark_mode);
+        let palette = squiglab_legacy::theme::Palette::resolve(self.session.dark_mode);
         egui::Panel::bottom("status")
             .resizable(false)
             .default_size(24.0)
@@ -3293,7 +3307,7 @@ impl CrinGraphApp {
                             self.session.zoom.x_range().0 as u32,
                             self.session.zoom.x_range().1 as u32
                         ))
-                        .size(squiglab::theme::TypeStep::Micro.size())
+                        .size(squiglab_legacy::theme::TypeStep::Micro.size())
                         .color(palette.text_secondary),
                     );
                     if let Some(index) = self.session.baseline {
@@ -3302,7 +3316,7 @@ impl CrinGraphApp {
                                 "Baseline: {}",
                                 self.session.groups[index].name
                             ))
-                            .size(squiglab::theme::TypeStep::Micro.size())
+                            .size(squiglab_legacy::theme::TypeStep::Micro.size())
                             .color(palette.text_secondary),
                         );
                     }
@@ -3325,7 +3339,7 @@ impl CrinGraphApp {
                 if let Some(message) = &self.screenshot_message {
                     ui.label(
                         egui::RichText::new(message.as_str())
-                            .size(squiglab::theme::TypeStep::Micro.size())
+                            .size(squiglab_legacy::theme::TypeStep::Micro.size())
                             .color(palette.text_secondary),
                     );
                 }
@@ -3335,7 +3349,7 @@ impl CrinGraphApp {
                 if let Some(message) = &self.svg_message {
                     ui.label(
                         egui::RichText::new(message.as_str())
-                            .size(squiglab::theme::TypeStep::Micro.size())
+                            .size(squiglab_legacy::theme::TypeStep::Micro.size())
                             .color(palette.text_secondary),
                     );
                 }
@@ -3345,7 +3359,7 @@ impl CrinGraphApp {
                 if let Some(message) = &self.curve_export_message {
                     ui.label(
                         egui::RichText::new(message.as_str())
-                            .size(squiglab::theme::TypeStep::Micro.size())
+                            .size(squiglab_legacy::theme::TypeStep::Micro.size())
                             .color(palette.text_secondary),
                     );
                 }
@@ -3399,8 +3413,8 @@ impl CrinGraphApp {
     /// reference-target pills. Rendered inside `lower_strip` rather than owning
     /// its own panel.
     fn target_strip_content(&mut self, ui: &mut Ui) {
-        use squiglab::ui as cgui;
-        let palette = squiglab::theme::Palette::resolve(ui.visuals().dark_mode);
+        use squiglab_legacy::ui as cgui;
+        let palette = squiglab_legacy::theme::Palette::resolve(ui.visuals().dark_mode);
         let delta_open = self.session.show_delta;
         ui.spacing_mut().item_spacing.x = cgui::Spacing::COMPACT;
         ui.horizontal(|ui| {
@@ -3426,7 +3440,9 @@ impl CrinGraphApp {
             }
             ui.label(
                 egui::RichText::new("\u{25b2}")
-                    .font(squiglab::theme::font(squiglab::theme::TypeStep::Caption))
+                    .font(squiglab_legacy::theme::font(
+                        squiglab_legacy::theme::TypeStep::Caption,
+                    ))
                     .color(glyph_color),
             );
 
@@ -3503,7 +3519,7 @@ impl CrinGraphApp {
         };
         // The graph's own size, by the rule it is drawn with, so the two
         // cannot drift apart.
-        let (_, graph_height) = squiglab::graph::GraphCanvas::plot_size(
+        let (_, graph_height) = squiglab_legacy::graph::GraphCanvas::plot_size(
             egui::vec2(
                 (ui.available_width() - library_width).max(0.0),
                 ui.available_height(),
@@ -3539,7 +3555,7 @@ impl CrinGraphApp {
     fn central_panel(&mut self, ui: &mut Ui) {
         egui::CentralPanel::default().show(ui, |ui| {
             if let Some(error) = &self.processing_error {
-                let palette = squiglab::theme::Palette::resolve(self.session.dark_mode);
+                let palette = squiglab_legacy::theme::Palette::resolve(self.session.dark_mode);
                 ui.colored_label(palette.error, error);
             }
             if self.session.display_curves.is_empty() {
@@ -3655,7 +3671,7 @@ impl eframe::App for CrinGraphApp {
         let ctx = ui.ctx().clone();
         #[cfg(debug_assertions)]
         ctx.set_debug_on_hover(self.debug_hooks);
-        squiglab::theme::apply(&ctx, self.session.dark_mode);
+        squiglab_legacy::theme::apply(&ctx, self.session.dark_mode);
         if self.screenshot_pending {
             ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(egui::UserData::default()));
             self.screenshot_pending = false;
@@ -3978,6 +3994,16 @@ fn validate_app_config(config: &AppConfig) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// The repository's root: the data and the example configurations live there,
+/// whatever directory the program is run from.
+fn repository_root() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .and_then(Path::parent)
+        .expect("the application crate sits inside the repository")
+        .to_path_buf()
+}
+
 fn resolve_measurement_dir(
     configured: Option<&Path>,
     fallback: &Path,
@@ -4175,6 +4201,7 @@ mod tests {
         MeasurementVariant, Preferences, MAX_EQ_ROWS, MAX_SHARE_URI_LENGTH, MAX_SMOOTH_LEVEL,
         TUTORIAL_SEGMENTS,
     };
+    use crate::app::{app_config_path, repository_root, DefaultConfig, MeasurementConfig};
     use squiglab_core::data::{CurveInfo, FRPoint};
     use squiglab_core::delta::DeltaTarget;
     use squiglab_core::session::{
@@ -4191,6 +4218,33 @@ mod tests {
     /// Run `body` with the application pointed at a scratch config directory, so
     /// a test is not reading whichever preferences happen to exist on the machine
     /// running it. Restores the previous setting afterwards.
+    /// Load the repository's measurements into the app.
+    ///
+    /// The application points at the measurements beside it, so a test that
+    /// runs from the crate's own directory has to say where the repository's
+    /// data is.
+    fn load_repository_measurements(app: &mut CrinGraphApp) {
+        let config_path = app_config_path().expect("a scratch configuration directory");
+        let config = AppConfig {
+            measurements: MeasurementConfig {
+                database_dir: Some(repository_root().join("data")),
+                headphone_database_dir: Some(repository_root().join("data_hp")),
+                delta_dir: Some(repository_root().join("data_deltas")),
+            },
+            defaults: DefaultConfig::default(),
+            rig_description: None,
+        };
+        if let Some(directory) = config_path.parent() {
+            std::fs::create_dir_all(directory).expect("the configuration directory exists");
+        }
+        std::fs::write(
+            &config_path,
+            toml::to_string(&config).expect("the configuration is writable"),
+        )
+        .expect("the configuration is written");
+        app.load_measurements().expect("the measurements load");
+    }
+
     fn with_isolated_config<T>(body: impl FnOnce() -> T) -> T {
         let _guard = CONFIG_DIR_LOCK
             .lock()
@@ -4209,8 +4263,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&directory);
         result
     }
-    use squiglab::graph::ZoomRegion;
-    use std::path::Path;
+    use squiglab_legacy::graph::ZoomRegion;
 
     #[test]
     fn default_smoothing_matches_the_original_graph_setting() {
@@ -4267,7 +4320,7 @@ smoothing_octaves = 3
         assert_eq!(
             resolve_measurement_dir(
                 config.measurements.database_dir.as_deref(),
-                Path::new("data"),
+                &repository_root().join("data"),
                 &path
             ),
             directory.join("measurements")
@@ -4275,14 +4328,18 @@ smoothing_octaves = 3
         assert_eq!(
             resolve_measurement_dir(
                 config.measurements.headphone_database_dir.as_deref(),
-                Path::new("data_hp"),
+                &repository_root().join("data_hp"),
                 &path
             ),
             directory.join("headphones")
         );
         let absolute_path = directory.join("external-headphones");
         assert_eq!(
-            resolve_measurement_dir(Some(&absolute_path), Path::new("data_hp"), &path),
+            resolve_measurement_dir(
+                Some(&absolute_path),
+                &repository_root().join("data_hp"),
+                &path,
+            ),
             absolute_path
         );
         std::fs::remove_dir_all(directory).unwrap();
@@ -4296,7 +4353,7 @@ smoothing_octaves = 3
             "config-examples/macos/config.toml",
         ];
         for example in examples {
-            let path = Path::new(env!("CARGO_MANIFEST_DIR")).join(example);
+            let path = repository_root().join(example);
             let config = read_app_config_from(&path).unwrap();
             validate_app_config(&config).unwrap();
             assert!(config.measurements.database_dir.is_some());
@@ -4525,7 +4582,7 @@ smoothing_octaves = 3
     fn equalizers_round_trip_through_preferences_and_share_links() {
         with_isolated_config(|| {
             let mut app = CrinGraphApp::default();
-            app.load_measurements().unwrap();
+            load_repository_measurements(&mut app);
             let key =
                 group_key(&app.session.groups[app.session.active.iter().next().copied().unwrap()]);
             let rows = vec![super::EqRow {
@@ -4630,7 +4687,7 @@ smoothing_octaves = 3
     fn the_equalizer_panel_resolves_the_curve_and_target_it_edits() {
         with_isolated_config(|| {
             let mut app = CrinGraphApp::default();
-            app.load_measurements().unwrap();
+            load_repository_measurements(&mut app);
             // With one measurement active and no target, the panel edits it
             // and falls back to the reference's second-measurement rule for
             // the target, which does not exist yet.
@@ -4677,7 +4734,7 @@ smoothing_octaves = 3
     fn auto_eq_moves_a_measurement_towards_its_target() {
         with_isolated_config(|| {
             let mut app = CrinGraphApp::default();
-            app.load_measurements().unwrap();
+            load_repository_measurements(&mut app);
             let phone = group_named(&app, "HTH67");
             let target = group_named(&app, "Harman");
             app.session.active = [phone].into_iter().collect();
@@ -4735,7 +4792,7 @@ smoothing_octaves = 3
     fn the_equalizer_exports_name_the_curve_and_agree_on_its_filters() {
         with_isolated_config(|| {
             let mut app = CrinGraphApp::default();
-            app.load_measurements().unwrap();
+            load_repository_measurements(&mut app);
             let phone = group_named(&app, "HTH67");
             app.session.active = [phone].into_iter().collect();
             // Give the curve a band the panel would have installed so the
@@ -4793,7 +4850,7 @@ smoothing_octaves = 3
     fn importing_an_apo_file_replaces_the_curves_filters() {
         with_isolated_config(|| {
             let mut app = CrinGraphApp::default();
-            app.load_measurements().unwrap();
+            load_repository_measurements(&mut app);
             let phone = group_named(&app, "HTH67");
             app.session.active = [phone].into_iter().collect();
 
@@ -4947,7 +5004,7 @@ smoothing_octaves = 3
     fn an_uploaded_measurement_lands_in_the_uploaded_brand() {
         with_isolated_config(|| {
             let mut app = CrinGraphApp::default();
-            app.load_measurements().unwrap();
+            load_repository_measurements(&mut app);
             let groups_before = app.session.groups.len();
             let path = write_measurement("My Headphones", 300);
             app.upload_path = path.to_string_lossy().into_owned();
@@ -4985,7 +5042,7 @@ smoothing_octaves = 3
     fn an_uploaded_measurement_is_left_out_of_a_shared_link() {
         with_isolated_config(|| {
             let mut app = CrinGraphApp::default();
-            app.load_measurements().unwrap();
+            load_repository_measurements(&mut app);
             let path = write_measurement("Shared Away", 300);
             app.upload_path = path.to_string_lossy().into_owned();
             app.import_upload();
@@ -5027,7 +5084,7 @@ smoothing_octaves = 3
     fn a_second_upload_of_the_same_measurement_joins_the_first() {
         with_isolated_config(|| {
             let mut app = CrinGraphApp::default();
-            app.load_measurements().unwrap();
+            load_repository_measurements(&mut app);
             let path = write_measurement("Twice", 300);
             app.upload_path = path.to_string_lossy().into_owned();
             app.import_upload();
@@ -5073,7 +5130,7 @@ smoothing_octaves = 3
     fn a_right_channel_upload_gains_a_null_left_channel() {
         with_isolated_config(|| {
             let mut app = CrinGraphApp::default();
-            app.load_measurements().unwrap();
+            load_repository_measurements(&mut app);
             let path = write_measurement("Right Only R", 300);
             app.upload_path = path.to_string_lossy().into_owned();
             app.import_upload();
@@ -5105,7 +5162,7 @@ smoothing_octaves = 3
     fn a_target_upload_is_named_flagged_and_deduplicated() {
         with_isolated_config(|| {
             let mut app = CrinGraphApp::default();
-            app.load_measurements().unwrap();
+            load_repository_measurements(&mut app);
             let path = write_measurement("Brand New Target", 300);
             app.upload_path = path.to_string_lossy().into_owned();
             app.upload_as_target = true;
@@ -5155,7 +5212,7 @@ smoothing_octaves = 3
     fn a_short_upload_is_refused_and_nothing_is_added() {
         with_isolated_config(|| {
             let mut app = CrinGraphApp::default();
-            app.load_measurements().unwrap();
+            load_repository_measurements(&mut app);
             let groups_before = app.session.groups.len();
             let curves_before = app.session.curves.len();
             let path = write_measurement("Fragment", 50);
@@ -5178,7 +5235,7 @@ smoothing_octaves = 3
     fn a_missing_upload_file_is_reported_not_ignored() {
         with_isolated_config(|| {
             let mut app = CrinGraphApp::default();
-            app.load_measurements().unwrap();
+            load_repository_measurements(&mut app);
             app.upload_path = "/nonexistent/measurement.txt".to_owned();
             app.import_upload();
             assert!(app.upload_error.is_some());
@@ -5247,7 +5304,7 @@ smoothing_octaves = 3
     fn startup_loads_the_configured_measurement_and_targets() {
         with_isolated_config(|| {
             let mut app = CrinGraphApp::default();
-            app.load_measurements().unwrap();
+            load_repository_measurements(&mut app);
             assert!(!app.session.curves.is_empty());
             assert!(app
                 .session
@@ -5271,7 +5328,7 @@ smoothing_octaves = 3
             // A first launch selects a default curve, which the library must
             // scroll into view.
             let mut app = CrinGraphApp::default();
-            app.load_measurements().unwrap();
+            load_repository_measurements(&mut app);
             assert!(!app.session.active.is_empty());
             assert!(app.library_reveal_pending);
 
@@ -5346,7 +5403,9 @@ smoothing_octaves = 3
 
     #[test]
     fn target_groups_and_model_variants_follow_the_phone_book() {
-        let book = squiglab_core::data::load_phone_book(Path::new("data/phone_book.json")).unwrap();
+        let book =
+            squiglab_core::data::load_phone_book(&repository_root().join("data/phone_book.json"))
+                .unwrap();
         let curves = vec![
             test_curve("HTH67", "L", 50.0),
             test_curve("HTH67", "R", 51.0),
@@ -5986,7 +6045,7 @@ smoothing_octaves = 3
             label_positions: [("Brand · Model".to_owned(), [0.4, 0.6])]
                 .into_iter()
                 .collect(),
-            label_layout: squiglab::graph::LabelLayout::CornerTopLeft,
+            label_layout: squiglab_legacy::graph::LabelLayout::CornerTopLeft,
             tutorial_segment: Some(3),
             y_scale: 1.75,
             curve_color_offsets: [("Brand\u{1f}Model".into(), 2)].into_iter().collect(),

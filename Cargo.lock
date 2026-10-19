@@ -3556,7 +3556,23 @@ dependencies = [
 ]
 
 [[package]]
-name = "squiglab"
+name = "squiglab-core"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "cpal",
+ "dirs",
+ "libspa-sys",
+ "once_cell",
+ "pipewire",
+ "serde",
+ "serde_json",
+ "toml 0.8.23",
+ "walkdir",
+]
+
+[[package]]
+name = "squiglab-legacy"
 version = "0.1.0"
 dependencies = [
  "anyhow",
@@ -3575,22 +3591,6 @@ dependencies = [
  "toml 0.8.23",
  "walkdir",
  "winresource",
-]
-
-[[package]]
-name = "squiglab-core"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "cpal",
- "dirs",
- "libspa-sys",
- "once_cell",
- "pipewire",
- "serde",
- "serde_json",
- "toml 0.8.23",
- "walkdir",
 ]
 
 [[package]]
