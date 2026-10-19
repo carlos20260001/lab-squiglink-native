@@ -41,10 +41,6 @@ pub struct App {
     pub search: String,
     /// The message shown at the foot of the window.
     pub status: Option<String>,
-    /// Whether the graph's curves carry labels.
-    pub show_labels: bool,
-    /// Whether the pointer reads the curve under it.
-    pub inspect: bool,
     /// The band the tone generator sweeps.
     pub tone_band: (f32, f32),
     /// The changes that can be undone, and the ones that can be redone.
@@ -129,8 +125,6 @@ impl App {
             tab: Tab::Brands,
             search: String::new(),
             status,
-            show_labels: true,
-            inspect: false,
             tone_band: (20.0, 20_000.0),
             history: crate::equalizer::History::default(),
             brand: None,

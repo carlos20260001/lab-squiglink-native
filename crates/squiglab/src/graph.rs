@@ -45,12 +45,12 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
             ui.allocate_painter(Vec2::new(width, height), Sense::click_and_drag());
         let rect = response.rect;
         painter.rect_filled(rect, 0.0, palette.graph);
-        draw(app, &painter, rect);
+        draw(app, &painter, rect, response.hover_pos());
     });
 }
 
-/// Draw the graph into a rectangle.
-fn draw(app: &App, painter: &egui::Painter, rect: Rect) {
+/// Draw the graph into a rectangle, with the pointer where it is.
+fn draw(app: &App, painter: &egui::Painter, rect: Rect, pointer: Option<Pos2>) {
     let curves = plot_curves(app);
 
     // The plot's own area, inside the box: room for the dB scale on the left
@@ -71,6 +71,9 @@ fn draw(app: &App, painter: &egui::Painter, rect: Rect) {
     grid(painter, plot, &transform, &minimum, &maximum);
     band_names(painter, plot, &transform);
     curves_into(painter, app, &curves, &transform);
+    if app.session.inspect_mode {
+        inspector(painter, app, &curves, &transform, plot, pointer);
+    }
     labels(painter, app, &curves, &transform, plot);
     rig_line(painter, app, rect);
     watermark(painter, plot);
@@ -259,7 +262,7 @@ fn labels(
     transform: &Transform,
     plot: Rect,
 ) {
-    if !app.show_labels {
+    if !app.session.show_labels {
         return;
     }
     let font = TypeStep::Label.font_bold();
@@ -296,6 +299,56 @@ fn labels(
             color,
         );
     }
+}
+
+/// The line under the pointer, and what each curve reads there.
+///
+/// This is the reference's inspector: a vertical line at the pointer's
+/// frequency, and the value of every curve at that frequency, stacked so they
+/// do not lie on top of one another.
+fn inspector(
+    painter: &egui::Painter,
+    app: &App,
+    curves: &[PlotCurve<'_>],
+    transform: &Transform,
+    plot: Rect,
+    pointer: Option<Pos2>,
+) {
+    let palette = theme::current_palette();
+    let Some(pointer) = pointer.filter(|position| plot.contains(*position)) else {
+        return;
+    };
+    let frequency = transform.x_at(pointer.x);
+    let x = transform.hz_to_x(frequency);
+    painter.line_segment(
+        [Pos2::new(x, plot.top()), Pos2::new(x, plot.bottom())],
+        egui::Stroke::new(1.0, palette.text_tertiary),
+    );
+    // The readings, one under the other, from the top of the plot down.
+    let mut next_top = plot.top() + 6.0;
+    for curve in curves {
+        let Some(point) = squiglab_core::graph::nearest_point(curve.points, frequency) else {
+            continue;
+        };
+        let text = format!("{:.1} dB", point.db);
+        painter.text(
+            Pos2::new(x + 4.0, next_top),
+            Align2::LEFT_TOP,
+            text,
+            TypeStep::Label.font(),
+            theme::color(curve.color),
+        );
+        next_top += TypeStep::Label.size() + 3.0;
+    }
+    // The frequency itself, at the foot of the line.
+    painter.text(
+        Pos2::new(x, plot.bottom() - 4.0),
+        Align2::CENTER_BOTTOM,
+        squiglab_core::graph::format_frequency(frequency),
+        TypeStep::Label.font(),
+        palette.text_secondary,
+    );
+    let _ = app;
 }
 
 /// The rig the measurements were taken on, in the corner of the graph.

@@ -676,6 +676,20 @@ impl Session {
                 }
             }
         }
+        // The rig corrections are targets of their own: the reference keeps
+        // them in a group marked Δ beside the others.
+        for &index in &self.active_deltas {
+            let Some(delta) = self.delta_targets.get(index) else {
+                continue;
+            };
+            output.push(DisplayCurve {
+                group_index: index,
+                source: CurveSource::Measurement,
+                label: delta.name.clone(),
+                points: delta.points.clone(),
+                target: true,
+            });
+        }
         if let Some(baseline) = self.baseline {
             if let Err(error) = apply_baseline(&mut output, baseline) {
                 self.display_curves.clear();

@@ -28,6 +28,58 @@ fn targets(ui: &mut Ui, app: &mut App) {
     if targets.is_empty() {
         return;
     }
+    let mut first = true;
+    // The rig corrections are a group of their own, marked Δ, as the
+    // reference marks them.
+    if !app.session.delta_targets.is_empty() {
+        ui.horizontal_wrapped(|ui| {
+            if !first {
+                ui.label(
+                    RichText::new("|")
+                        .font(TypeStep::Label.font())
+                        .color(palette.text_tertiary),
+                );
+            }
+            first = false;
+            ui.label(
+                RichText::new("Δ:")
+                    .font(TypeStep::Label.font())
+                    .color(palette.text_tertiary),
+            );
+            for index in 0..app.session.delta_targets.len() {
+                let name = app.session.delta_targets[index].name.clone();
+                let on = app.session.active_deltas.contains(&index);
+                let response = ui
+                    .selectable_label(
+                        on,
+                        RichText::new(name.clone())
+                            .font(TypeStep::Label.font())
+                            .color(if on {
+                                palette.on_accent
+                            } else {
+                                palette.text_secondary
+                            }),
+                    )
+                    .on_hover_text(format!(
+                        "The correction for the {} rig{}",
+                        app.session.delta_targets[index].clone_rig,
+                        match &app.session.delta_targets[index].note {
+                            Some(note) => format!(": {note}"),
+                            None => String::new(),
+                        }
+                    ));
+                if response.clicked() {
+                    if on {
+                        app.session.active_deltas.remove(&index);
+                    } else {
+                        app.session.active_deltas.insert(index);
+                    }
+                    app.session.rebuild_display_curves();
+                }
+            }
+        });
+    }
+
     // The categories keep their own order, so the strip reads the same way
     // every time.
     let order = [
@@ -36,7 +88,6 @@ fn targets(ui: &mut Ui, app: &mut App) {
         "Preference targets",
         "Other targets",
     ];
-    let mut first = true;
     for category in order {
         let in_category: Vec<usize> = targets
             .iter()

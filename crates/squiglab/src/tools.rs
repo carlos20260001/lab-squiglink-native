@@ -130,12 +130,11 @@ fn smooth(ui: &mut Ui, app: &mut App) {
     label(ui, "Smooth");
     let mut level = app.session.smooth_level as f64;
     if ui
-        .add(
-            egui::Slider::new(
-                &mut level,
-                0.0..=squiglab_core::config::MAX_SMOOTH_LEVEL as f64,
-            )
-            .suffix("/oct"),
+        .add_sized(
+            [56.0, 22.0],
+            egui::DragValue::new(&mut level)
+                .range(0.0..=squiglab_core::config::MAX_SMOOTH_LEVEL as f64)
+                .speed(1.0),
         )
         .on_hover_text("Fractional octaves of smoothing")
         .changed()
@@ -148,21 +147,25 @@ fn smooth(ui: &mut Ui, app: &mut App) {
 /// The view toggles.
 fn toggles(ui: &mut Ui, app: &mut App) {
     let palette = theme::current_palette();
-    let mut labels = app.show_labels;
+    // The labels and the inspector are the session's, so they are kept with
+    // the rest of the view.
+    let mut labels = app.session.show_labels;
     if ui
         .checkbox(&mut labels, "Labels")
         .on_hover_text("Name each curve at its end")
         .changed()
     {
-        app.show_labels = labels;
+        app.session.show_labels = labels;
+        app.session.dirty = true;
     }
-    let mut inspect = app.inspect;
+    let mut inspect = app.session.inspect_mode;
     if ui
         .checkbox(&mut inspect, "Inspect")
         .on_hover_text("Read the curve under the pointer")
         .changed()
     {
-        app.inspect = inspect;
+        app.session.inspect_mode = inspect;
+        app.session.dirty = true;
     }
     if ui
         .button("Recolor")
