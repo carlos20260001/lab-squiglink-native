@@ -1,4 +1,4 @@
-const DIR = "../data_hp/";
+const DIR = "data_hp/";
 
 // Add a watermark to the graph.
 function watermark(svg) {

@@ -2211,45 +2211,63 @@
     "filters": [
       {
         "type": "PK",
-        "freq": 42,
+        "freq": 20,
+        "q": 5,
+        "gain": -1.3
+      },
+      {
+        "type": "PK",
+        "freq": 40,
         "q": 0.9,
-        "gain": 6.6
+        "gain": 6.5
       },
       {
         "type": "PK",
-        "freq": 130,
-        "q": 1.2,
-        "gain": -3.3
+        "freq": 100,
+        "q": 3,
+        "gain": -0.8
       },
       {
         "type": "PK",
-        "freq": 310,
-        "q": 1.6,
-        "gain": 3.8
+        "freq": 140,
+        "q": 1.5,
+        "gain": -3
+      },
+      {
+        "type": "PK",
+        "freq": 320,
+        "q": 1.5,
+        "gain": 3.6
       },
       {
         "type": "PK",
         "freq": 680,
-        "q": 1.9,
+        "q": 2,
         "gain": -1
       },
       {
         "type": "PK",
         "freq": 1500,
-        "q": 2,
+        "q": 2.2,
         "gain": 1
       },
       {
         "type": "PK",
-        "freq": 3700,
-        "q": 0.7,
+        "freq": 2600,
+        "q": 3.4,
+        "gain": -0.7
+      },
+      {
+        "type": "PK",
+        "freq": 3400,
+        "q": 0.8,
         "gain": 4
       },
       {
         "type": "PK",
-        "freq": 6600,
-        "q": 1.8,
-        "gain": -1.6
+        "freq": 6800,
+        "q": 2.4,
+        "gain": -1
       }
     ]
   },
@@ -2258,33 +2276,33 @@
     "filters": [
       {
         "type": "PK",
-        "freq": 42,
+        "freq": 41,
         "q": 0.9,
-        "gain": 6.7
+        "gain": 6.6
       },
       {
         "type": "PK",
         "freq": 130,
         "q": 1.2,
-        "gain": -3.2
+        "gain": -3.1
       },
       {
         "type": "PK",
         "freq": 310,
         "q": 1.7,
-        "gain": 3.7
+        "gain": 3.6
       },
       {
         "type": "PK",
-        "freq": 3500,
+        "freq": 3400,
         "q": 0.7,
-        "gain": 3.8
+        "gain": 4
       },
       {
         "type": "PK",
         "freq": 6800,
-        "q": 2,
-        "gain": -1.2
+        "q": 2.3,
+        "gain": -1.3
       }
     ]
   }

@@ -1,5 +1,5 @@
-// Regenerates src/equalizer_golden.json, the fixture the equalizer port is
-// tested against.
+// Regenerates crates/squiglab-core/src/equalizer_golden.json, the fixture
+// the equalizer port is tested against.
 //
 // The fixture pins the Rust port in src/equalizer.rs against this repository's
 // copy of the reference implementation, web/equalizer.js, which is the source
@@ -135,6 +135,12 @@ const fixture = {
     },
 };
 
-const output = join(repositoryRoot, "src", "equalizer_golden.json");
+const output = join(
+    repositoryRoot,
+    "crates",
+    "squiglab-core",
+    "src",
+    "equalizer_golden.json",
+);
 writeFileSync(output, `${JSON.stringify(fixture, null, 2)}\n`);
 console.log(`Wrote ${output}`);

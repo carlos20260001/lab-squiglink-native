@@ -1,19 +1,20 @@
 // Configuration options
 const init_phones = ["BKF"],            // Optional. Which graphs to display on initial load. Note: Share URLs will override this set
-      DIR = "../data/",                             // Directory where graph files are stored
+      DIR = "/data/",                                // Directory where graph files are stored
+//      DIR = "https://squig.link/headphones/data/",                                // Directory where graph files are stored
+//      num_samples = 3,
       default_channels = ["L","R"],                 // Which channels to display. Avoid javascript errors if loading just one channel per phone
       default_normalization = "dB",                 // Sets default graph normalization mode. Accepts "dB" or "Hz"
       default_norm_db = 60,                         // Sets default dB normalization point
       default_norm_hz = 500,                        // Sets default Hz normalization point (500Hz is recommended by IEC)
       max_channel_imbalance = 5,                    // Channel imbalance threshold to show ! in the channel selector
-      alt_layout = true,                            // Toggle between classic and alt layouts
       alt_sticky_graph = true,                      // If active graphs overflows the viewport, does the graph scroll with the page or stick to the viewport?
       alt_animated = false,                         // Determines if new graphs are drawn with a 1-second animation, or appear instantly
       alt_header = true,                            // Display a configurable header at the top of the alt layout
       alt_header_new_tab = false,                   // Clicking alt_header links opens in new tab
       alt_tutorial = true,                          // Display a configurable frequency response guide below the graph
       alt_augment = false,                          // Display augment card in phone list, e.g. review sore, shop link
-      site_url = 'index.html',                      // URL of your graph "homepage"
+      site_url = 'graph.html',                      // URL of your graph "homepage"
       share_url = true,                             // If true, enables shareable URLs
       watermark_text = "CrinGraph",                 // Optional. Watermark appears behind graphs
       watermark_image_url = "cringraph-logo.svg",   // Optional. If image file is in same directory as config, can be just the filename
@@ -30,7 +31,7 @@ const init_phones = ["BKF"],            // Optional. Which graphs to display on 
       targetDashed = false,                         // If true, makes target curves dashed lines
       targetColorCustom = false,                    // If false, targets appear as a random gray value. Can replace with a fixed color value to make all targets the specified color, e.g. "black"
       targetRestoreLastUsed = false,				// Restore user's last-used target settings on load
-      labelsPosition = "default",                   // Up to four labels will be grouped in a specified corner. Accepts "top-left," bottom-left," "bottom-right," and "default"
+      labelsPosition = "bottom-left",                   // Up to four labels will be grouped in a specified corner. Accepts "top-left," bottom-left," "bottom-right," and "default"
       stickyLabels = true,                          // "Sticky" labels 
       analyticsEnabled = true,                     // Enables Google Analytics 4 measurement of site usage
       exportableGraphs = true,                      // Enables export graph button
@@ -39,7 +40,9 @@ const init_phones = ["BKF"],            // Optional. Which graphs to display on 
       extraEQEnabled = true,                        // Enable parametic eq function
       extraEQBands = 10,                            // Default EQ bands available
       extraEQBandsMax = 20,                         // Max EQ bands available
-      extraToneGeneratorEnabled = true;             // Enable tone generator function
+      extraToneGeneratorEnabled = true,             // Enable tone generator function
+      extraPinkNoiseEnabled = true,                 // Pink noise through parametric EQ (Equalizer tab)
+      extraMusicEnabled = true;                     // Local file music player through parametric EQ (Equalizer tab)
 
 // Specify which targets to display
 const targets = [
@@ -88,7 +91,8 @@ function tsvParse(fr) {
         .filter(t => !isNaN(t[0]) && !isNaN(t[1]));
 }
 
-// Apply stylesheet based layout options above
+// Main app uses style-alt (+ theme) only. Legacy classic layout lives in style.css for old
+// standalone pages (e.g. graph_hp.html) that link it directly — not loaded here.
 function setLayout() {
     function applyStylesheet(styleSheet) {
         var docHead = document.querySelector("head"),
@@ -101,12 +105,8 @@ function setLayout() {
         docHead.append(linkTag);
     }
 
-    if ( !alt_layout ) {
-        applyStylesheet("style.css");
-    } else {
-        applyStylesheet("style-alt.css");
-        applyStylesheet("style-alt-theme.css");
-    }
+    applyStylesheet("style-alt.css");
+    applyStylesheet("style-alt-theme.css");
 }
 setLayout();
 

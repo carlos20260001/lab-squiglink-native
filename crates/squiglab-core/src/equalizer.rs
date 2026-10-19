@@ -28,11 +28,12 @@ pub const TREBLE_START_FROM: f64 = 7_000.0;
 /// Filters close to Nyquist are avoided because their behaviour is
 /// implementation dependent. The reference tool lets the band be changed
 /// before a run, so this is the starting point rather than a fixed rule.
-pub const AUTO_EQ_RANGE: (f64, f64) = (20.0, 15_000.0);
+pub const AUTO_EQ_RANGE: (f64, f64) = (20.0, 20_000.0);
+/// Bounds the optimizer and the exported filters are clamped to. The
+/// reference widened these when it let the constraints widen them too.
+pub const OPTIMIZE_Q_RANGE: (f64, f64) = (0.1, 10.0);
 /// Bounds the optimizer and the exported filters are clamped to.
-pub const OPTIMIZE_Q_RANGE: (f64, f64) = (0.5, 2.0);
-/// Bounds the optimizer and the exported filters are clamped to.
-pub const OPTIMIZE_GAIN_RANGE: (f64, f64) = (-12.0, 12.0);
+pub const OPTIMIZE_GAIN_RANGE: (f64, f64) = (-40.0, 40.0);
 /// Per-pass coordinate-descent deltas, coarse to fine: the maximum frequency,
 /// Q, and gain step, then the size each step is multiplied by.
 const OPTIMIZE_DELTAS: [[f64; 6]; 3] = [
@@ -428,15 +429,57 @@ fn freq_unit(freq: f64) -> f64 {
 /// Round filters to friendly, device-compatible values and clamp them into the
 /// optimizer's ranges.
 fn strip(filters: Vec<Filter>) -> Vec<Filter> {
+    strip_within(
+        filters,
+        AUTO_EQ_RANGE,
+        &crate::constraints::Constraints::none(),
+    )
+}
+
+/// The same, within a band and with only the filter types the constraints
+/// allow.
+///
+/// The reference widened what a filter may be: the band it may sit in, the
+/// Q and gain it may take, and the kinds of filter it may be. A filter of a
+/// kind that is not allowed becomes one that is, and one outside the band
+/// is brought inside it.
+fn strip_within(
+    filters: Vec<Filter>,
+    range: (f64, f64),
+    constraints: &crate::constraints::Constraints,
+) -> Vec<Filter> {
     let (min_q, max_q) = OPTIMIZE_Q_RANGE;
     let (min_gain, max_gain) = OPTIMIZE_GAIN_RANGE;
+    let (mut min_freq, mut max_freq) = range;
+    if min_freq > max_freq {
+        std::mem::swap(&mut min_freq, &mut max_freq);
+    }
+    let fallback = if constraints.allows(crate::equalizer::FilterType::Peaking) {
+        crate::equalizer::FilterType::Peaking
+    } else if constraints.allows(crate::equalizer::FilterType::LowShelf) {
+        crate::equalizer::FilterType::LowShelf
+    } else {
+        crate::equalizer::FilterType::HighShelf
+    };
     filters
         .into_iter()
-        .map(|filter| Filter {
-            filter_type: filter.filter_type,
-            freq: (filter.freq - filter.freq % freq_unit(filter.freq)).floor(),
-            q: ((filter.q * 10.0).floor() / 10.0).clamp(min_q, max_q),
-            gain: ((filter.gain * 10.0).floor() / 10.0).clamp(min_gain, max_gain),
+        .map(|filter| {
+            let filter_type = if constraints.allows(filter.filter_type) {
+                filter.filter_type
+            } else {
+                fallback
+            };
+            let snapped = if filter.freq.is_finite() && filter.freq > 0.0 {
+                (filter.freq - filter.freq % freq_unit(filter.freq)).floor()
+            } else {
+                min_freq
+            };
+            Filter {
+                filter_type,
+                freq: snapped.clamp(min_freq, max_freq),
+                q: ((filter.q * 10.0).floor() / 10.0).clamp(min_q, max_q),
+                gain: ((filter.gain * 10.0).floor() / 10.0).clamp(min_gain, max_gain),
+            }
         })
         .collect()
 }
@@ -510,13 +553,16 @@ pub fn optimize(
         };
         // On a graphic band the frequency is the band's, so only the gain and
         // the Q are searched.
+        // The reference's loops run from -max to max - 1, and the Q steps from
+        // max - 1 down to -max. The step that is one past the end is the one
+        // that decides a tie, so the bounds have to be the reference's.
         let df_range: Box<dyn Iterator<Item = i64>> = if constraints.graphic_bands.is_empty() {
-            Box::new(-(max_df as i64)..max_df as i64)
+            Box::new(-(max_df as i64)..=(max_df as i64 - 1))
         } else {
             Box::new(0..0)
         };
         for df in df_range {
-            for dq in (-(max_dq as i64)..max_dq as i64 - 1).rev() {
+            for dq in (-(max_dq as i64)..=(max_dq as i64 - 1)).rev() {
                 // Widen and deepen the filter, then narrow it: each inner loop
                 // stops at the first step that fails to improve.
                 for dg in 1..max_dg as i64 {

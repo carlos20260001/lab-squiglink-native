@@ -15,6 +15,11 @@ in three sets. These are the reference's values, with one change: **the dark
 theme's accent is the native's blue, not the reference's yellow**, because the
 curves are the native's own coloured palette and a yellow accent fights them.
 
+The values here are the ones the live site serves, which are the "Super"
+theme. The repository's own stylesheet still carries the older "Primary"
+theme, whose page is a neutral grey rather than a warm off-white; the live
+site is the later of the two, and the window follows it.
+
 | Token | Light | Dark | High contrast |
 |---|---|---|---|
 | accent | `hsl(210, 53%, 49%)` | `#3870A6` (native) | `hsl(0, 0%, 0%)` |
