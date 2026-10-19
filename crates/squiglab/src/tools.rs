@@ -190,6 +190,24 @@ fn actions(ui: &mut Ui, app: &mut App) {
         }
     }
     if ui
+        .button("PNG")
+        .on_hover_text("Save a picture of the window")
+        .clicked()
+    {
+        app.screenshot_requested = true;
+    }
+    if ui
+        .button("SVG")
+        .on_hover_text("Save the graph as a vector picture")
+        .clicked()
+    {
+        let svg = crate::graph::export_svg(app, 1200.0, 360.0);
+        match save("graph.svg", &svg) {
+            Ok(path) => app.say(format!("The graph was saved to {}", path.display())),
+            Err(problem) => app.say(format!("The graph was not saved: {problem}")),
+        }
+    }
+    if ui
         .button("Share")
         .on_hover_text("Open a window with this view")
         .clicked()
@@ -199,4 +217,45 @@ fn actions(ui: &mut Ui, app: &mut App) {
             Err(error) => app.say(format!("The link could not be made: {error}")),
         }
     }
+}
+
+/// Write a file into the user's pictures directory, or their home directory if
+/// the operating system does not have one.
+fn save(name: &str, contents: &str) -> anyhow::Result<std::path::PathBuf> {
+    let directory = dirs::picture_dir()
+        .or_else(dirs::home_dir)
+        .ok_or_else(|| anyhow::anyhow!("the operating system did not provide a directory"))?;
+    std::fs::create_dir_all(&directory)?;
+    let path = directory.join(name);
+    std::fs::write(&path, contents)?;
+    Ok(path)
+}
+
+/// Write a picture of the window into the user's pictures directory, or their
+/// home directory if the operating system does not have one.
+pub fn save_picture(name: &str, image: &egui::ColorImage) -> Option<std::path::PathBuf> {
+    let directory = dirs::picture_dir().or_else(dirs::home_dir)?;
+    std::fs::create_dir_all(&directory).ok()?;
+    let path = directory.join(name);
+    // The toolkit's pixels are premultiplied; a picture on disk is not.
+    let pixels: Vec<u8> = image
+        .as_raw()
+        .chunks(4)
+        .flat_map(|pixel| {
+            let alpha = pixel[3];
+            if alpha == 0 {
+                [0, 0, 0, 0]
+            } else {
+                [
+                    (u16::from(pixel[0]) * 255 / u16::from(alpha)).min(255) as u8,
+                    (u16::from(pixel[1]) * 255 / u16::from(alpha)).min(255) as u8,
+                    (u16::from(pixel[2]) * 255 / u16::from(alpha)).min(255) as u8,
+                    alpha,
+                ]
+            }
+        })
+        .collect();
+    let picture = image::RgbaImage::from_raw(image.width() as u32, image.height() as u32, pixels)?;
+    picture.save(&path).ok()?;
+    Some(path)
 }

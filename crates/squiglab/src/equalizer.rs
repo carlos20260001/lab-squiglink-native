@@ -167,7 +167,7 @@ pub fn show(ui: &mut Ui, app: &mut App) {
         .num_columns(5)
         .spacing([metrics::GAP, metrics::GAP])
         .show(ui, |ui| {
-            for heading in ["Type", "Frequency", "Gain", "Q"] {
+            for heading in ["Type", "Frequency (Hz)", "Gain (dB)", "Q"] {
                 ui.label(
                     RichText::new(heading)
                         .font(TypeStep::Label.font())
@@ -181,53 +181,31 @@ pub fn show(ui: &mut Ui, app: &mut App) {
                     row.enabled = enabled;
                     changed = true;
                 }
-                egui::ComboBox::from_id_salt(("eq_type", row_index))
-                    .selected_text(row.filter.filter_type.short_name())
-                    .show_ui(ui, |ui| {
-                        for filter_type in [
-                            FilterType::Peaking,
-                            FilterType::LowShelf,
-                            FilterType::HighShelf,
-                        ] {
-                            ui.selectable_value(
-                                &mut row.filter.filter_type,
-                                filter_type,
-                                filter_type.short_name(),
-                            );
-                        }
-                    });
-                let mut frequency = row.filter.freq;
-                let mut gain = row.filter.gain;
-                let mut q = row.filter.q;
-                if ui
-                    .add(
-                        egui::DragValue::new(&mut frequency)
-                            .range(0.0..=20_000.0)
-                            .speed(10.0)
-                            .suffix(" Hz"),
-                    )
-                    .changed()
-                {
-                    row.filter.freq = frequency;
+                // A menu rather than a select: the select is wider than the
+                // names it holds, and the column is narrow.
+                ui.menu_button(row.filter.filter_type.short_name(), |ui| {
+                    for filter_type in [
+                        FilterType::Peaking,
+                        FilterType::LowShelf,
+                        FilterType::HighShelf,
+                    ] {
+                        ui.selectable_value(
+                            &mut row.filter.filter_type,
+                            filter_type,
+                            filter_type.short_name(),
+                        );
+                    }
+                });
+                // The numbers are typed rather than dragged: the column is
+                // narrow, and a drag handle would take the room the digits
+                // need.
+                if number(ui, &mut row.filter.freq, 0.0, 20_000.0, 0) {
                     changed = true;
                 }
-                if ui
-                    .add(
-                        egui::DragValue::new(&mut gain)
-                            .range(-40.0..=40.0)
-                            .speed(0.1)
-                            .suffix(" dB"),
-                    )
-                    .changed()
-                {
-                    row.filter.gain = gain;
+                if number(ui, &mut row.filter.gain, -40.0, 40.0, 1) {
                     changed = true;
                 }
-                if ui
-                    .add(egui::DragValue::new(&mut q).range(0.0..=20.0).speed(0.1))
-                    .changed()
-                {
-                    row.filter.q = q;
+                if number(ui, &mut row.filter.q, 0.0, 20.0, 2) {
                     changed = true;
                 }
                 ui.end_row();
@@ -545,5 +523,28 @@ fn snapshot(app: &App) -> Snapshot {
     Snapshot {
         filters: app.session.eq_filters.clone(),
         constraints: app.session.eq_constraints.clone(),
+    }
+}
+
+/// A number in the band table, typed rather than dragged.
+fn number(ui: &mut Ui, value: &mut f64, low: f64, high: f64, places: usize) -> bool {
+    let mut text = match places {
+        0 => format!("{value:.0}"),
+        1 => format!("{value:.1}"),
+        _ => format!("{value:.2}"),
+    };
+    let response = ui.add_sized(
+        [56.0, 20.0],
+        egui::TextEdit::singleline(&mut text).desired_width(56.0),
+    );
+    if !response.changed() {
+        return false;
+    }
+    match text.trim().parse::<f64>() {
+        Ok(parsed) => {
+            *value = parsed.clamp(low, high);
+            true
+        }
+        Err(_) => false,
     }
 }

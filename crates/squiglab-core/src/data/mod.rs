@@ -75,6 +75,14 @@ pub struct PhoneBrand {
 pub struct PhoneModel {
     pub name: String,
     pub variants: Vec<PhoneVariant>,
+    /// The review the reference's phone book records, if any.
+    pub review_score: Option<String>,
+    /// The link to that review.
+    pub review_link: Option<String>,
+    /// The link to where the model can be bought.
+    pub shop_link: Option<String>,
+    /// The price the reference's phone book records, if any.
+    pub price: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -119,6 +127,19 @@ fn parse_phone_book(json: &Value) -> anyhow::Result<PhoneBook> {
 }
 
 fn parse_phone_model(phone: &Value, brand_name: &str) -> anyhow::Result<PhoneModel> {
+    // The augment: what the reference's phone book knows about the model
+    // besides its measurements.
+    let augment = |key: &str| {
+        phone
+            .get(key)
+            .and_then(Value::as_str)
+            .map(|value| value.to_owned())
+            .filter(|value| !value.is_empty())
+    };
+    let review_score = augment("reviewScore");
+    let review_link = augment("reviewLink");
+    let shop_link = augment("shopLink");
+    let price = augment("price");
     let (names, files, suffixes, prefix) = if let Some(name) = phone.as_str() {
         (
             vec![name.to_owned()],
@@ -187,6 +208,10 @@ fn parse_phone_model(phone: &Value, brand_name: &str) -> anyhow::Result<PhoneMod
     Ok(PhoneModel {
         name: model_name,
         variants,
+        review_score,
+        review_link,
+        shop_link,
+        price,
     })
 }
 

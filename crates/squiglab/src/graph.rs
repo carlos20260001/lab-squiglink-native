@@ -340,3 +340,115 @@ pub fn scale_limit(peak: f32) -> f32 {
 pub fn label_layout(app: &App) -> LabelLayout {
     app.session.label_layout
 }
+
+/// The graph as an SVG document.
+///
+/// The export is a drawing of the same graph, in a form that can be scaled
+/// and printed: the axes, the grid, the curves, their names, and the mark.
+pub fn export_svg(app: &App, width: f32, height: f32) -> String {
+    let palette = theme::current_palette();
+    let curves = plot_curves(app);
+    let (minimum, maximum) = y_range(&curves);
+    let (minimum, maximum) = scaled_y_range((minimum, maximum), app.session.y_scale);
+    let zoom = app.session.zoom;
+
+    let left = 44.0;
+    let top = 10.0;
+    let right = 10.0;
+    let bottom = 46.0;
+    let plot = Rect::from_min_max(
+        Pos2::new(left, top),
+        Pos2::new(width - right, height - bottom),
+    );
+    let transform = Transform::new(plot, zoom.x_range(), (minimum, maximum));
+
+    let mut svg = String::new();
+    svg.push_str(&format!(
+        "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{width}\" height=\"{height}\" \
+         viewBox=\"0 0 {width} {height}\">\n"
+    ));
+    svg.push_str(&format!(
+        "<rect width=\"{width}\" height=\"{height}\" fill=\"{}\" />\n",
+        hex(palette.graph)
+    ));
+
+    // The grid and the dB scale.
+    let grid_color = hex(palette.border.gamma_multiply(0.6));
+    let label_color = hex(palette.text_tertiary);
+    let mut db = (minimum / 5.0).ceil() * 5.0;
+    while db <= maximum {
+        let y = transform.db_to_y(db);
+        if y >= plot.top() && y <= plot.bottom() {
+            svg.push_str(&format!(
+                "<line x1=\"{:.2}\" y1=\"{:.2}\" x2=\"{:.2}\" y2=\"{:.2}\" stroke=\"{grid_color}\" stroke-width=\"0.7\" />\n",
+                plot.left(), y, plot.right(), y
+            ));
+            svg.push_str(&format!(
+                "<text x=\"{:.2}\" y=\"{:.2}\" text-anchor=\"end\" font-family=\"sans-serif\" font-size=\"11\" fill=\"{label_color}\">{}</text>\n",
+                plot.left() - 6.0,
+                y + 4.0,
+                tick_db(db)
+            ));
+        }
+        db += 5.0;
+    }
+    for frequency in X_TICKS {
+        if frequency < transform.x_range.0 || frequency > transform.x_range.1 {
+            continue;
+        }
+        let x = transform.hz_to_x(frequency);
+        svg.push_str(&format!(
+            "<line x1=\"{x:.2}\" y1=\"{:.2}\" x2=\"{x:.2}\" y2=\"{:.2}\" stroke=\"{grid_color}\" stroke-width=\"0.7\" />\n",
+            plot.top(),
+            plot.bottom()
+        ));
+        svg.push_str(&format!(
+            "<text x=\"{x:.2}\" y=\"{:.2}\" text-anchor=\"middle\" font-family=\"sans-serif\" font-size=\"11\" fill=\"{label_color}\">{}</text>\n",
+            plot.bottom() + 18.0,
+            format_axis_frequency(frequency)
+        ));
+    }
+
+    // The curves.
+    for curve in &curves {
+        if curve.points.is_empty() {
+            continue;
+        }
+        let points: Vec<Pos2> = curve
+            .points
+            .iter()
+            .map(|point| Pos2::new(transform.hz_to_x(point.hz), transform.db_to_y(point.db)))
+            .collect();
+        let path = sample_curve_path(&points, app.session.smooth_level > 0);
+        let color = hex(theme::color(curve.color));
+        let points = path
+            .iter()
+            .map(|point| format!("{:.2},{:.2}", point.x, point.y))
+            .collect::<Vec<_>>()
+            .join(" ");
+        svg.push_str(&format!(
+            "<polyline points=\"{points}\" fill=\"none\" stroke=\"{color}\" stroke-width=\"2\"{dash} />\n",
+            dash = if curve.dashed {
+                " stroke-dasharray=\"6 4\""
+            } else {
+                ""
+            }
+        ));
+    }
+
+    // The mark and the name.
+    svg.push_str(&format!(
+        "<text x=\"{:.2}\" y=\"{:.2}\" text-anchor=\"middle\" font-family=\"sans-serif\" font-size=\"16\" fill=\"{}\">{}</text>\n",
+        plot.center().x,
+        plot.center().y,
+        hex(palette.text_tertiary.gamma_multiply(0.6)),
+        squiglab_core::product::APP_NAME
+    ));
+    svg.push_str("</svg>\n");
+    svg
+}
+
+/// A colour as the SVG spells it.
+fn hex(color: Color32) -> String {
+    format!("#{:02x}{:02x}{:02x}", color.r(), color.g(), color.b())
+}

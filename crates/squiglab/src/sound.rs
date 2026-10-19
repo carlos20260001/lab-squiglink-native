@@ -48,7 +48,10 @@ pub fn show(ui: &mut Ui, app: &mut App) {
         );
         let mut volume = app.volume;
         if ui
-            .add(egui::Slider::new(&mut volume, 0.0..=1.0).show_value(false))
+            .add_sized(
+                [160.0, 24.0],
+                egui::Slider::new(&mut volume, 0.0..=1.0).show_value(false),
+            )
             .on_hover_text("How loud the source plays")
             .changed()
         {
@@ -115,7 +118,8 @@ pub fn show(ui: &mut Ui, app: &mut App) {
             );
             let mut frequency = app.frequency;
             if ui
-                .add(
+                .add_sized(
+                    [160.0, 24.0],
                     egui::Slider::new(&mut frequency, app.tone_band.0..=app.tone_band.1)
                         .suffix(" Hz"),
                 )

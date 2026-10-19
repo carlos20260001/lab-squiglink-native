@@ -61,6 +61,12 @@ pub struct App {
     pub volume: f32,
     /// The frequency the tone generator is playing.
     pub frequency: f32,
+    /// Whether a picture of the window was asked for.
+    pub screenshot_requested: bool,
+    /// The file the upload panel is waiting to load.
+    pub upload_path: String,
+    /// What the upload panel last said.
+    pub upload_message: Option<String>,
 }
 
 impl Default for App {
@@ -104,6 +110,11 @@ impl App {
             },
             Err(problem) => status = Some(format!("The preferences could not be found: {problem}")),
         }
+        // The equalizer works on one measurement: the one that is on the
+        // graph, if there is one.
+        if session.eq_phone.is_none() {
+            session.eq_phone = session.active.iter().next().copied();
+        }
         session.rebuild_display_curves();
         let theme = session.theme;
         Self {
@@ -121,6 +132,9 @@ impl App {
             source: squiglab_core::audio::Source::Tone { freq: 1000.0 },
             volume: 0.2,
             frequency: 1000.0,
+            screenshot_requested: false,
+            upload_path: String::new(),
+            upload_message: None,
         }
         .with_theme(theme)
     }
@@ -129,6 +143,19 @@ impl App {
     fn with_theme(mut self, theme: squiglab_core::theme::Theme) -> Self {
         self.session.theme = theme;
         self
+    }
+
+    /// Keep the view, so the window opens on it next time.
+    pub fn save_preferences(&mut self) {
+        let path = match squiglab_core::config::preferences_path() {
+            Ok(path) => path,
+            Err(_) => return,
+        };
+        if let Err(problem) =
+            squiglab_core::config::write_preferences_to(&path, &self.session.preferences())
+        {
+            self.status = Some(format!("The view could not be saved: {problem}"));
+        }
     }
 
     /// Say something at the foot of the window.
@@ -152,6 +179,20 @@ impl App {
                 self.left_column(ui);
                 self.right_column(ui);
             });
+
+        if self.screenshot_requested {
+            self.screenshot_requested = false;
+            // The picture is taken of the next frame, and the closure that
+            // writes it away is carried along with the request.
+            let callback: Box<dyn Fn(&egui::ColorImage) + Send + Sync> = Box::new(|image| {
+                if let Some(path) = crate::tools::save_picture("window.png", image) {
+                    eprintln!("The picture was saved to {}", path.display());
+                }
+            });
+            ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(egui::UserData::new(
+                callback,
+            )));
+        }
 
         if let Some(notice) = &self.notice {
             let area = ctx.content_rect();
@@ -214,6 +255,8 @@ impl App {
                                 crate::equalizer::show_summary(ui, self);
                             }
                         }
+                        ui.separator();
+                        crate::upload::show(ui, self);
                     });
             });
     }
@@ -229,6 +272,12 @@ impl App {
 impl eframe::App for App {
     fn ui(&mut self, ui: &mut Ui, _frame: &mut eframe::Frame) {
         self.draw(ui);
+    }
+
+    /// The view is kept between sessions, so the window opens on what was on
+    /// the graph when it was last closed.
+    fn on_exit(&mut self) {
+        self.save_preferences();
     }
 }
 

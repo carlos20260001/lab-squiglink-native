@@ -169,6 +169,14 @@ pub struct MeasurementGroup {
     pub name: String,
     pub variants: Vec<MeasurementVariant>,
     pub target: bool,
+    /// The review the phone book records for this measurement, if any.
+    pub review_score: Option<String>,
+    /// The link to that review.
+    pub review_link: Option<String>,
+    /// The link to where the measurement can be bought.
+    pub shop_link: Option<String>,
+    /// The price the phone book records, if any.
+    pub price: Option<String>,
 }
 
 /// The state of a session: what is loaded, what is selected, and what has been
@@ -1163,6 +1171,10 @@ impl Session {
             Some(index) => index,
             None => {
                 self.groups.push(MeasurementGroup {
+                    review_score: None,
+                    review_link: None,
+                    shop_link: None,
+                    price: None,
                     brand,
                     brand_suffix: None,
                     name: name.to_owned(),
@@ -1477,6 +1489,10 @@ pub fn build_groups(
                         name: model.name.clone(),
                         target: false,
                         variants,
+                        review_score: model.review_score.clone(),
+                        review_link: model.review_link.clone(),
+                        shop_link: model.shop_link.clone(),
+                        price: model.price.clone(),
                     });
                 }
             }
@@ -1500,6 +1516,10 @@ pub fn build_groups(
     }
     for ((category, name), curve_indices) in targets {
         groups.push(MeasurementGroup {
+            review_score: None,
+            review_link: None,
+            shop_link: None,
+            price: None,
             brand: category,
             brand_suffix: None,
             name,
@@ -1512,6 +1532,10 @@ pub fn build_groups(
     }
     for (name, curve_indices) in other {
         groups.push(MeasurementGroup {
+            review_score: None,
+            review_link: None,
+            shop_link: None,
+            price: None,
             brand: "Other measurements".to_owned(),
             brand_suffix: None,
             name: name.clone(),

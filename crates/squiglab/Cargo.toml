@@ -17,6 +17,12 @@ path = "src/lib.rs"
 name = "squiglab"
 path = "src/main.rs"
 
+# The packaging tool: it gathers the data, the licence and the mark around
+# the executable.
+[[bin]]
+name = "app-bundle"
+path = "tools/app_bundle.rs"
+
 [dependencies]
 squiglab-core = { path = "../squiglab-core" }
 eframe = "0.36"

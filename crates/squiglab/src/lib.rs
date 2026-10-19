@@ -13,3 +13,4 @@ pub mod selector;
 pub mod sound;
 pub mod theme;
 pub mod tools;
+pub mod upload;
