@@ -955,9 +955,6 @@ impl GraphCanvas<'_> {
     /// wasted room.
     const PLOT_ASPECT_RATIO: f32 = 3.4;
 
-    /// How many labels to group in the corner before letting the rest follow
-    /// their curves. The reference tool groups about five.
-
     /// The mark and the name, faded back behind the curves.
     ///
     /// The reference draws them in one group at a fifth of the usual opacity,
