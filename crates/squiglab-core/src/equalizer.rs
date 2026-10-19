@@ -351,11 +351,28 @@ pub fn search_candidates(
     target: &[ResponsePoint],
     threshold: f64,
     range: (f64, f64),
+    constraints: &crate::constraints::Constraints,
 ) -> Vec<Filter> {
+    let (min_freq, max_freq) = range;
+    if !constraints.graphic_bands.is_empty() {
+        // A graphic fit places one filter on each of the given bands, with the
+        // gain that brings the curve to the target there.
+        let mut candidates = Vec::new();
+        for band in &constraints.graphic_bands {
+            if !constraints.frequency_allowed(*band) {
+                continue;
+            }
+            let gain = interp(&[*band], target)[0].db - interp(&[*band], curve)[0].db;
+            if !constraints.gain_allowed(gain) {
+                continue;
+            }
+            candidates.push(Filter::new(FilterType::Peaking, *band, 1.0, gain));
+        }
+        return candidates;
+    }
     let mut state = 0.0; // 1: peak, 0: matched, -1: dip
     let mut start_index: isize = -1;
     let mut candidates = Vec::new();
-    let (min_freq, max_freq) = range;
     for index in 0..curve.len() {
         let freq = curve[index].hz;
         let delta = curve[index].db - target[index].db;
@@ -376,7 +393,12 @@ pub fn search_candidates(
                 let gain = interp(&[center], &target[start_index as usize..index])[0].db
                     - interp(&[center], &curve[start_index as usize..index])[0].db;
                 let q = center / (end - start);
-                if (min_freq..=max_freq).contains(&center) {
+                if (min_freq..=max_freq).contains(&center)
+                    && constraints.frequency_allowed(center)
+                    && constraints.allows(FilterType::Peaking)
+                    && constraints.gain_allowed(gain)
+                    && constraints.q_allowed(q)
+                {
                     candidates.push(Filter::new(FilterType::Peaking, center, q, gain));
                 }
             }
@@ -432,6 +454,7 @@ pub fn optimize(
     iteration: usize,
     reverse: bool,
     range: (f64, f64),
+    constraints: &crate::constraints::Constraints,
 ) -> Vec<Filter> {
     let mut filters = strip(filters);
     let (min_freq, max_freq) = range;
@@ -468,6 +491,10 @@ pub fn optimize(
             if !(min_freq..=max_freq).contains(&freq)
                 || !(min_q..=max_q).contains(&q)
                 || !(min_gain..=max_gain).contains(&gain)
+                || !constraints.frequency_allowed(freq)
+                || !constraints.gain_allowed(gain)
+                || !constraints.q_allowed(q)
+                || !constraints.allows(filter.filter_type)
             {
                 return false;
             }
@@ -481,7 +508,14 @@ pub fn optimize(
             }
             false
         };
-        for df in -(max_df as i64)..max_df as i64 {
+        // On a graphic band the frequency is the band's, so only the gain and
+        // the Q are searched.
+        let df_range: Box<dyn Iterator<Item = i64>> = if constraints.graphic_bands.is_empty() {
+            Box::new(-(max_df as i64)..max_df as i64)
+        } else {
+            Box::new(0..0)
+        };
+        for df in df_range {
             for dq in (-(max_dq as i64)..max_dq as i64 - 1).rev() {
                 // Widen and deepen the filter, then narrow it: each inner loop
                 // stops at the first step that fails to improve.
@@ -501,7 +535,7 @@ pub fn optimize(
         index += step;
     }
     if !reverse {
-        return optimize(curve, target, filters, iteration, true, range);
+        return optimize(curve, target, filters, iteration, true, range, constraints);
     }
 
     filters.sort_by(|left, right| left.freq.total_cmp(&right.freq));
@@ -554,9 +588,16 @@ pub fn autoeq(
     target: &[ResponsePoint],
     max_filters: usize,
     range: (f64, f64),
+    constraints: &crate::constraints::Constraints,
 ) -> Vec<Filter> {
+    // The constraint's cap and the caller's budget: the tighter one wins.
+    let max_filters = if constraints.max_filters == 0 {
+        max_filters
+    } else {
+        max_filters.min(constraints.max_filters)
+    };
     let first_batch_size = ((max_filters as f64 / 2.0).floor() - 1.0).max(1.0) as usize;
-    let mut first_candidates = search_candidates(curve, target, 1.0, range)
+    let mut first_candidates = search_candidates(curve, target, 1.0, range, constraints)
         .into_iter()
         // The treble is left to the second batch.
         .filter(|candidate| candidate.freq <= TREBLE_START_FROM)
@@ -568,12 +609,20 @@ pub fn autoeq(
         .collect();
     first_filters.sort_by(|left, right| left.freq.total_cmp(&right.freq));
     for iteration in 0..OPTIMIZE_DELTAS.len() {
-        first_filters = optimize(curve, target, first_filters, iteration, false, range);
+        first_filters = optimize(
+            curve,
+            target,
+            first_filters,
+            iteration,
+            false,
+            range,
+            constraints,
+        );
     }
 
     let corrected = apply(curve, &first_filters, DEFAULT_SAMPLE_RATE);
     let second_batch_size = max_filters.saturating_sub(first_filters.len());
-    let mut second_candidates = search_candidates(&corrected, target, 0.5, range);
+    let mut second_candidates = search_candidates(&corrected, target, 0.5, range, constraints);
     second_candidates.sort_by(|left, right| left.q.total_cmp(&right.q));
     let mut second_filters: Vec<Filter> = second_candidates
         .into_iter()
@@ -581,13 +630,29 @@ pub fn autoeq(
         .collect();
     second_filters.sort_by(|left, right| left.freq.total_cmp(&right.freq));
     for iteration in 0..OPTIMIZE_DELTAS.len() {
-        second_filters = optimize(&corrected, target, second_filters, iteration, false, range);
+        second_filters = optimize(
+            &corrected,
+            target,
+            second_filters,
+            iteration,
+            false,
+            range,
+            constraints,
+        );
     }
 
     let mut all_filters = first_filters;
     all_filters.extend(second_filters);
     for iteration in 0..OPTIMIZE_DELTAS.len() {
-        all_filters = optimize(curve, target, all_filters, iteration, false, range);
+        all_filters = optimize(
+            curve,
+            target,
+            all_filters,
+            iteration,
+            false,
+            range,
+            constraints,
+        );
     }
     strip(all_filters)
 }
@@ -1040,7 +1105,13 @@ mod tests {
         let curve = to_curve(&golden.curve);
         let target = to_curve(&golden.target);
         for case in [&golden.autoeq, &golden.autoeq_small] {
-            let filters = autoeq(&curve, &target, case.max_filters, AUTO_EQ_RANGE);
+            let filters = autoeq(
+                &curve,
+                &target,
+                case.max_filters,
+                AUTO_EQ_RANGE,
+                &crate::constraints::Constraints::none(),
+            );
             assert_filters_match(
                 &filters,
                 &case.filters,
@@ -1056,7 +1127,13 @@ mod tests {
         let golden = fixture();
         let curve = to_curve(&golden.curve);
         let target = to_curve(&golden.target);
-        let filters = autoeq(&curve, &target, golden.autoeq.max_filters, (200.0, 2_000.0));
+        let filters = autoeq(
+            &curve,
+            &target,
+            golden.autoeq.max_filters,
+            (200.0, 2_000.0),
+            &crate::constraints::Constraints::none(),
+        );
         assert!(
             !filters.is_empty(),
             "a fit inside the band still produces filters"
@@ -1069,10 +1146,78 @@ mod tests {
             );
         }
         // The default band is wider, so it lets the treble through.
-        let wide = autoeq(&curve, &target, golden.autoeq.max_filters, AUTO_EQ_RANGE);
+        let wide = autoeq(
+            &curve,
+            &target,
+            golden.autoeq.max_filters,
+            AUTO_EQ_RANGE,
+            &crate::constraints::Constraints::none(),
+        );
         assert!(
             wide.iter().any(|filter| filter.freq > 2_000.0),
             "the default band reaches past the narrow one"
+        );
+    }
+
+    #[test]
+    fn the_constraints_bind_the_fit() {
+        // The reference can say what its fit is allowed to produce, and the
+        // limits have to bind: a band, a count, and the kinds of filter.
+        let golden = fixture();
+        let curve = to_curve(&golden.curve);
+        let target = to_curve(&golden.target);
+
+        let narrow = crate::constraints::Constraints {
+            freq_min: 0.0,
+            freq_max: 2_000.0,
+            ..crate::constraints::Constraints::none()
+        };
+        let fitted = autoeq(
+            &curve,
+            &target,
+            golden.autoeq.max_filters,
+            (200.0, 2_000.0),
+            &narrow,
+        );
+        assert!(
+            fitted.iter().all(|filter| filter.freq <= 2_000.0),
+            "a filter landed outside the band: {fitted:?}"
+        );
+
+        // A cap of three filters is three filters.
+        let capped = crate::constraints::Constraints {
+            max_filters: 3,
+            ..crate::constraints::Constraints::none()
+        };
+        let fitted = autoeq(
+            &curve,
+            &target,
+            golden.autoeq.max_filters,
+            AUTO_EQ_RANGE,
+            &capped,
+        );
+        assert!(
+            fitted.len() <= 3,
+            "the fit produced {} filters under a cap of three",
+            fitted.len()
+        );
+
+        // A fit that may only use peaking filters uses them.
+        let peaking_only = crate::constraints::Constraints {
+            allow_low_shelf: false,
+            allow_high_shelf: false,
+            ..crate::constraints::Constraints::none()
+        };
+        let fitted = autoeq(
+            &curve,
+            &target,
+            golden.autoeq.max_filters,
+            AUTO_EQ_RANGE,
+            &peaking_only,
+        );
+        assert!(
+            fitted.iter().all(|f| f.filter_type == FilterType::Peaking),
+            "the fit used a filter kind it was not allowed: {fitted:?}"
         );
     }
 

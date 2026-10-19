@@ -247,6 +247,9 @@ pub struct Session {
     pub eq_max_filters: usize,
     /// The frequency band AutoEQ fits within.
     pub eq_range: (f64, f64),
+    /// What AutoEQ is allowed to fit: which filter types, how many, and over
+    /// what frequency, gain and Q.
+    pub eq_constraints: crate::constraints::Constraints,
     /// The grid an uploaded measurement is resampled onto.
     pub upload_grid: Vec<f32>,
     /// The names of the curves the user uploaded, so they are excluded from
@@ -306,6 +309,7 @@ impl Default for Session {
             eq_target: None,
             eq_max_filters: DEFAULT_EQ_MAX_FILTERS,
             eq_range: crate::equalizer::AUTO_EQ_RANGE,
+            eq_constraints: crate::constraints::Constraints::none(),
             upload_grid: Vec::new(),
             uploaded_names: BTreeSet::new(),
             sound_slot: 0,
@@ -751,7 +755,13 @@ impl Session {
                 .normalized_average_points(target)
                 .map_err(|error| format!("Auto EQ target: {error}"))?,
         );
-        let fitted = equalizer::autoeq(&source, &target_curve, self.eq_max_filters, self.eq_range);
+        let fitted = equalizer::autoeq(
+            &source,
+            &target_curve,
+            self.eq_max_filters,
+            self.eq_range,
+            &self.eq_constraints,
+        );
         let message = format!(
             "Auto EQ fitted {} filters against {}.",
             fitted.len(),

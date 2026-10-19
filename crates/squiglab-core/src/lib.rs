@@ -9,6 +9,7 @@ pub mod audio;
 pub mod branding;
 pub mod color;
 pub mod config;
+pub mod constraints;
 pub mod data;
 pub mod delta;
 pub mod equalizer;
