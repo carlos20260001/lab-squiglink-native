@@ -92,6 +92,50 @@ impl LabelLayout {
     }
 }
 
+/// A named band of the frequency axis.
+///
+/// The reference names the bands of the axis, and the names are part of its
+/// vocabulary rather than of any one picture of it, so they live here.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct FrequencyBand {
+    /// The name the reference gives the band.
+    pub title: &'static str,
+    /// The frequencies the band covers.
+    pub range_hz: (f32, f32),
+}
+
+/// The bands of the frequency axis, in order.
+pub const FREQUENCY_BANDS: [FrequencyBand; 7] = [
+    FrequencyBand {
+        title: "Sub bass",
+        range_hz: (20.0, 60.0),
+    },
+    FrequencyBand {
+        title: "Mid bass",
+        range_hz: (60.0, 200.0),
+    },
+    FrequencyBand {
+        title: "Lower midrange",
+        range_hz: (200.0, 500.0),
+    },
+    FrequencyBand {
+        title: "Upper midrange",
+        range_hz: (500.0, 2000.0),
+    },
+    FrequencyBand {
+        title: "Presence region",
+        range_hz: (2000.0, 5000.0),
+    },
+    FrequencyBand {
+        title: "Mid treble",
+        range_hz: (5000.0, 10000.0),
+    },
+    FrequencyBand {
+        title: "Air",
+        range_hz: (10000.0, 20000.0),
+    },
+];
+
 pub fn y_range(curves: &[PlotCurve<'_>]) -> (f32, f32) {
     // Targets are excluded from the plotted dB range. A target with a steep
     // high-frequency rolloff — the Harman target reaches 14.7 dB at 20 kHz —

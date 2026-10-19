@@ -1,7 +1,8 @@
-# The interface: the window, the panels, and the widgets they are drawn with.
+# The interface.
 #
-# It draws the program, and knows nothing about how it works: the rules, the
-# state and the data live in squiglab-core, which has no egui in it at all.
+# It draws the program and knows nothing about how the program works: the
+# rules, the state and the data live in squiglab-core, which has no egui in
+# it at all.
 [package]
 name = "squiglab"
 version = "0.1.0"
@@ -20,15 +21,11 @@ path = "src/main.rs"
 squiglab-core = { path = "../squiglab-core" }
 eframe = "0.36"
 egui = "0.36"
-egui_extras = "0.36"
+egui_extras = { version = "0.36", features = ["image", "svg"] }
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 anyhow = "1.0"
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-toml = "0.8"
 dirs = "7"
 
 [build-dependencies]
-# The product's mark and its manifest, so the executable can carry them.
 squiglab-core = { path = "../squiglab-core" }
 winresource = "0.1"

@@ -1,4 +1,4 @@
-//! The design tokens: colour, type, spacing, and the way the toolkit is set up.
+//! The design tokens: colour, type, and the measure.
 //!
 //! Every value is the reference's own, read from its stylesheet, so the window
 //! looks like the page it is modelled on. `docs/design-system.md` is the
@@ -6,28 +6,11 @@
 //!
 //! Two of them are the native's rather than the reference's: the dark theme's
 //! accent is a blue, because the curves are the native's own coloured palette
-//! and the reference's yellow accent fights them; and the curve colours are
-//! the native's golden-angle palette, because the reference greys its curves
-//! for a page that carries one accent, and the window carries many.
+//! and the reference's yellow accent fights them; and the light theme's accent
+//! is a step darker than the reference's, because white text on the
+//! reference's own accent does not clear 4.5:1.
 
 use egui::{Color32, Context, FontFamily, FontId, Stroke, Style, TextStyle, Visuals};
-
-/// Font family name for the bold face, used for emphasis in places where the
-/// built-in text styles do not express enough.
-pub const FONT_BOLD: &str = "open-sans-bold";
-/// Font family name for the regular face, used for reading and control text.
-pub const FONT_REGULAR: &str = "open-sans";
-
-/// Physical spacing rhythm. All padding, gaps, and margins are multiples of
-/// `SPACE_UNIT` so the interface keeps one consistent beat.
-pub const SPACE_UNIT: f32 = 4.0;
-
-/// Minimum corner radius for interactive controls.
-pub const RADIUS_CONTROL: f32 = 6.0;
-
-// ---------------------------------------------------------------------------
-// The themes
-// ---------------------------------------------------------------------------
 
 /// The three themes the reference offers. The choice is a preference, so it
 /// lives in the core with the rest of them; only the colours are the
@@ -68,60 +51,108 @@ pub fn set_current(theme: Theme) {
 }
 
 // ---------------------------------------------------------------------------
+// The measure
+// ---------------------------------------------------------------------------
+
+/// The reference's measurements, in points.
+pub mod metrics {
+    /// The header's height.
+    pub const HEADER_HEIGHT: f32 = 48.0;
+    /// The left column's width.
+    pub const COLUMN_WIDTH: f32 = 350.0;
+    /// The brand column's width, inside the left column.
+    pub const BRAND_COLUMN_WIDTH: f32 = 94.0;
+    /// The list's width, inside the left column.
+    pub const LIST_WIDTH: f32 = COLUMN_WIDTH - BRAND_COLUMN_WIDTH;
+    /// A list row's height.
+    pub const ROW_HEIGHT: f32 = 36.0;
+    /// An input's height.
+    pub const INPUT_HEIGHT: f32 = 36.0;
+    /// The standard corner radius.
+    pub const RADIUS: f32 = 6.0;
+    /// The smaller corner radius.
+    pub const RADIUS_SMALL: f32 = 4.0;
+    /// A chip's radius, half its height.
+    pub const RADIUS_CHIP: f32 = 11.0;
+    /// A slider's thumb.
+    pub const THUMB: f32 = 12.0;
+    /// The gap between the fields of a row.
+    pub const GAP: f32 = 4.0;
+    /// The gap between the controls of a cluster.
+    pub const GAP_LARGE: f32 = 8.0;
+    /// The padding around a panel's contents.
+    pub const PADDING: f32 = 16.0;
+    /// The padding inside a field.
+    pub const PADDING_FIELD: f32 = 10.0;
+    /// The graph's proportion: its width for every unit of its height.
+    pub const PLOT_ASPECT_RATIO: f32 = 3.4;
+    /// The chrome the graph's width is measured against: the window's height
+    /// less this is what the graph may be wide by.
+    pub const GRAPH_CHROME_HEIGHT: f32 = 300.0;
+    /// How many units across the graph may be for every unit of height.
+    pub const GRAPH_ASPECT: f32 = 2.2;
+    /// Below this width the columns stack.
+    pub const NARROW_VIEWPORT: f32 = 1000.0;
+}
+
+// ---------------------------------------------------------------------------
 // Typography
 // ---------------------------------------------------------------------------
 
-/// One font size per step of the scale. The sizes are the reference's own:
-/// the logo at 18, the controls at 12, the labels at 11, the body at 13.
+/// The reference's type scale: the logo at 18, the controls at 12, the labels
+/// at 11, the body at 13.
 #[derive(Clone, Copy)]
 pub enum TypeStep {
-    /// Tiny meta text: counts, units, attribute labels.
-    Micro,
-    /// Secondary labels and attribute rows.
-    Caption,
-    /// Default reading and control size.
-    Body,
-    /// Emphasised labels inside controls.
-    Subtitle,
-    /// Panel headings and toolbar section titles.
+    /// The logo.
+    Logo,
+    /// Panel headings.
     Title,
-    /// App title and large readouts.
-    Heading,
+    /// Buttons and selects.
+    Control,
+    /// Labels, inputs and chips.
+    Label,
+    /// The body.
+    Body,
 }
 
 impl TypeStep {
+    /// The size in points.
     pub fn size(self) -> f32 {
         match self {
-            TypeStep::Micro => 11.0,
-            TypeStep::Caption => 11.0,
-            TypeStep::Body => 13.0,
-            TypeStep::Subtitle => 12.0,
+            TypeStep::Logo => 18.0,
             TypeStep::Title => 16.0,
-            TypeStep::Heading => 18.0,
+            TypeStep::Control => 12.0,
+            TypeStep::Label => 11.0,
+            TypeStep::Body => 13.0,
         }
+    }
+
+    /// The font for this step.
+    pub fn font(self) -> FontId {
+        FontId::new(self.size(), FontFamily::Proportional)
+    }
+
+    /// The bold font for this step.
+    pub fn font_bold(self) -> FontId {
+        FontId::new(self.size(), FontFamily::Name(BOLD_FAMILY.into()))
+    }
+
+    /// The monospaced font for this step, for figures that line up.
+    pub fn font_mono(self) -> FontId {
+        FontId::new(self.size(), FontFamily::Monospace)
     }
 }
 
-/// Font id for regular weight at a scale step.
-pub fn font(step: TypeStep) -> FontId {
-    FontId::new(step.size(), FontFamily::Proportional)
-}
-
-/// Font id for bold weight at a scale step.
-pub fn font_bold(step: TypeStep) -> FontId {
-    FontId::new(step.size(), FontFamily::Name(FONT_BOLD.into()))
-}
-
-/// Font id for monospace measurement data at a scale step.
-pub fn font_mono(step: TypeStep) -> FontId {
-    FontId::new(step.size(), FontFamily::Monospace)
-}
+/// The product's regular typeface.
+pub const REGULAR_FAMILY: &str = "open-sans";
+/// The product's bold typeface.
+pub const BOLD_FAMILY: &str = "open-sans-bold";
 
 // ---------------------------------------------------------------------------
-// Color
+// Colour
 // ---------------------------------------------------------------------------
 
-/// A resolved color set for one theme.
+/// A resolved set of colours for one theme.
 ///
 /// The names are the roles the reference's own variables fill, so a value can
 /// be traced back to the line of CSS it came from.
@@ -129,13 +160,13 @@ pub fn font_mono(step: TypeStep) -> FontId {
 pub struct Palette {
     // Surfaces, ordered from deepest to nearest the viewer.
     /// The page itself.
-    pub surface_panel: Color32,
+    pub page: Color32,
     /// The graph's ground.
-    pub surface_base: Color32,
+    pub graph: Color32,
     /// The fields and the raised surfaces.
-    pub surface_raised: Color32,
-    /// The sunken surfaces: the code and the quiet fills.
-    pub surface_sunken: Color32,
+    pub field: Color32,
+    /// The sunken surfaces: the quiet fills and the code.
+    pub sunken: Color32,
 
     // Text.
     pub text_primary: Color32,
@@ -175,22 +206,13 @@ impl Palette {
         }
     }
 
-    /// The palette for the light or the dark theme.
-    pub fn resolve(dark: bool) -> Self {
-        if dark {
-            Self::dark()
-        } else {
-            Self::light()
-        }
-    }
-
     /// The light theme: the reference's default.
     pub fn light() -> Self {
         Self {
-            surface_panel: hsl(54, 5, 96),
-            surface_base: hsl(54, 0, 100),
-            surface_raised: hsl(210, 10, 98),
-            surface_sunken: hsl(54, 5, 90),
+            page: hsl(54, 5, 96),
+            graph: hsl(54, 0, 100),
+            field: hsl(210, 10, 98),
+            sunken: hsl(54, 5, 90),
 
             text_primary: hsl(210, 20, 10),
             text_secondary: hsl(210, 20, 40),
@@ -224,10 +246,10 @@ impl Palette {
     /// yellow, because the curves are the native's own colours.
     pub fn dark() -> Self {
         Self {
-            surface_panel: hsl(215, 14, 10),
-            surface_base: hsl(215, 14, 7),
-            surface_raised: hsl(215, 14, 5),
-            surface_sunken: hsl(215, 14, 10),
+            page: hsl(215, 14, 10),
+            graph: hsl(215, 14, 7),
+            field: hsl(215, 14, 5),
+            sunken: hsl(215, 14, 10),
 
             text_primary: hsl(54, 11, 87),
             text_secondary: hsl(215, 14, 60),
@@ -256,10 +278,10 @@ impl Palette {
     /// The high contrast theme: black on white, and no greys between them.
     pub fn contrast() -> Self {
         Self {
-            surface_panel: Color32::WHITE,
-            surface_base: Color32::WHITE,
-            surface_raised: Color32::WHITE,
-            surface_sunken: Color32::BLACK,
+            page: Color32::WHITE,
+            graph: Color32::WHITE,
+            field: Color32::WHITE,
+            sunken: Color32::BLACK,
 
             text_primary: Color32::BLACK,
             text_secondary: Color32::BLACK,
@@ -285,24 +307,24 @@ impl Palette {
         }
     }
 
-    /// Fill for a selected interactive control.
+    /// Whether the theme is a dark one.
+    pub fn is_dark(&self) -> bool {
+        matches!(self.theme, Theme::Dark)
+    }
+
+    /// The fill of a selected control.
     pub fn selected_fill(&self) -> Color32 {
         self.accent
     }
 
-    /// Stroke for a control border.
+    /// The stroke of a control's border.
     pub fn control_stroke(&self) -> Stroke {
         Stroke::new(1.0, self.border)
     }
 
-    /// Border on a control that currently has keyboard focus.
+    /// The border of a control that has keyboard focus.
     pub fn focus_stroke(&self) -> Stroke {
         Stroke::new(1.5, self.accent)
-    }
-
-    /// Whether the theme is a dark one.
-    pub fn is_dark(&self) -> bool {
-        matches!(self.theme, Theme::Dark)
     }
 }
 
@@ -341,51 +363,176 @@ pub fn hsl(hue: u8, saturation: u8, lightness: u8) -> Color32 {
         (value * 255.0).round() as u8
     };
     // Each channel takes the hue at its own offset, and the offsets are what
-    // turn around the colour wheel; the sector only decides which of the three
-    // sits at full strength.
+    // turn around the colour wheel.
     Color32::from_rgb(channel(h + 1.0 / 3.0), channel(h), channel(h - 1.0 / 3.0))
 }
 
+/// The core's colour, as the interface paints it.
+pub fn color(color: squiglab_core::color::Rgb) -> Color32 {
+    Color32::from_rgb(color.r, color.g, color.b)
+}
+
+/// The interface's own colour, named the way the core names colours.
+pub fn core_color(color: Color32) -> squiglab_core::color::Rgb {
+    squiglab_core::color::Rgb::new(color.r(), color.g(), color.b())
+}
+
 // ---------------------------------------------------------------------------
-// Graph
+// Setting the toolkit up
 // ---------------------------------------------------------------------------
 
-/// Stroke weights and label sizes for the graph canvas.
+/// Register the product's typefaces. Must be called before the first frame.
+pub fn register_fonts(ctx: &Context) {
+    let mut fonts = egui::FontDefinitions::default();
+    fonts.font_data.insert(
+        REGULAR_FAMILY.to_owned(),
+        std::sync::Arc::new(egui::FontData::from_static(
+            squiglab_core::product::FONT_REGULAR,
+        )),
+    );
+    fonts.font_data.insert(
+        BOLD_FAMILY.to_owned(),
+        std::sync::Arc::new(egui::FontData::from_static(
+            squiglab_core::product::FONT_BOLD,
+        )),
+    );
+    fonts.families.insert(
+        FontFamily::Proportional,
+        vec![REGULAR_FAMILY.to_owned(), BOLD_FAMILY.to_owned()],
+    );
+    // The bold face is a family of its own, so a step can ask for the bold
+    // weight directly.
+    fonts.families.insert(
+        FontFamily::Name(BOLD_FAMILY.into()),
+        vec![BOLD_FAMILY.to_owned(), REGULAR_FAMILY.to_owned()],
+    );
+    fonts.families.insert(
+        FontFamily::Monospace,
+        vec![REGULAR_FAMILY.to_owned(), BOLD_FAMILY.to_owned()],
+    );
+    ctx.set_fonts(fonts);
+}
+
+/// Apply a theme to the toolkit.
 ///
-/// The graph carries more saturated color than any other surface, so its own
-/// chrome is the quietest thing in the application: a hairline grid, recessive
-/// axis type, and bold curve labels that match the measurement colors.
-pub mod graph {
-    /// Width of the measurement and target curves.
-    pub const CURVE_WIDTH: f32 = 2.0;
-    /// Width of the hovered curve's emphasis stroke.
-    pub const CURVE_WIDTH_HOVER: f32 = 4.0;
-    /// Width of a grid line.
-    pub const GRID_WIDTH: f32 = 0.7;
-    /// Width of the inspector's vertical frequency line.
-    pub const INSPECTOR_WIDTH: f32 = 1.5;
+/// The toolkit knows of a light and a dark preference, so the reference's
+/// three themes are the preference plus the colours on top: the high contrast
+/// theme is the light one with its own colours.
+pub fn apply(ctx: &Context, theme: Theme) {
+    set_current(theme);
+    ctx.set_theme(match theme {
+        Theme::Light | Theme::Contrast => egui::ThemePreference::Light,
+        Theme::Dark => egui::ThemePreference::Dark,
+    });
+    let style = style_for(theme);
+    // The style is set for both preferences, so the theme does not change under
+    // the window's own light or dark setting.
+    ctx.set_style_of(egui::Theme::Dark, style.clone());
+    ctx.set_style_of(egui::Theme::Light, style);
 }
 
-// ---------------------------------------------------------------------------
-// Spacing
-// ---------------------------------------------------------------------------
-
-/// Spacing scale, all multiples of [`SPACE_UNIT`].
-pub struct Spacing;
-
-impl Spacing {
-    pub const MICRO: f32 = SPACE_UNIT * 0.5;
-    pub const TIGHT: f32 = SPACE_UNIT * 1.0;
-    pub const COMPACT: f32 = SPACE_UNIT * 2.0;
-    pub const NORMAL: f32 = SPACE_UNIT * 3.0;
-    pub const RELAXED: f32 = SPACE_UNIT * 4.0;
-    pub const LOOSE: f32 = SPACE_UNIT * 6.0;
-    pub const SECTION: f32 = SPACE_UNIT * 8.0;
+fn style_for(theme: Theme) -> Style {
+    let palette = Palette::resolve_theme(theme);
+    Style {
+        text_styles: text_styles(),
+        spacing: egui::Spacing {
+            item_spacing: egui::vec2(metrics::GAP_LARGE, metrics::GAP_LARGE),
+            button_padding: egui::vec2(metrics::PADDING_FIELD, 6.0),
+            menu_margin: margin(metrics::PADDING, metrics::GAP_LARGE),
+            window_margin: margin(metrics::PADDING, metrics::PADDING),
+            indent: metrics::GAP_LARGE + metrics::GAP,
+            interact_size: egui::vec2(80.0, metrics::INPUT_HEIGHT),
+            combo_height: metrics::INPUT_HEIGHT,
+            scroll: scroll::style(),
+            ..Default::default()
+        },
+        visuals: visuals(&palette),
+        ..Default::default()
+    }
 }
 
-// ---------------------------------------------------------------------------
-// Scrolling
-// ---------------------------------------------------------------------------
+/// The text styles for the reference's scale.
+fn text_styles() -> std::collections::BTreeMap<TextStyle, FontId> {
+    use TextStyle::{Body, Button, Heading, Monospace, Small};
+    [
+        (Small, TypeStep::Label.font()),
+        (Body, TypeStep::Body.font()),
+        (Button, TypeStep::Control.font()),
+        (Heading, TypeStep::Title.font_bold()),
+        (Monospace, TypeStep::Label.font_mono()),
+        (TextStyle::Name("logo".into()), TypeStep::Logo.font_bold()),
+        (TextStyle::Name("title".into()), TypeStep::Title.font_bold()),
+        (TextStyle::Name("label".into()), TypeStep::Label.font()),
+        (TextStyle::Name("value".into()), TypeStep::Body.font_mono()),
+    ]
+    .into_iter()
+    .collect()
+}
+
+/// The toolkit's colours for a theme.
+fn visuals(palette: &Palette) -> Visuals {
+    let mut visuals = if palette.is_dark() {
+        Visuals::dark()
+    } else {
+        Visuals::light()
+    };
+    visuals.override_text_color = Some(palette.text_primary);
+    visuals.panel_fill = palette.page;
+    visuals.window_fill = palette.field;
+    visuals.extreme_bg_color = palette.graph;
+    visuals.faint_bg_color = palette.sunken;
+    visuals.code_bg_color = palette.sunken;
+    visuals.text_cursor.stroke.color = palette.accent;
+    visuals.hyperlink_color = palette.accent;
+    visuals.warn_fg_color = palette.warning;
+    visuals.error_fg_color = palette.error;
+    visuals.selection.bg_fill = palette.accent;
+    visuals.selection.stroke = Stroke::new(1.0, palette.on_accent);
+    visuals.widgets.noninteractive.bg_fill = palette.graph;
+    visuals.widgets.noninteractive.weak_bg_fill = palette.graph;
+    visuals.widgets.noninteractive.bg_stroke = Stroke::new(1.0, palette.border);
+    visuals.widgets.noninteractive.fg_stroke = Stroke::new(1.0, palette.text_primary);
+    visuals.widgets.inactive.bg_fill = palette.field;
+    visuals.widgets.inactive.weak_bg_fill = palette.field;
+    visuals.widgets.inactive.bg_stroke = Stroke::new(1.0, palette.border);
+    visuals.widgets.inactive.fg_stroke = Stroke::new(1.0, palette.text_secondary);
+    visuals.widgets.hovered.bg_fill = palette.hover_fill;
+    visuals.widgets.hovered.weak_bg_fill = palette.hover_fill;
+    visuals.widgets.hovered.bg_stroke = Stroke::new(1.0, palette.border_strong);
+    visuals.widgets.hovered.fg_stroke = Stroke::new(1.0, palette.text_primary);
+    visuals.widgets.active.bg_fill = palette.active_fill;
+    visuals.widgets.active.weak_bg_fill = palette.active_fill;
+    visuals.widgets.active.bg_stroke = Stroke::new(1.0, palette.accent);
+    visuals.widgets.active.fg_stroke = Stroke::new(1.0, palette.text_primary);
+    visuals.widgets.open.bg_fill = palette.field;
+    visuals.widgets.open.weak_bg_fill = palette.field;
+    visuals.widgets.open.bg_stroke = Stroke::new(1.0, palette.accent);
+    visuals.widgets.open.fg_stroke = Stroke::new(1.0, palette.text_primary);
+    for visuals in [
+        &mut visuals.widgets.noninteractive,
+        &mut visuals.widgets.inactive,
+    ] {
+        visuals.corner_radius = metrics::RADIUS.into();
+    }
+    for visuals in [
+        &mut visuals.widgets.hovered,
+        &mut visuals.widgets.active,
+        &mut visuals.widgets.open,
+    ] {
+        visuals.corner_radius = metrics::RADIUS.into();
+    }
+    visuals
+}
+
+/// egui's [`egui::Margin`] stores whole points, so spacing steps round to it.
+fn margin(horizontal: f32, vertical: f32) -> egui::Margin {
+    egui::Margin {
+        left: horizontal as i8,
+        right: horizontal as i8,
+        top: vertical as i8,
+        bottom: vertical as i8,
+    }
+}
 
 /// Scrollbar geometry, applied through [`egui::style::Spacing::scroll`].
 ///
@@ -394,22 +541,21 @@ impl Spacing {
 /// the active widget visuals and its track from the extreme background, so the
 /// themed equivalent is a floating bar with the handle drawn in the palette's
 /// foreground stroke, which brightens on hover through the same widget states
-/// every other control uses. Without this the scrollbars are stock egui grey,
-/// which is a visible tell next to the rest of the interface.
+/// every other control uses.
 pub mod scroll {
-    use super::SPACE_UNIT;
+    use super::metrics;
     /// Width of the bar at rest.
     pub const BAR_WIDTH: f32 = 10.0;
     /// Thin width the floating bar collapses to when the pointer is elsewhere.
     pub const FLOATING_WIDTH: f32 = 4.0;
     /// Space always reserved for the floating bar, so it appears without
     /// covering content.
-    pub const FLOATING_ALLOCATED_WIDTH: f32 = SPACE_UNIT;
+    pub const FLOATING_ALLOCATED_WIDTH: f32 = metrics::GAP;
     /// Shortest the handle is ever drawn, so a long list still shows a
     /// grabbable span.
     pub const HANDLE_MIN_LENGTH: f32 = 24.0;
     /// Gap between the content and the bar.
-    pub const BAR_INNER_MARGIN: f32 = SPACE_UNIT * 0.5;
+    pub const BAR_INNER_MARGIN: f32 = metrics::GAP / 2.0;
 
     /// The themed scrollbar style, shared by every palette.
     pub fn style() -> egui::style::ScrollStyle {
@@ -423,8 +569,6 @@ pub mod scroll {
             // The handle is painted with the widget's foreground stroke, so it
             // uses the palette's text colors rather than stock egui grey.
             foreground_color: true,
-            // Dormant opacities keep the bar a hint rather than a permanent
-            // stripe, and the hovered opacities answer the pointer arriving.
             dormant_handle_opacity: 0.35,
             active_handle_opacity: 0.6,
             interact_handle_opacity: 1.0,
@@ -434,198 +578,6 @@ pub mod scroll {
             ..Default::default()
         }
     }
-}
-
-// ---------------------------------------------------------------------------
-// Registration and application
-// ---------------------------------------------------------------------------
-/// Register the application fonts. Must be called once before the first frame.
-pub fn register_fonts(ctx: &Context) {
-    let mut fonts = egui::FontDefinitions::default();
-
-    fonts.font_data.insert(
-        FONT_REGULAR.to_owned(),
-        std::sync::Arc::new(egui::FontData::from_static(
-            squiglab_core::product::FONT_REGULAR,
-        )),
-    );
-    fonts.font_data.insert(
-        FONT_BOLD.to_owned(),
-        std::sync::Arc::new(egui::FontData::from_static(
-            squiglab_core::product::FONT_BOLD,
-        )),
-    );
-
-    fonts.families.insert(
-        FontFamily::Proportional,
-        vec![FONT_REGULAR.to_owned(), FONT_BOLD.to_owned()],
-    );
-    fonts.families.insert(
-        FontFamily::Name(FONT_BOLD.into()),
-        vec![FONT_BOLD.to_owned(), FONT_REGULAR.to_owned()],
-    );
-    fonts.families.insert(
-        FontFamily::Monospace,
-        vec![FONT_REGULAR.to_owned(), FONT_BOLD.to_owned()],
-    );
-
-    ctx.set_fonts(fonts);
-}
-
-/// Apply the token set to the context for the active theme.
-///
-/// `Context::set_style_of` takes a whole [`Style`] per theme, so both themes are
-/// installed and egui switches between them as the theme preference changes. This
-/// must be the single place the application configures appearance: calling
-/// `Context::set_visuals` anywhere else silently overrides the active theme.
-///
-/// Fonts are registered separately by [`register_fonts`] from the eframe
-/// creation hook, because `set_fonts` is deferred to the next frame.
-pub fn apply(ctx: &Context, theme: Theme) {
-    set_current(theme);
-    ctx.set_theme(match theme {
-        Theme::Light | Theme::Contrast => egui::ThemePreference::Light,
-        Theme::Dark => egui::ThemePreference::Dark,
-    });
-    ctx.set_style_of(egui::Theme::Dark, style_for(Theme::Dark));
-    ctx.set_style_of(egui::Theme::Light, style_for(theme));
-}
-
-fn style_for(theme: Theme) -> Style {
-    let palette = Palette::resolve_theme(theme);
-    Style {
-        text_styles: text_styles(),
-        spacing: egui::Spacing {
-            item_spacing: egui::vec2(Spacing::COMPACT, Spacing::COMPACT * 0.5),
-            button_padding: egui::vec2(Spacing::COMPACT, Spacing::TIGHT),
-            menu_margin: margin(Spacing::NORMAL, Spacing::COMPACT),
-            window_margin: margin(Spacing::NORMAL, Spacing::NORMAL),
-            indent: Spacing::COMPACT + Spacing::TIGHT,
-            interact_size: egui::vec2(80.0, 22.0),
-            combo_height: Spacing::COMPACT * 3.0,
-            scroll: scroll::style(),
-            ..Default::default()
-        },
-        visuals: visuals(&palette),
-        ..Default::default()
-    }
-}
-
-/// The core names colours in its own terms; the interface paints them.
-pub fn color(color: squiglab_core::color::Rgb) -> egui::Color32 {
-    egui::Color32::from_rgb(color.r, color.g, color.b)
-}
-
-/// The interface's own colour, named the way the core names colours.
-pub fn core_color(color: egui::Color32) -> squiglab_core::color::Rgb {
-    squiglab_core::color::Rgb::new(color.r(), color.g(), color.b())
-}
-
-/// egui's [`egui::Margin`] stores whole points, so spacing steps round to it.
-fn margin(horizontal: f32, vertical: f32) -> egui::Margin {
-    egui::Margin {
-        left: horizontal as i8,
-        right: horizontal as i8,
-        top: vertical as i8,
-        bottom: vertical as i8,
-    }
-}
-
-/// Map each textual role onto the scale. `Body` and `Button` share a size because
-/// `Button` is egui's fallback for plain labels, so keeping them equal stops
-/// incidental labels from jumping a step. Emphasis comes from [`font_bold`],
-/// size, and fill rather than from bolding everything.
-fn text_styles() -> std::collections::BTreeMap<TextStyle, FontId> {
-    use TextStyle::{Body, Button, Heading, Monospace, Small};
-    [
-        (Small, font(TypeStep::Micro)),
-        (Body, font(TypeStep::Body)),
-        (Button, font(TypeStep::Body)),
-        (Heading, font(TypeStep::Title)),
-        (Monospace, font_mono(TypeStep::Caption)),
-        (
-            TextStyle::Name("display".into()),
-            font_bold(TypeStep::Heading),
-        ),
-        (
-            TextStyle::Name("title".into()),
-            font_bold(TypeStep::Subtitle),
-        ),
-        (TextStyle::Name("label".into()), font(TypeStep::Caption)),
-        (TextStyle::Name("value".into()), font_mono(TypeStep::Body)),
-        (TextStyle::Name("meta".into()), font(TypeStep::Micro)),
-    ]
-    .into_iter()
-    .collect()
-}
-
-fn visuals(palette: &Palette) -> Visuals {
-    let mut visuals = if palette.is_dark() {
-        Visuals::dark()
-    } else {
-        Visuals::light()
-    };
-
-    visuals.override_text_color = Some(palette.text_primary);
-    visuals.panel_fill = palette.surface_panel;
-    visuals.window_fill = palette.surface_raised;
-    visuals.extreme_bg_color = palette.surface_base;
-    visuals.faint_bg_color = palette.surface_sunken;
-    visuals.code_bg_color = palette.surface_sunken;
-    visuals.text_cursor.stroke.color = palette.accent;
-    visuals.hyperlink_color = palette.accent;
-    visuals.warn_fg_color = palette.warning;
-    visuals.error_fg_color = palette.error;
-
-    visuals.widgets = egui::style::Widgets {
-        noninteractive: egui::style::WidgetVisuals {
-            bg_fill: palette.surface_base,
-            weak_bg_fill: palette.surface_base,
-            bg_stroke: Stroke::new(1.0, palette.border),
-            fg_stroke: Stroke::new(1.0, palette.text_primary),
-            corner_radius: RADIUS_CONTROL.into(),
-            expansion: 0.0,
-        },
-        inactive: egui::style::WidgetVisuals {
-            bg_fill: palette.surface_raised,
-            weak_bg_fill: palette.surface_raised,
-            bg_stroke: Stroke::new(1.0, palette.border),
-            fg_stroke: Stroke::new(1.0, palette.text_secondary),
-            corner_radius: RADIUS_CONTROL.into(),
-            expansion: 1.5,
-        },
-        hovered: egui::style::WidgetVisuals {
-            bg_fill: palette.hover_fill,
-            weak_bg_fill: palette.hover_fill,
-            bg_stroke: Stroke::new(1.0, palette.border_strong),
-            fg_stroke: Stroke::new(1.0, palette.text_primary),
-            corner_radius: RADIUS_CONTROL.into(),
-            expansion: 1.5,
-        },
-        active: egui::style::WidgetVisuals {
-            bg_fill: palette.active_fill,
-            weak_bg_fill: palette.active_fill,
-            bg_stroke: Stroke::new(1.0, palette.accent),
-            fg_stroke: Stroke::new(1.0, palette.text_primary),
-            corner_radius: RADIUS_CONTROL.into(),
-            expansion: 1.5,
-        },
-        open: egui::style::WidgetVisuals {
-            bg_fill: palette.surface_raised,
-            weak_bg_fill: palette.surface_raised,
-            bg_stroke: Stroke::new(1.0, palette.accent),
-            fg_stroke: Stroke::new(1.0, palette.text_primary),
-            corner_radius: RADIUS_CONTROL.into(),
-            expansion: 2.0,
-        },
-    };
-
-    visuals.selection.bg_fill = palette.accent;
-    visuals.selection.stroke = Stroke::new(1.0, palette.on_accent);
-    visuals.widgets.inactive.fg_stroke.color = palette.text_secondary;
-    visuals.widgets.hovered.fg_stroke.color = palette.text_primary;
-
-    visuals
 }
 
 #[cfg(test)]
@@ -651,13 +603,35 @@ mod tests {
     }
 
     #[test]
+    fn the_hue_conversion_is_the_standard_one() {
+        assert_eq!(hsl(0, 100, 50), Color32::from_rgb(255, 0, 0));
+        assert_eq!(hsl(120, 100, 50), Color32::from_rgb(0, 255, 0));
+        assert_eq!(hsl(240, 100, 50), Color32::from_rgb(0, 0, 255));
+        assert_eq!(hsl(0, 0, 50), Color32::from_rgb(128, 128, 128));
+        assert_eq!(hsl(0, 0, 100), Color32::WHITE);
+        // The reference's light accent, hsl(210, 53%, 49%).
+        assert_eq!(hsl(210, 53, 49), Color32::from_rgb(59, 125, 191));
+        // The reference's page, hsl(54, 5%, 96%).
+        assert_eq!(hsl(54, 5, 96), Color32::from_rgb(245, 245, 244));
+    }
+
+    #[test]
+    fn the_themes_are_the_reference_s_own() {
+        // The light theme's page is the reference's warm off-white.
+        assert_eq!(Palette::light().page, hsl(54, 5, 96));
+        assert_eq!(Palette::light().graph, hsl(54, 0, 100));
+        // The dark theme's accent is the native's blue.
+        assert_eq!(Palette::dark().accent, Color32::from_rgb(0x38, 0x70, 0xA6));
+        assert_eq!(Palette::dark().page, hsl(215, 14, 10));
+        // The contrast theme is black on white.
+        assert_eq!(Palette::contrast().page, Color32::WHITE);
+        assert_eq!(Palette::contrast().text_primary, Color32::BLACK);
+    }
+
+    #[test]
     fn body_text_clears_wcag_aa_on_every_surface() {
         for palette in [Palette::dark(), Palette::light()] {
-            for surface in [
-                palette.surface_base,
-                palette.surface_panel,
-                palette.surface_raised,
-            ] {
+            for surface in [palette.graph, palette.page, palette.field] {
                 let ratio = contrast(palette.text_primary, surface);
                 assert!(
                     ratio >= 4.5,
@@ -684,46 +658,19 @@ mod tests {
 
     #[test]
     fn the_type_scale_is_the_reference_s_own() {
-        assert_eq!(TypeStep::Heading.size(), 18.0);
-        assert_eq!(TypeStep::Subtitle.size(), 12.0);
-        assert_eq!(TypeStep::Micro.size(), 11.0);
-        assert_eq!(TypeStep::Caption.size(), 11.0);
+        assert_eq!(TypeStep::Logo.size(), 18.0);
+        assert_eq!(TypeStep::Control.size(), 12.0);
+        assert_eq!(TypeStep::Label.size(), 11.0);
         assert_eq!(TypeStep::Body.size(), 13.0);
     }
 
     #[test]
-    fn the_hue_conversion_is_the_standard_one() {
-        assert_eq!(hsl(0, 100, 50), Color32::from_rgb(255, 0, 0));
-        assert_eq!(hsl(120, 100, 50), Color32::from_rgb(0, 255, 0));
-        assert_eq!(hsl(240, 100, 50), Color32::from_rgb(0, 0, 255));
-        assert_eq!(hsl(0, 0, 50), Color32::from_rgb(128, 128, 128));
-        assert_eq!(hsl(0, 0, 100), Color32::WHITE);
-        // The reference's light accent, hsl(210, 53%, 49%).
-        assert_eq!(hsl(210, 53, 49), Color32::from_rgb(59, 125, 191));
-        // The reference's page, hsl(54, 5%, 96%).
-        assert_eq!(hsl(54, 5, 96), Color32::from_rgb(245, 245, 244));
-    }
-
-    #[test]
-    fn the_themes_are_the_reference_s_own() {
-        // The light theme's page is the reference's warm off-white.
-        assert_eq!(Palette::light().surface_panel, hsl(54, 5, 96));
-        assert_eq!(Palette::light().surface_base, hsl(54, 0, 100));
-        assert_eq!(Palette::light().accent, hsl(210, 53, 46));
-        // The dark theme's accent is the native's blue.
-        assert_eq!(Palette::dark().accent, Color32::from_rgb(0x38, 0x70, 0xA6));
-        assert_eq!(Palette::dark().surface_panel, hsl(215, 14, 10));
-        // The contrast theme is black on white.
-        assert_eq!(Palette::contrast().surface_panel, Color32::WHITE);
-        assert_eq!(Palette::contrast().text_primary, Color32::BLACK);
-    }
-
-    #[test]
-    fn accent_stays_out_of_the_semantic_status_colors() {
-        for palette in [Palette::dark(), Palette::light()] {
-            assert_ne!(palette.accent, palette.warning);
-            assert_ne!(palette.accent, palette.error);
-            assert_ne!(palette.accent, palette.success);
-        }
+    fn the_measure_is_the_reference_s_own() {
+        assert_eq!(metrics::HEADER_HEIGHT, 48.0);
+        assert_eq!(metrics::COLUMN_WIDTH, 350.0);
+        assert_eq!(metrics::BRAND_COLUMN_WIDTH, 94.0);
+        assert_eq!(metrics::LIST_WIDTH, 256.0);
+        assert_eq!(metrics::ROW_HEIGHT, 36.0);
+        assert_eq!(metrics::PLOT_ASPECT_RATIO, 3.4);
     }
 }

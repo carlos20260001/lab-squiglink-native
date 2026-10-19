@@ -5,7 +5,11 @@
 //! on egui and could be drawn by anything.
 
 pub mod app;
-pub mod constraints;
+pub mod curves;
+pub mod equalizer;
 pub mod graph;
+pub mod header;
+pub mod selector;
+pub mod sound;
 pub mod theme;
-pub mod ui;
+pub mod tools;
