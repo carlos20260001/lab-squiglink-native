@@ -21,6 +21,8 @@ pub enum Icon {
     Save,
     /// A cross: the curve is taken off the graph.
     Close,
+    /// A flat line: the curve the others are read against.
+    Baseline,
 }
 
 /// Draw an icon inside a rectangle.
@@ -98,6 +100,24 @@ pub fn draw(painter: &Painter, rect: Rect, icon: Icon, color: Color32) {
                 [
                     Pos2::new(centre.x - size * 0.7, bottom),
                     Pos2::new(centre.x + size * 0.7, bottom),
+                ],
+                stroke,
+            );
+        }
+        Icon::Baseline => {
+            // A flat line with a tick at the end, which is what the
+            // reference's baseline mark is.
+            painter.line_segment(
+                [
+                    Pos2::new(centre.x - size * 0.8, centre.y + size * 0.4),
+                    Pos2::new(centre.x + size * 0.8, centre.y + size * 0.4),
+                ],
+                stroke,
+            );
+            painter.line_segment(
+                [
+                    Pos2::new(centre.x - size * 0.8, centre.y + size * 0.4),
+                    Pos2::new(centre.x - size * 0.8, centre.y - size * 0.2),
                 ],
                 stroke,
             );

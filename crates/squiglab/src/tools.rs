@@ -30,6 +30,8 @@ pub fn show(ui: &mut Ui, app: &mut App) {
                 smooth(ui, app);
                 rule(ui);
                 toggles(ui, app);
+                rule(ui);
+                theme(ui, app);
             });
         });
     ui.add_space(metrics::GAP);
@@ -151,7 +153,7 @@ fn toggles(ui: &mut Ui, app: &mut App) {
     // the rest of the view.
     let mut labels = app.session.show_labels;
     if ui
-        .checkbox(&mut labels, "Labels")
+        .checkbox(&mut labels, "label")
         .on_hover_text("Name each curve at its end")
         .changed()
     {
@@ -160,7 +162,7 @@ fn toggles(ui: &mut Ui, app: &mut App) {
     }
     let mut inspect = app.session.inspect_mode;
     if ui
-        .checkbox(&mut inspect, "Inspect")
+        .checkbox(&mut inspect, "inspect")
         .on_hover_text("Read the curve under the pointer")
         .changed()
     {
@@ -168,7 +170,7 @@ fn toggles(ui: &mut Ui, app: &mut App) {
         app.session.dirty = true;
     }
     if ui
-        .button("Recolor")
+        .button("recolor")
         .on_hover_text("Turn the curve colours around the wheel")
         .clicked()
     {
@@ -176,6 +178,29 @@ fn toggles(ui: &mut Ui, app: &mut App) {
         app.session.rebuild_display_curves();
     }
     let _ = palette;
+}
+
+/// The theme, named the way the reference names it: the mode the button
+/// would switch to.
+fn theme(ui: &mut Ui, app: &mut App) {
+    let palette = theme::current_palette();
+    let next = app.session.theme.next();
+    if ui
+        .add(
+            egui::Button::new(
+                RichText::new(next.next_name())
+                    .font(TypeStep::Control.font())
+                    .color(palette.text_secondary),
+            )
+            .fill(egui::Color32::TRANSPARENT)
+            .stroke(egui::Stroke::NONE)
+            .min_size(egui::vec2(0.0, 24.0)),
+        )
+        .on_hover_text("Switch to the next theme")
+        .clicked()
+    {
+        app.session.theme = next;
+    }
 }
 
 /// The actions that apply to the window.
@@ -202,7 +227,7 @@ fn actions(ui: &mut Ui, app: &mut App) {
         app.screenshot_requested = true;
     }
     if ui
-        .button("SVG")
+        .button("screenshot")
         .on_hover_text("Save the graph as a vector picture")
         .clicked()
     {

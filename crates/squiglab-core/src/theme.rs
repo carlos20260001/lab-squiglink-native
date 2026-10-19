@@ -51,6 +51,16 @@ impl Theme {
             Theme::Contrast => "Contrast",
         }
     }
+
+    /// The name the reference's theme button carries: the mode it would
+    /// switch to, in the reference's words.
+    pub fn next_name(self) -> &'static str {
+        match self.next() {
+            Theme::Light => "default mode",
+            Theme::Dark => "dark mode",
+            Theme::Contrast => "contrast mode",
+        }
+    }
 }
 
 #[cfg(test)]

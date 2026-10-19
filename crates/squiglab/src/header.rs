@@ -29,26 +29,6 @@ pub fn show(ui: &mut Ui, app: &mut App) {
     );
 
     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-        // --- the theme ---
-        let next = app.session.theme.next();
-        if ui
-            .add(
-                egui::Button::new(
-                    RichText::new(next.name())
-                        .font(TypeStep::Control.font())
-                        .color(palette.text_secondary),
-                )
-                .fill(egui::Color32::TRANSPARENT)
-                .stroke(egui::Stroke::NONE)
-                .min_size(egui::vec2(0.0, 24.0)),
-            )
-            .on_hover_text("Switch to the next theme")
-            .clicked()
-        {
-            app.session.theme = next;
-        }
-
-        ui.add_space(metrics::GAP_LARGE);
         ui.label(
             RichText::new(format!("{} curves", app.session.display_curves.len()))
                 .font(TypeStep::Label.font())

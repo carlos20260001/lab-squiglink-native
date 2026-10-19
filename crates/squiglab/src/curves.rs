@@ -261,6 +261,19 @@ fn row(ui: &mut Ui, app: &mut App, index: usize) {
                 }
                 app.session.dirty = true;
             }
+            // The baseline: the curve the others are read against.
+            let baseline = app.session.baseline == Some(index);
+            if crate::icons::button(
+                ui,
+                crate::icons::Icon::Baseline,
+                "Read the other curves against this one",
+                baseline,
+            )
+            .clicked()
+            {
+                app.session.baseline = if baseline { None } else { Some(index) };
+                app.session.rebuild_display_curves();
+            }
             // Hide.
             let hidden = app.session.hidden.contains(&index);
             if crate::icons::button(
