@@ -4,7 +4,7 @@
 //! no glyph for what these buttons mean — an arrow, a pin, an eye — so they
 //! are drawn here rather than spelled.
 
-use egui::{Color32, Painter, Pos2, Rect, Stroke, Vec2};
+use egui::{Color32, Painter, Pos2, Rect, Stroke};
 
 /// The icons the row buttons use.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

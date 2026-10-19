@@ -110,6 +110,81 @@ fn brands(ui: &mut Ui, app: &mut App) {
 
 /// The list of the chosen brand's measurements.
 fn models(ui: &mut Ui, app: &mut App) {
+    // The reference's models tab shows the brands down the left and the
+    // measurements of the chosen brand beside them.
+    let height = ui.available_height();
+    // Where the columns begin: below the tabs and the search.
+    let origin = ui.cursor().min;
+    ui.horizontal_top(|ui| {
+        // The brand column is narrow, and its names are cut short rather
+        // than wrapped: the reference does the same, and the whole name is in
+        // the tooltip.
+        ui.scope_builder(
+            egui::UiBuilder::new()
+                .max_rect(egui::Rect::from_min_size(
+                    origin,
+                    egui::vec2(metrics::BRAND_COLUMN_WIDTH, height),
+                ))
+                .layout(egui::Layout::top_down(egui::Align::Min)),
+            |ui| brand_column(ui, app),
+        );
+        ui.scope_builder(
+            egui::UiBuilder::new()
+                .max_rect(egui::Rect::from_min_size(
+                    egui::pos2(origin.x + metrics::BRAND_COLUMN_WIDTH, origin.y),
+                    egui::vec2(metrics::LIST_WIDTH, height),
+                ))
+                .layout(egui::Layout::top_down(egui::Align::Min)),
+            |ui| model_list(ui, app),
+        );
+    });
+}
+
+/// The brands down the left of the models tab.
+fn brand_column(ui: &mut Ui, app: &mut App) {
+    let palette = theme::current_palette();
+    let mut counts: Vec<(String, usize)> = Vec::new();
+    for group in &app.session.groups {
+        if group.target {
+            continue;
+        }
+        match counts.iter_mut().find(|(brand, _)| *brand == group.brand) {
+            Some((_, count)) => *count += 1,
+            None => counts.push((group.brand.clone(), 1)),
+        }
+    }
+    counts.sort_by_key(|(brand, _)| brand.to_lowercase());
+    egui::ScrollArea::vertical()
+        .id_salt("brand_column")
+        .auto_shrink([false, false])
+        .show(ui, |ui| {
+            for (brand, _) in counts {
+                if !app.search.is_empty() && !matches_search(&brand, &app.search) {
+                    continue;
+                }
+                let selected = app.brand.as_deref() == Some(brand.as_str());
+                if ui
+                    .selectable_label(
+                        selected,
+                        RichText::new(shorten(&brand, metrics::BRAND_COLUMN_WIDTH - 16.0))
+                            .font(TypeStep::Body.font())
+                            .color(if selected {
+                                palette.on_accent
+                            } else {
+                                palette.text_primary
+                            }),
+                    )
+                    .on_hover_text(format!("Show {brand}'s measurements"))
+                    .clicked()
+                {
+                    app.brand = Some(brand.clone());
+                }
+            }
+        });
+}
+
+/// The measurements of the chosen brand.
+fn model_list(ui: &mut Ui, app: &mut App) {
     let palette = theme::current_palette();
     let Some(brand) = app.brand.clone() else {
         ui.label(
@@ -119,13 +194,6 @@ fn models(ui: &mut Ui, app: &mut App) {
         );
         return;
     };
-    ui.label(
-        RichText::new(brand.clone())
-            .font(TypeStep::Title.font_bold())
-            .color(palette.text_primary),
-    );
-    ui.add_space(metrics::GAP);
-
     let groups: Vec<MeasurementGroup> = app
         .session
         .groups
@@ -133,42 +201,46 @@ fn models(ui: &mut Ui, app: &mut App) {
         .filter(|group| !group.target && group.brand == brand)
         .cloned()
         .collect();
-
-    for group in &groups {
-        if !app.search.is_empty() && !matches_search(&group.name, &app.search) {
-            continue;
-        }
-        let index = app
-            .session
-            .groups
-            .iter()
-            .position(|candidate| candidate.name == group.name)
-            .unwrap_or(0);
-        let on = app.session.active.contains(&index);
-        let response = ui
-            .selectable_label(
-                on,
-                RichText::new(group.name.clone())
-                    .font(TypeStep::Body.font())
-                    .color(if on {
-                        palette.on_accent
+    egui::ScrollArea::vertical()
+        .id_salt("model_list")
+        .auto_shrink([false, false])
+        .show(ui, |ui| {
+            for group in &groups {
+                if !app.search.is_empty() && !matches_search(&group.name, &app.search) {
+                    continue;
+                }
+                let index = app
+                    .session
+                    .groups
+                    .iter()
+                    .position(|candidate| candidate.name == group.name)
+                    .unwrap_or(0);
+                let on = app.session.active.contains(&index);
+                let response = ui
+                    .selectable_label(
+                        on,
+                        RichText::new(group.name.clone())
+                            .font(TypeStep::Body.font())
+                            .color(if on {
+                                palette.on_accent
+                            } else {
+                                palette.text_primary
+                            }),
+                    )
+                    .on_hover_text("Show this measurement on the graph");
+                if response.clicked() {
+                    if on {
+                        app.session.active.remove(&index);
                     } else {
-                        palette.text_primary
-                    }),
-            )
-            .on_hover_text("Show this measurement on the graph");
-        if response.clicked() {
-            if on {
-                app.session.active.remove(&index);
-            } else {
-                app.session.active.insert(index);
+                        app.session.active.insert(index);
+                    }
+                    app.session.eq_phone = Some(index);
+                    app.session.rebuild_display_curves();
+                }
+                augment(ui, group);
+                ui.separator();
             }
-            app.session.eq_phone = Some(index);
-            app.session.rebuild_display_curves();
-        }
-        augment(ui, group);
-        ui.separator();
-    }
+        });
 }
 
 /// The card the reference shows under a model: the review, the price, and
@@ -221,4 +293,30 @@ fn stars(score: &str) -> String {
         Ok(number) => "\u{2605}".repeat(number.clamp(0.0, 5.0).round() as usize),
         Err(_) => score.to_owned(),
     }
+}
+
+/// A name cut short to the width it has, the way the reference cuts the
+/// brands in its narrow column.
+fn shorten(name: &str, width: f32) -> String {
+    let font = TypeStep::Body.font();
+    let ctx = egui::Context::default();
+    let measured = |text: &str| {
+        ctx.fonts_mut(|fonts| {
+            text.chars()
+                .map(|character| fonts.glyph_width(&font, character))
+                .sum::<f32>()
+        })
+    };
+    if measured(name) <= width {
+        return name.to_owned();
+    }
+    let mut cut = name.to_owned();
+    while cut.chars().count() > 1 {
+        cut.pop();
+        let candidate = format!("{cut}…");
+        if measured(&candidate) <= width {
+            return candidate;
+        }
+    }
+    cut
 }

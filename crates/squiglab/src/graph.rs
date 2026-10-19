@@ -72,6 +72,7 @@ fn draw(app: &App, painter: &egui::Painter, rect: Rect) {
     band_names(painter, plot, &transform);
     curves_into(painter, app, &curves, &transform);
     labels(painter, app, &curves, &transform, plot);
+    rig_line(painter, app, rect);
     watermark(painter, plot);
 }
 
@@ -279,14 +280,37 @@ fn labels(
             continue;
         };
         let color = theme::color(curve.color);
+        // The name is preceded by a bar of the curve's colour, so a name that
+        // lies over another curve can still be read.
+        let swatch = Pos2::new(plot.left() + 12.0, *top + TypeStep::Label.size() * 0.45);
+        painter.rect_filled(
+            Rect::from_min_max(swatch - Vec2::new(0.0, 5.0), swatch + Vec2::new(10.0, 5.0)),
+            0.0,
+            color,
+        );
         painter.text(
-            Pos2::new(plot.left() + 12.0, *top),
+            Pos2::new(plot.left() + 28.0, *top),
             Align2::LEFT_TOP,
             curve.label,
             font.clone(),
             color,
         );
     }
+}
+
+/// The rig the measurements were taken on, in the corner of the graph.
+fn rig_line(painter: &egui::Painter, app: &App, rect: Rect) {
+    let palette = theme::current_palette();
+    let Some(description) = &app.session.rig_description else {
+        return;
+    };
+    painter.text(
+        Pos2::new(rect.right() - 10.0, rect.top() + 6.0),
+        Align2::RIGHT_TOP,
+        format!("Measured on: {description}"),
+        TypeStep::Label.font(),
+        palette.text_tertiary,
+    );
 }
 
 /// The mark and the name, behind the curves.
