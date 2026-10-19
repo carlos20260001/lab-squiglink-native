@@ -12,4 +12,5 @@ pub mod delta;
 pub mod equalizer;
 pub mod graph;
 pub mod processing;
+pub mod session;
 pub mod state;

@@ -6,8 +6,12 @@ use squiglab_core::color::target_color;
 use squiglab_core::data::{self, CurveInfo, FRPoint, PhoneBook};
 use squiglab_core::delta::{self, DeltaTarget};
 use squiglab_core::equalizer;
-use squiglab_core::graph::{PlotCurve, ZoomRegion};
+use squiglab_core::graph::PlotCurve;
 use squiglab_core::processing::{self, NormParams, SmoothingParams};
+use squiglab_core::session::{
+    ChannelMode, CurveSource, DisplayCurve, EqRow, MeasurementGroup, MeasurementVariant,
+    Preferences, SavedGroup,
+};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
@@ -28,7 +32,6 @@ const EQ_CURVE_COLOR_SPREAD: usize = 4;
 /// How many filters Auto EQ fits unless the panel's settings say otherwise.
 /// The reference tool's panel shows five bands; the budget is ours, since the
 /// live page does not expose one.
-const DEFAULT_EQ_MAX_FILTERS: usize = 10;
 /// Height of the manager panel's header and padding before any curve rows.
 const MANAGER_HEIGHT_BASE: f32 = 46.0;
 /// Vertical room one curve row occupies when identity and controls share a line.
@@ -302,19 +305,6 @@ const FREQUENCY_BANDS: [squiglab::graph::FrequencyBand; 7] = {
     ]
 };
 
-/// Where a displayed curve came from. The reference tool renders an
-/// equalizer's result as a synthetic curve added on the same path as a
-/// measurement, back-linked to the parent so normalization and baseline
-/// propagate to both. This is that back-link: an EQ curve names its parent
-/// group, which owns the normalization both share.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-enum CurveSource {
-    /// A curve loaded from the measurement database.
-    Measurement,
-    /// An equalizer applied to a measurement group's curve.
-    Equalizer,
-}
-
 /// One row of the delta bar, before it becomes a plot curve.
 /// One chip in the target strip: which curve it stands for, what it is called,
 /// whether it is in play, and what to say when it is hovered.
@@ -333,16 +323,6 @@ struct DeviationCurve {
     points: Vec<FRPoint>,
     color: Color32,
     dashed: bool,
-}
-
-struct DisplayCurve {
-    /// The measurement group this curve belongs to: the group itself for a
-    /// measurement, its parent for an EQ curve.
-    group_index: usize,
-    source: CurveSource,
-    label: String,
-    points: Vec<FRPoint>,
-    target: bool,
 }
 
 /// The panels sharing the library column. The reference tool's left column is
@@ -374,137 +354,6 @@ enum Category {
     Headphones,
     /// Earbuds.
     Earbuds,
-}
-
-/// One row of a curve's equalizer: a filter and whether the row is switched
-/// on. The reference tool keeps a disabled row in place rather than deleting
-/// it, so a filter can be toggled back on without re-entering it.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-struct EqRow {
-    #[serde(flatten)]
-    filter: equalizer::Filter,
-    enabled: bool,
-}
-
-#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq, Serialize)]
-enum ChannelMode {
-    Left,
-    Right,
-    #[default]
-    Both,
-    Average,
-}
-
-impl ChannelMode {
-    /// How the mode reads in a sentence and in a file name.
-    fn label(self) -> &'static str {
-        match self {
-            Self::Left => "Left",
-            Self::Right => "Right",
-            Self::Both => "Both",
-            Self::Average => "Average",
-        }
-    }
-
-    /// Whether a prepared channel belongs to this mode.
-    ///
-    /// `Both` and `Average` are the only modes whose prepared channel carries
-    /// their own name; `Left` and `Right` match the raw channel of the same
-    /// name, so a mode does not need a channel named after it to be exported.
-    fn accepts(self, channel: &str) -> bool {
-        match self {
-            Self::Left => channel.starts_with('L'),
-            Self::Right => channel.starts_with('R'),
-            Self::Both => channel.is_empty() || channel.starts_with('L'),
-            Self::Average => channel.starts_with('A') || channel == "avg",
-        }
-    }
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-#[serde(default)]
-struct Preferences {
-    active: Vec<SavedGroup>,
-    baseline: Option<String>,
-    zoom: ZoomRegion,
-    phon_normalization: bool,
-    target_phon: f32,
-    target_hz: f32,
-    smooth_level: usize,
-    show_labels: bool,
-    inspect_mode: bool,
-    dark_mode: bool,
-    color_offset: usize,
-    show_measurements: bool,
-    /// Whether the deviation window is open. The deviation is a second reading
-    /// of the same selection rather than a view of it, so it lives in its own
-    /// window and is off by default.
-    show_delta: bool,
-    label_positions: BTreeMap<String, [f32; 2]>,
-    label_layout: squiglab::graph::LabelLayout,
-    tutorial_segment: Option<usize>,
-    y_scale: f32,
-    curve_color_offsets: BTreeMap<String, usize>,
-    /// Every curve's equalizer, keyed by group key. An equalizer belongs to
-    /// the curve, so it survives the curve being switched off and comes back
-    /// with it, as `p.eq` does in the reference tool.
-    eq_filters: BTreeMap<String, Vec<EqRow>>,
-    /// Selected delta targets, by name. A delta target is a rig correction
-    /// rather than a curve to compare, so it carries none of the per-curve
-    /// state a `SavedGroup` does.
-    active_deltas: Vec<String>,
-}
-
-impl Default for Preferences {
-    fn default() -> Self {
-        Self {
-            active: Vec::new(),
-            baseline: None,
-            zoom: ZoomRegion::Full,
-            phon_normalization: true,
-            target_phon: 60.0,
-            target_hz: 500.0,
-            smooth_level: 5,
-            show_labels: false,
-            inspect_mode: false,
-            dark_mode: true,
-            color_offset: 0,
-            show_measurements: true,
-            show_delta: false,
-            label_positions: BTreeMap::new(),
-            label_layout: squiglab::graph::LabelLayout::default(),
-            tutorial_segment: None,
-            y_scale: 1.0,
-            curve_color_offsets: BTreeMap::new(),
-            eq_filters: BTreeMap::new(),
-            active_deltas: Vec::new(),
-        }
-    }
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-struct SavedGroup {
-    key: String,
-    variant: usize,
-    channel_mode: ChannelMode,
-    hidden: bool,
-    pinned: bool,
-    offset: f32,
-}
-
-#[derive(Clone, Debug)]
-struct MeasurementVariant {
-    name: String,
-    curve_indices: Vec<usize>,
-}
-
-#[derive(Clone, Debug)]
-struct MeasurementGroup {
-    brand: String,
-    brand_suffix: Option<String>,
-    name: String,
-    variants: Vec<MeasurementVariant>,
-    target: bool,
 }
 
 /// Progressive fallback for the toolbar as the viewport narrows.
@@ -557,54 +406,25 @@ impl ToolbarDensity {
 }
 
 pub struct CrinGraphApp {
-    curves: Vec<CurveInfo>,
-    groups: Vec<MeasurementGroup>,
-    active: BTreeSet<usize>,
-    active_targets: BTreeSet<usize>,
-    hidden: BTreeSet<usize>,
-    pinned: BTreeSet<usize>,
-    baseline: Option<usize>,
-    offsets: BTreeMap<usize, f32>,
-    channel_modes: BTreeMap<usize, ChannelMode>,
-    variant_choices: BTreeMap<usize, usize>,
-    display_curves: Vec<DisplayCurve>,
+    /// The program's state: what is loaded, what is selected, and what has
+    /// been changed. The interface reads it and asks for changes.
+    session: squiglab_core::session::Session,
     /// Rig-compensation curves, loaded from the delta directory. Empty when
     /// there is none, which is the normal case: they are optional.
-    delta_targets: Vec<DeltaTarget>,
     /// Which delta targets are correcting the readings. Kept separate from
     /// `active` because a delta target is not a curve on the graph.
-    active_deltas: BTreeSet<usize>,
     /// Why the delta directory could not be read, if it could not. Optional
     /// data failing to load must not take the measurements down with it.
-    delta_error: Option<String>,
     search: String,
-    zoom: ZoomRegion,
-    phon_normalization: bool,
-    target_phon: f32,
-    target_hz: f32,
-    smooth_level: usize,
-    show_labels: bool,
-    inspect_mode: bool,
-    dark_mode: bool,
-    color_offset: usize,
-    show_measurements: bool,
     /// Whether the deviation window is open. The deviation is a second reading
     /// of the same selection rather than a view of it, so it lives in its own
     /// window and is off by default.
-    show_delta: bool,
-    label_positions: BTreeMap<String, [f32; 2]>,
-    label_layout: squiglab::graph::LabelLayout,
-    tutorial_segment: Option<usize>,
-    y_scale: f32,
-    curve_color_offsets: BTreeMap<String, usize>,
     /// Per-curve equalizer filter rows, keyed by measurement group index.
-    eq_filters: BTreeMap<usize, Vec<EqRow>>,
     dirty: bool,
     loaded: bool,
     load_error: Option<String>,
     processing_error: Option<String>,
     settings_error: Option<String>,
-    last_saved_preferences: Option<Preferences>,
     screenshot_pending: bool,
     screenshot_error: Option<String>,
     screenshot_message: Option<String>,
@@ -627,14 +447,10 @@ pub struct CrinGraphApp {
     category: Category,
     /// The measurement whose equalizer the panel is editing. Session state:
     /// the panel re-derives a sensible curve rather than restoring a choice.
-    eq_phone: Option<usize>,
     /// The target AutoEQ fits against.
-    eq_target: Option<usize>,
     /// How many filters Auto EQ may produce.
-    eq_max_filters: usize,
     /// The frequency band AutoEQ fits within, as the reference tool lets the
     /// user set it: the low bound, and the high bound.
-    eq_range: (f64, f64),
     /// The band the tone generator's slider sweeps, as the reference tool lets
     /// the user set it: the low bound, and the high bound.
     tone_range: (f64, f64),
@@ -645,21 +461,16 @@ pub struct CrinGraphApp {
     eq_export_error: Option<String>,
     /// The playing sound, if it is playing. Stopped and dropped by
     /// [`stop_sound`].
-    player: Option<squiglab_core::audio::Player>,
     /// Which of the Compare A | B settings the controls are editing.
-    sound_slot: usize,
     /// The two settings Compare A | B switches between. They live with the
     /// session rather than in preferences: a sound setting is something the
     /// user is auditioning now, not a view to restore.
-    sound_settings: [squiglab_core::audio::Settings; 2],
     /// A message from the sound player, shown in the panel.
     sound_message: Option<String>,
     /// The measurement grid uploads are resampled onto, captured at load so an
     /// upload lands on the same frequencies as the database.
-    upload_grid: Vec<f32>,
     /// The names of the curves the user uploaded, so they are excluded from
     /// shared state no matter which brand they were filed under.
-    uploaded_names: BTreeSet<String>,
     /// Whether the equalizer's "How to use" window is open. Session state: the
     /// reference shows it to a first-time visitor, and this offers it again
     /// from the panel's help control.
@@ -684,45 +495,14 @@ pub struct CrinGraphApp {
 impl Default for CrinGraphApp {
     fn default() -> Self {
         Self {
-            curves: Vec::new(),
-            groups: Vec::new(),
-            active: BTreeSet::new(),
-            active_targets: BTreeSet::new(),
-            hidden: BTreeSet::new(),
-            pinned: BTreeSet::new(),
-            baseline: None,
-            offsets: BTreeMap::new(),
-            channel_modes: BTreeMap::new(),
-            variant_choices: BTreeMap::new(),
-            display_curves: Vec::new(),
-            delta_targets: Vec::new(),
-            active_deltas: BTreeSet::new(),
-            delta_error: None,
+            session: squiglab_core::session::Session::default(),
             search: String::new(),
-            zoom: ZoomRegion::Full,
-            phon_normalization: true,
-            target_phon: 60.0,
-            target_hz: 500.0,
-            smooth_level: 5,
-            show_labels: false,
-            inspect_mode: false,
-            dark_mode: true,
-            color_offset: 0,
-            show_measurements: true,
-            show_delta: false,
-            label_positions: BTreeMap::new(),
-            label_layout: squiglab::graph::LabelLayout::default(),
-            tutorial_segment: None,
-            y_scale: 1.0,
-            curve_color_offsets: BTreeMap::new(),
-            eq_filters: BTreeMap::new(),
             rig_description: None,
             dirty: true,
             loaded: false,
             load_error: None,
             processing_error: None,
             settings_error: None,
-            last_saved_preferences: None,
             screenshot_pending: false,
             screenshot_error: None,
             screenshot_message: None,
@@ -738,22 +518,13 @@ impl Default for CrinGraphApp {
             library_tab: LibraryTab::Models,
             brand_filter: None,
             category: Category::default(),
-            eq_phone: None,
-            eq_target: None,
-            eq_max_filters: DEFAULT_EQ_MAX_FILTERS,
-            eq_range: squiglab_core::equalizer::AUTO_EQ_RANGE,
             tone_range: (20.0, 20_000.0),
             eq_import_open: false,
             eq_import_path: String::new(),
             eq_import_error: None,
             eq_export_message: None,
             eq_export_error: None,
-            player: None,
-            sound_slot: 0,
-            sound_settings: [squiglab_core::audio::Settings::default(); 2],
             sound_message: None,
-            upload_grid: Vec::new(),
-            uploaded_names: BTreeSet::new(),
             onboarding_open: false,
             onboarding_section: 0,
             upload_open: false,
@@ -800,7 +571,7 @@ impl CrinGraphApp {
             self.onboarding_open = false;
         }
         if except != Some("tutorial") {
-            self.tutorial_segment = None;
+            self.session.tutorial_segment = None;
         }
     }
 
@@ -808,7 +579,7 @@ impl CrinGraphApp {
         let config_path = app_config_path()?;
         let config = initialize_app_config_from(&config_path)?;
         validate_app_config(&config)?;
-        self.smooth_level = config.defaults.smoothing_octaves;
+        self.session.smooth_level = config.defaults.smoothing_octaves;
         self.rig_description = config.rig_description.clone();
 
         let database_dir = resolve_measurement_dir(
@@ -817,8 +588,8 @@ impl CrinGraphApp {
             &config_path,
         );
         let (mut curves, grid) = data::load_data(&database_dir)?;
-        self.upload_grid = grid;
-        self.uploaded_names.clear();
+        self.session.upload_grid = grid;
+        self.session.uploaded_names.clear();
         let mut phone_books = vec![data::load_phone_book(
             &database_dir.join("phone_book.json"),
         )?];
@@ -841,22 +612,22 @@ impl CrinGraphApp {
                 .cmp(&right.model)
                 .then(left.variant.cmp(&right.variant))
         });
-        self.groups = build_groups(&phone_books, &curves);
+        self.session.groups = build_groups(&phone_books, &curves);
 
         // Delta targets are optional, so a failure to read them is reported in
         // their own section rather than failing the whole load: losing a rig
         // correction should not cost you the measurements as well.
-        self.delta_error = None;
+        self.session.delta_error = None;
         let delta_dir = resolve_measurement_dir(
             config.measurements.delta_dir.as_deref(),
             Path::new("data_deltas"),
             &config_path,
         );
-        self.delta_targets = if delta_dir.is_dir() {
-            match delta::load_delta_targets(&delta_dir, &self.upload_grid) {
+        self.session.delta_targets = if delta_dir.is_dir() {
+            match delta::load_delta_targets(&delta_dir, &self.session.upload_grid) {
                 Ok(targets) => targets,
                 Err(error) => {
-                    self.delta_error = Some(format!("{error}"));
+                    self.session.delta_error = Some(format!("{error}"));
                     Vec::new()
                 }
             }
@@ -866,14 +637,15 @@ impl CrinGraphApp {
         // A delta target that was selected in an earlier session but is no
         // longer in the directory cannot be honoured, and must not leave a
         // dangling index behind for the rest of the session.
-        self.active_deltas
-            .retain(|index| *index < self.delta_targets.len());
+        self.session
+            .active_deltas
+            .retain(|index| *index < self.session.delta_targets.len());
 
         if self.debug_hooks {
             eprintln!(
                 "SquigLab loaded {} curves across {} measurement groups.",
                 curves.len(),
-                self.groups.len()
+                self.session.groups.len()
             );
         }
         let restored_preferences = if let Some(shared_state) = self.shared_state.take() {
@@ -898,28 +670,33 @@ impl CrinGraphApp {
                 }
             }
         };
-        if self.active.is_empty() && self.active_targets.is_empty() && !restored_preferences {
-            self.active = self
+        if self.session.active.is_empty()
+            && self.session.active_targets.is_empty()
+            && !restored_preferences
+        {
+            self.session.active = self
+                .session
                 .groups
                 .iter()
                 .enumerate()
                 .filter(|(_, group)| group.name == "HTH67")
                 .map(|(index, _)| index)
                 .collect();
-            if self.active.is_empty() {
-                if let Some(index) = self.groups.iter().position(|group| group.target) {
-                    self.active_targets.insert(index);
+            if self.session.active.is_empty() {
+                if let Some(index) = self.session.groups.iter().position(|group| group.target) {
+                    self.session.active_targets.insert(index);
                 }
             }
         }
-        self.curves = curves;
+        self.session.curves = curves;
         self.loaded = true;
         self.dirty = true;
-        self.last_saved_preferences = Some(self.preferences());
+        self.session.last_saved_preferences = Some(self.preferences());
         // The library list scrolls independently, so a session restored with a
         // curve selected far down it must scroll that row into view rather
         // than opening at the top of a list of thousands.
-        self.library_reveal_pending = !self.active.is_empty() || !self.active_targets.is_empty();
+        self.library_reveal_pending =
+            !self.session.active.is_empty() || !self.session.active_targets.is_empty();
         Ok(())
     }
 
@@ -935,7 +712,8 @@ impl CrinGraphApp {
                 .active
                 .iter()
                 .filter(|saved| {
-                    self.groups
+                    self.session
+                        .groups
                         .iter()
                         .any(|group| !group.target && group_key(group) == saved.key)
                 })
@@ -962,140 +740,162 @@ impl CrinGraphApp {
                 Some("Unable to load preferences: invalid settings values".into());
             return false;
         }
-        self.active.clear();
-        self.active_targets.clear();
-        self.active_deltas.clear();
+        self.session.active.clear();
+        self.session.active_targets.clear();
+        self.session.active_deltas.clear();
         for name in &preferences.active_deltas {
             if let Some(index) = self
+                .session
                 .delta_targets
                 .iter()
                 .position(|target| &target.name == name)
             {
-                self.active_deltas.insert(index);
+                self.session.active_deltas.insert(index);
             }
         }
-        self.show_delta = preferences.show_delta;
-        self.hidden.clear();
-        self.pinned.clear();
-        self.offsets.clear();
-        self.channel_modes.clear();
-        self.variant_choices.clear();
-        self.baseline = None;
-        self.label_positions = preferences.label_positions.clone();
-        self.label_layout = preferences.label_layout;
-        self.tutorial_segment = preferences.tutorial_segment;
-        self.y_scale = preferences.y_scale;
-        self.curve_color_offsets = preferences.curve_color_offsets.clone();
-        self.eq_filters.clear();
-        for (index, group) in self.groups.iter().enumerate() {
+        self.session.show_delta = preferences.show_delta;
+        self.session.hidden.clear();
+        self.session.pinned.clear();
+        self.session.offsets.clear();
+        self.session.channel_modes.clear();
+        self.session.variant_choices.clear();
+        self.session.baseline = None;
+        self.session.label_positions = preferences.label_positions.clone();
+        self.session.label_layout = preferences.label_layout;
+        self.session.tutorial_segment = preferences.tutorial_segment;
+        self.session.y_scale = preferences.y_scale;
+        self.session.curve_color_offsets = preferences.curve_color_offsets.clone();
+        self.session.eq_filters.clear();
+        for (index, group) in self.session.groups.iter().enumerate() {
             if let Some(rows) = preferences.eq_filters.get(&group_key(group)) {
                 if eq_rows_are_valid(rows) {
-                    self.eq_filters.insert(index, rows.clone());
+                    self.session.eq_filters.insert(index, rows.clone());
                 }
             }
         }
-        for (index, group) in self.groups.iter().enumerate() {
+        for (index, group) in self.session.groups.iter().enumerate() {
             if let Some(saved) = preferences
                 .active
                 .iter()
                 .find(|saved| saved.key == group_key(group))
             {
                 if group.target {
-                    self.active_targets.insert(index);
+                    self.session.active_targets.insert(index);
                 } else {
-                    self.active.insert(index);
+                    self.session.active.insert(index);
                 }
-                self.variant_choices.insert(
+                self.session.variant_choices.insert(
                     index,
                     saved.variant.min(group.variants.len().saturating_sub(1)),
                 );
-                self.channel_modes.insert(index, saved.channel_mode);
+                self.session.channel_modes.insert(index, saved.channel_mode);
                 if saved.hidden {
-                    self.hidden.insert(index);
+                    self.session.hidden.insert(index);
                 }
                 if saved.pinned {
-                    self.pinned.insert(index);
+                    self.session.pinned.insert(index);
                 }
                 if saved.offset != 0.0 {
-                    self.offsets.insert(index, saved.offset);
+                    self.session.offsets.insert(index, saved.offset);
                 }
             }
         }
-        self.baseline = preferences.baseline.and_then(|key| {
-            self.groups.iter().enumerate().position(|(index, group)| {
-                (self.active.contains(&index) || self.active_targets.contains(&index))
-                    && group_key(group) == key
-            })
+        self.session.baseline = preferences.baseline.and_then(|key| {
+            self.session
+                .groups
+                .iter()
+                .enumerate()
+                .position(|(index, group)| {
+                    (self.session.active.contains(&index)
+                        || self.session.active_targets.contains(&index))
+                        && group_key(group) == key
+                })
         });
-        self.zoom = preferences.zoom;
-        self.phon_normalization = preferences.phon_normalization;
-        self.target_phon = preferences.target_phon;
-        self.target_hz = preferences.target_hz;
-        self.smooth_level = preferences.smooth_level;
-        self.show_labels = preferences.show_labels;
-        self.inspect_mode = preferences.inspect_mode;
-        self.dark_mode = preferences.dark_mode;
-        self.color_offset = preferences.color_offset;
-        self.show_measurements = preferences.show_measurements;
+        self.session.zoom = preferences.zoom;
+        self.session.phon_normalization = preferences.phon_normalization;
+        self.session.target_phon = preferences.target_phon;
+        self.session.target_hz = preferences.target_hz;
+        self.session.smooth_level = preferences.smooth_level;
+        self.session.show_labels = preferences.show_labels;
+        self.session.inspect_mode = preferences.inspect_mode;
+        self.session.dark_mode = preferences.dark_mode;
+        self.session.color_offset = preferences.color_offset;
+        self.session.show_measurements = preferences.show_measurements;
         true
     }
 
     fn preferences(&self) -> Preferences {
         Preferences {
             active: self
+                .session
                 .active
                 .iter()
-                .chain(self.active_targets.iter())
+                .chain(self.session.active_targets.iter())
                 // An uploaded curve is excluded: a shared link is a claim about
                 // the reference database, and a measurement from another rig is
                 // not part of it, so a link that carried one would restore a
                 // curve the recipient does not have and cannot check.
                 .filter(|&&index| !self.is_uploaded(index))
                 .map(|&index| SavedGroup {
-                    key: group_key(&self.groups[index]),
-                    variant: self.variant_choices.get(&index).copied().unwrap_or(0),
-                    channel_mode: self.channel_modes.get(&index).copied().unwrap_or_default(),
-                    hidden: self.hidden.contains(&index),
-                    pinned: self.pinned.contains(&index),
-                    offset: self.offsets.get(&index).copied().unwrap_or(0.0),
+                    key: group_key(&self.session.groups[index]),
+                    variant: self
+                        .session
+                        .variant_choices
+                        .get(&index)
+                        .copied()
+                        .unwrap_or(0),
+                    channel_mode: self
+                        .session
+                        .channel_modes
+                        .get(&index)
+                        .copied()
+                        .unwrap_or_default(),
+                    hidden: self.session.hidden.contains(&index),
+                    pinned: self.session.pinned.contains(&index),
+                    offset: self.session.offsets.get(&index).copied().unwrap_or(0.0),
                 })
                 .collect(),
-            baseline: self.baseline.map(|index| group_key(&self.groups[index])),
-            zoom: self.zoom,
-            phon_normalization: self.phon_normalization,
-            target_phon: self.target_phon,
-            target_hz: self.target_hz,
-            smooth_level: self.smooth_level,
-            show_labels: self.show_labels,
-            inspect_mode: self.inspect_mode,
-            dark_mode: self.dark_mode,
-            color_offset: self.color_offset,
-            show_measurements: self.show_measurements,
-            label_positions: self.label_positions.clone(),
-            label_layout: self.label_layout,
-            tutorial_segment: self.tutorial_segment,
-            y_scale: self.y_scale,
-            curve_color_offsets: self.curve_color_offsets.clone(),
+            baseline: self
+                .session
+                .baseline
+                .map(|index| group_key(&self.session.groups[index])),
+            zoom: self.session.zoom,
+            phon_normalization: self.session.phon_normalization,
+            target_phon: self.session.target_phon,
+            target_hz: self.session.target_hz,
+            smooth_level: self.session.smooth_level,
+            show_labels: self.session.show_labels,
+            inspect_mode: self.session.inspect_mode,
+            dark_mode: self.session.dark_mode,
+            color_offset: self.session.color_offset,
+            show_measurements: self.session.show_measurements,
+            label_positions: self.session.label_positions.clone(),
+            label_layout: self.session.label_layout,
+            tutorial_segment: self.session.tutorial_segment,
+            y_scale: self.session.y_scale,
+            curve_color_offsets: self.session.curve_color_offsets.clone(),
             eq_filters: self
+                .session
                 .eq_filters
                 .iter()
-                .map(|(&index, rows)| (group_key(&self.groups[index]), rows.clone()))
+                .map(|(&index, rows)| (group_key(&self.session.groups[index]), rows.clone()))
                 .collect(),
             active_deltas: self
+                .session
                 .active_deltas
                 .iter()
-                .map(|&index| self.delta_targets[index].name.clone())
+                .map(|&index| self.session.delta_targets[index].name.clone())
                 .collect(),
-            show_delta: self.show_delta,
+            show_delta: self.session.show_delta,
         }
     }
 
     fn persist_preferences_if_changed(&mut self) {
         let preferences = self.preferences();
-        if self.last_saved_preferences.as_ref() == Some(&preferences) {
+        if self.session.last_saved_preferences.as_ref() == Some(&preferences) {
             return;
         }
-        self.last_saved_preferences = Some(preferences.clone());
+        self.session.last_saved_preferences = Some(preferences.clone());
         match write_preferences(&preferences) {
             Ok(()) => self.settings_error = None,
             Err(error) => {
@@ -1105,14 +905,22 @@ impl CrinGraphApp {
     }
 
     fn rebuild_display_curves(&mut self) {
-        let mut output = Vec::with_capacity(self.active.len());
+        let mut output = Vec::with_capacity(self.session.active.len());
         self.processing_error = None;
-        for &group_index in self.active.iter().chain(self.active_targets.iter()) {
-            if self.hidden.contains(&group_index) && self.baseline != Some(group_index) {
+        for &group_index in self
+            .session
+            .active
+            .iter()
+            .chain(self.session.active_targets.iter())
+        {
+            if self.session.hidden.contains(&group_index)
+                && self.session.baseline != Some(group_index)
+            {
                 continue;
             }
-            let group = &self.groups[group_index];
+            let group = &self.session.groups[group_index];
             let variant_index = self
+                .session
                 .variant_choices
                 .get(&group_index)
                 .copied()
@@ -1120,20 +928,21 @@ impl CrinGraphApp {
                 .min(group.variants.len().saturating_sub(1));
             let variant = &group.variants[variant_index];
             let channel_mode = self
+                .session
                 .channel_modes
                 .get(&group_index)
                 .copied()
                 .unwrap_or_default();
             let channels = match prepare_channels(
-                &self.curves,
+                &self.session.curves,
                 &variant.curve_indices,
                 channel_mode,
-                self.smooth_level,
+                self.session.smooth_level,
             ) {
                 Ok(channels) => channels,
                 Err(error) => {
                     self.processing_error = Some(format!("{}: {error}", group.name));
-                    self.display_curves.clear();
+                    self.session.display_curves.clear();
                     self.dirty = false;
                     return;
                 }
@@ -1142,15 +951,15 @@ impl CrinGraphApp {
                 continue;
             }
             let normalization_channels = match prepare_channels(
-                &self.curves,
+                &self.session.curves,
                 &variant.curve_indices,
                 ChannelMode::Both,
-                self.smooth_level,
+                self.session.smooth_level,
             ) {
                 Ok(channels) => channels,
                 Err(error) => {
                     self.processing_error = Some(format!("{}: {error}", group.name));
-                    self.display_curves.clear();
+                    self.session.display_curves.clear();
                     self.dirty = false;
                     return;
                 }
@@ -1159,21 +968,26 @@ impl CrinGraphApp {
                 .iter()
                 .map(|(_, points)| points.as_slice())
                 .collect();
-            let normalization_offset = if self.phon_normalization {
+            let normalization_offset = if self.session.phon_normalization {
                 processing::average_curves(&channel_points).and_then(|average| {
                     let params = NormParams::for_curve(&average)?;
-                    processing::normalize(&average, self.target_phon, &params)
+                    processing::normalize(&average, self.session.target_phon, &params)
                 })
             } else {
-                processing::normalize_by_hz(&channel_points, self.target_hz)
+                processing::normalize_by_hz(&channel_points, self.session.target_hz)
             };
             match normalization_offset {
                 Ok(offset) => {
-                    let manual_offset = self.offsets.get(&group_index).copied().unwrap_or(0.0);
+                    let manual_offset = self
+                        .session
+                        .offsets
+                        .get(&group_index)
+                        .copied()
+                        .unwrap_or(0.0);
                     // An equalizer curves its parent's response, so the child is
                     // built from the parent's already-normalized points and
                     // inherits the parent's normalization by construction.
-                    let eq_rows = self.eq_filters.get(&group_index).filter(|rows| {
+                    let eq_rows = self.session.eq_filters.get(&group_index).filter(|rows| {
                         !group.target && rows.iter().any(|row| row.enabled && !eq_row_is_inert(row))
                     });
                     for (channel_name, mut points) in channels {
@@ -1226,74 +1040,76 @@ impl CrinGraphApp {
                 }
                 Err(error) => {
                     self.processing_error = Some(format!("{}: {error}", group.name));
-                    self.display_curves.clear();
+                    self.session.display_curves.clear();
                     self.dirty = false;
                     return;
                 }
             }
         }
-        if let Some(baseline) = self.baseline {
+        if let Some(baseline) = self.session.baseline {
             if let Err(error) = apply_baseline(&mut output, baseline) {
                 self.processing_error = Some(format!("Baseline: {error}"));
-                self.display_curves.clear();
+                self.session.display_curves.clear();
                 self.dirty = false;
                 return;
             }
         }
-        output.retain(|curve| !self.hidden.contains(&curve.group_index));
-        self.display_curves = output;
+        output.retain(|curve| !self.session.hidden.contains(&curve.group_index));
+        self.session.display_curves = output;
         self.dirty = false;
     }
 
     fn toggle_curve(&mut self, index: usize) {
-        let is_target = self.groups[index].target;
+        let is_target = self.session.groups[index].target;
         let is_selected = if is_target {
-            self.active_targets.contains(&index)
+            self.session.active_targets.contains(&index)
         } else {
-            self.active.contains(&index)
+            self.session.active.contains(&index)
         };
-        if is_selected && self.pinned.contains(&index) {
+        if is_selected && self.session.pinned.contains(&index) {
             return;
         }
         if is_selected {
             if is_target {
-                self.active_targets.remove(&index);
+                self.session.active_targets.remove(&index);
             } else {
-                self.active.remove(&index);
+                self.session.active.remove(&index);
             }
-            self.hidden.remove(&index);
-            self.pinned.remove(&index);
-            self.offsets.remove(&index);
-            self.curve_color_offsets
-                .remove(&group_key(&self.groups[index]));
-            if self.baseline == Some(index) {
-                self.baseline = None;
+            self.session.hidden.remove(&index);
+            self.session.pinned.remove(&index);
+            self.session.offsets.remove(&index);
+            self.session
+                .curve_color_offsets
+                .remove(&group_key(&self.session.groups[index]));
+            if self.session.baseline == Some(index) {
+                self.session.baseline = None;
             }
-        } else if is_target || self.active.len() < MAX_ACTIVE_CURVES {
+        } else if is_target || self.session.active.len() < MAX_ACTIVE_CURVES {
             if is_target {
-                self.active_targets.insert(index);
+                self.session.active_targets.insert(index);
             } else {
-                self.active.insert(index);
+                self.session.active.insert(index);
             }
-            self.variant_choices.entry(index).or_insert(0);
-            self.channel_modes.entry(index).or_default();
+            self.session.variant_choices.entry(index).or_insert(0);
+            self.session.channel_modes.entry(index).or_default();
         }
         self.dirty = true;
     }
 
     fn curve_color(&self, index: usize) -> squiglab_core::color::Rgb {
-        let group = &self.groups[index];
+        let group = &self.session.groups[index];
         if group.target {
             target_color()
         } else {
             let personal_offset = self
+                .session
                 .curve_color_offsets
                 .get(&group_key(group))
                 .copied()
                 .unwrap_or_default();
             squiglab_core::color::get_curve_color_with_offset(
                 index,
-                self.color_offset.wrapping_add(personal_offset),
+                self.session.color_offset.wrapping_add(personal_offset),
             )
         }
     }
@@ -1303,8 +1119,8 @@ impl CrinGraphApp {
     /// because a group can be rebuilt or renamed and the shared state has to
     /// keep excluding it either way.
     fn is_uploaded(&self, index: usize) -> bool {
-        let group = &self.groups[index];
-        group.brand == UPLOADED_BRAND || self.uploaded_names.contains(&group.name)
+        let group = &self.session.groups[index];
+        group.brand == UPLOADED_BRAND || self.session.uploaded_names.contains(&group.name)
     }
 
     /// Color for a displayed curve. An EQ curve takes a palette slot spread
@@ -1315,7 +1131,7 @@ impl CrinGraphApp {
             CurveSource::Measurement => self.curve_color(curve.group_index),
             CurveSource::Equalizer => squiglab_core::color::get_curve_color_with_offset(
                 curve.group_index + EQ_CURVE_COLOR_SPREAD,
-                self.color_offset,
+                self.session.color_offset,
             ),
         }
     }
@@ -1330,9 +1146,9 @@ impl CrinGraphApp {
         // picked out and the other recessive; dragging the other makes it the
         // one in use.
         cgui::cluster_label(ui, "Normalize:");
-        let mut phon = self.target_phon;
+        let mut phon = self.session.target_phon;
         ui.scope(|ui| {
-            if !self.phon_normalization {
+            if !self.session.phon_normalization {
                 ui.visuals_mut().override_text_color = Some(palette.text_tertiary);
             }
             let response = ui
@@ -1344,15 +1160,15 @@ impl CrinGraphApp {
                 )
                 .on_hover_text("Normalize every curve to a target listening level");
             if response.changed() {
-                self.target_phon = phon;
+                self.session.target_phon = phon;
             }
             if response.drag_started() {
-                self.phon_normalization = true;
+                self.session.phon_normalization = true;
             }
         });
-        let mut frequency = self.target_hz;
+        let mut frequency = self.session.target_hz;
         ui.scope(|ui| {
-            if self.phon_normalization {
+            if self.session.phon_normalization {
                 ui.visuals_mut().override_text_color = Some(palette.text_tertiary);
             }
             let response = ui
@@ -1364,31 +1180,31 @@ impl CrinGraphApp {
                 )
                 .on_hover_text("Make every curve match at this frequency");
             if response.changed() {
-                self.target_hz = frequency;
+                self.session.target_hz = frequency;
             }
             if response.drag_started() {
-                self.phon_normalization = false;
+                self.session.phon_normalization = false;
             }
         });
         cgui::cluster_label(ui, "Smooth:");
         ui.add(
-            egui::Slider::new(&mut self.smooth_level, 0..=12)
+            egui::Slider::new(&mut self.session.smooth_level, 0..=12)
                 .suffix(" /oct")
                 .text(""),
         )
         .on_hover_text("Fractional-octave smoothing applied to every curve");
-        ui.checkbox(&mut self.show_labels, "Labels")
+        ui.checkbox(&mut self.session.show_labels, "Labels")
             .on_hover_text("Curve labels are auto-spaced; drag a label to position it.");
-        if self.show_labels
+        if self.session.show_labels
             && cgui::action_button(
                 ui,
-                self.label_layout.short_name(),
+                self.session.label_layout.short_name(),
                 "Group labels in a corner like squig.link, or keep each beside its curve",
             )
         {
-            self.label_layout = self.label_layout.next();
+            self.session.label_layout = self.session.label_layout.next();
         }
-        ui.checkbox(&mut self.inspect_mode, "Inspect")
+        ui.checkbox(&mut self.session.inspect_mode, "Inspect")
             .on_hover_text("Read the exact dB value under the cursor at a frequency.");
         #[cfg(debug_assertions)]
         if self.debug_hooks {
@@ -1403,7 +1219,7 @@ impl CrinGraphApp {
     fn toolbar_actions(&mut self, ui: &mut Ui) {
         use squiglab::ui as cgui;
         if cgui::action_button(ui, "Recolor", "Cycle the measurement curve colors.") {
-            self.color_offset = self.color_offset.wrapping_add(1);
+            self.session.color_offset = self.session.color_offset.wrapping_add(1);
         }
         if cgui::action_button(ui, "PNG", "Save a PNG of the current application window.") {
             self.screenshot_pending = true;
@@ -1430,15 +1246,15 @@ impl CrinGraphApp {
         }
         if cgui::action_button(
             ui,
-            if self.tutorial_segment.is_some() {
+            if self.session.tutorial_segment.is_some() {
                 "Close guide"
             } else {
                 "Guide"
             },
             "Learn how to read a frequency response curve.",
         ) {
-            self.tutorial_segment = self.tutorial_segment.map_or(Some(0), |_| None);
-            if self.tutorial_segment.is_some() {
+            self.session.tutorial_segment = self.session.tutorial_segment.map_or(Some(0), |_| None);
+            if self.session.tutorial_segment.is_some() {
                 self.close_all_overlays_except(Some("tutorial"));
             }
         }
@@ -1545,7 +1361,7 @@ impl CrinGraphApp {
         if !self.menu_open {
             return;
         }
-        let palette = squiglab::theme::Palette::resolve(self.dark_mode);
+        let palette = squiglab::theme::Palette::resolve(self.session.dark_mode);
 
         // Dimmed backdrop; clicking it closes the drawer. It deliberately
         // stops at the drawer's right edge so taps inside the drawer column
@@ -1648,7 +1464,7 @@ impl CrinGraphApp {
         if !self.library_drawer_open && opening <= 0.0 {
             return;
         }
-        let palette = squiglab::theme::Palette::resolve(self.dark_mode);
+        let palette = squiglab::theme::Palette::resolve(self.session.dark_mode);
         let height =
             (screen_rect.height() * 0.70).clamp(LIBRARY_SHEET_MIN_HEIGHT, LIBRARY_SHEET_MAX_HEIGHT);
         let top = screen_rect.bottom() - height * opening;
@@ -1711,10 +1527,10 @@ impl CrinGraphApp {
     fn toolbar(&mut self, ui: &mut Ui) {
         use squiglab::ui as cgui;
         let previous_processing_settings = (
-            self.phon_normalization,
-            self.target_phon,
-            self.target_hz,
-            self.smooth_level,
+            self.session.phon_normalization,
+            self.session.target_phon,
+            self.session.target_hz,
+            self.session.smooth_level,
         );
         egui::Panel::top("toolbar").show(ui, |ui| {
             // One row of clearly separated clusters: view range, then the two
@@ -1736,7 +1552,7 @@ impl CrinGraphApp {
 
                         // ---- View range ----
                         cgui::cluster_label(ui, "Zoom:");
-                        cgui::zoom_segmented(ui, &mut self.zoom);
+                        cgui::zoom_segmented(ui, &mut self.session.zoom);
                         cgui::cluster_rule(ui);
 
                         // ---- Normalize / smooth / view toggles ----
@@ -1760,11 +1576,15 @@ impl CrinGraphApp {
                                 if !density.shows_theme()
                                     && cgui::action_button(
                                         ui,
-                                        if self.dark_mode { "Light" } else { "Dark" },
+                                        if self.session.dark_mode {
+                                            "Light"
+                                        } else {
+                                            "Dark"
+                                        },
                                         "Switch between the dark and light themes",
                                     )
                                 {
-                                    self.dark_mode = !self.dark_mode;
+                                    self.session.dark_mode = !self.session.dark_mode;
                                 }
                             })
                             .response
@@ -1776,41 +1596,45 @@ impl CrinGraphApp {
                         if density.shows_theme() {
                             if cgui::action_button(
                                 ui,
-                                if self.dark_mode { "Light" } else { "Dark" },
+                                if self.session.dark_mode {
+                                    "Light"
+                                } else {
+                                    "Dark"
+                                },
                                 "Switch between the dark and light themes",
                             ) {
-                                self.dark_mode = !self.dark_mode;
+                                self.session.dark_mode = !self.session.dark_mode;
                             }
                             cgui::cluster_rule(ui);
                         }
 
                         // ---- Panel visibility (primary toggles, at the end) ----
                         if ui
-                            .selectable_label(self.show_measurements, "Library")
+                            .selectable_label(self.session.show_measurements, "Library")
                             .on_hover_text("Show or hide the measurement and target library.")
                             .clicked()
                         {
-                            self.show_measurements = !self.show_measurements;
+                            self.session.show_measurements = !self.session.show_measurements;
                         }
                         // The deviation is a second reading of the same selection, so
                         // it is a window rather than a place in the layout: the layout
                         // is the curves themselves, and this is a question about them.
                         if ui
-                            .selectable_label(self.show_delta, "\u{394} Deviation")
+                            .selectable_label(self.session.show_delta, "\u{394} Deviation")
                             .on_hover_text("Show how far each headphone sits from the target.")
                             .clicked()
                         {
-                            self.show_delta = !self.show_delta;
+                            self.session.show_delta = !self.session.show_delta;
                         }
                     });
                 });
         });
         self.dirty |= previous_processing_settings
             != (
-                self.phon_normalization,
-                self.target_phon,
-                self.target_hz,
-                self.smooth_level,
+                self.session.phon_normalization,
+                self.session.target_phon,
+                self.session.target_hz,
+                self.session.smooth_level,
             );
     }
 
@@ -1860,7 +1684,7 @@ impl CrinGraphApp {
     }
 
     fn tutorial_window(&mut self, ctx: &Context) {
-        let Some(mut selected) = self.tutorial_segment else {
+        let Some(mut selected) = self.session.tutorial_segment else {
             return;
         };
         let mut open = true;
@@ -1903,7 +1727,7 @@ impl CrinGraphApp {
                     }
                 });
             });
-        self.tutorial_segment = (open && !finished).then_some(selected);
+        self.session.tutorial_segment = (open && !finished).then_some(selected);
     }
 
     fn restore_shared_state(&mut self, uri: &str) -> anyhow::Result<()> {
@@ -1921,7 +1745,7 @@ impl CrinGraphApp {
     /// slot, matching the reference tool's column. `left` places it beside the
     /// graph (desktop); `false` stacks it below the graph (mobile).
     fn selector_panel(&mut self, ui: &mut Ui, left: bool) {
-        if !self.show_measurements {
+        if !self.session.show_measurements {
             return;
         }
         if left {
@@ -1995,7 +1819,7 @@ impl CrinGraphApp {
     /// counts do not change while typing.
     fn brand_model_counts(&self) -> Vec<(String, usize)> {
         let mut counts = BTreeMap::<String, usize>::new();
-        for group in &self.groups {
+        for group in &self.session.groups {
             if group.target {
                 continue;
             }
@@ -2015,7 +1839,7 @@ impl CrinGraphApp {
         brand_filter: Option<&str>,
     ) -> Vec<(usize, String)> {
         let mut models: Vec<(usize, String)> = Vec::new();
-        for (index, group) in self.groups.iter().enumerate() {
+        for (index, group) in self.session.groups.iter().enumerate() {
             if group.target {
                 continue; // Reference targets live in the target strip, not here.
             }
@@ -2031,13 +1855,17 @@ impl CrinGraphApp {
     /// The measurement whose equalizer the panel is editing: the one chosen in
     /// its dropdown, or the first active measurement when nothing is chosen.
     fn eq_phone(&self) -> Option<usize> {
-        self.eq_phone
-            .filter(|&index| self.active.contains(&index) && !self.groups[index].target)
+        self.session
+            .eq_phone
+            .filter(|&index| {
+                self.session.active.contains(&index) && !self.session.groups[index].target
+            })
             .or_else(|| {
-                self.active
+                self.session
+                    .active
                     .iter()
                     .copied()
-                    .find(|&index| !self.groups[index].target)
+                    .find(|&index| !self.session.groups[index].target)
             })
     }
 
@@ -2045,25 +1873,28 @@ impl CrinGraphApp {
     /// active target, else the second active measurement, which is the
     /// reference tool's fallback.
     fn eq_target(&self) -> Option<usize> {
-        self.eq_target
-            .filter(|&index| self.active_targets.contains(&index))
-            .or_else(|| self.active_targets.iter().copied().next())
-            .or_else(|| self.active.iter().copied().nth(1))
+        self.session
+            .eq_target
+            .filter(|&index| self.session.active_targets.contains(&index))
+            .or_else(|| self.session.active_targets.iter().copied().next())
+            .or_else(|| self.session.active.iter().copied().nth(1))
     }
 
     /// The measurements the panel offers in its dropdown.
     fn active_measurements(&self) -> Vec<usize> {
-        self.active
+        self.session
+            .active
             .iter()
             .copied()
-            .filter(|&index| !self.groups[index].target)
+            .filter(|&index| !self.session.groups[index].target)
             .collect()
     }
 
     /// The enabled filters of a curve, which is what the exports and the
     /// response calculation take.
     fn enabled_filters(&self, index: usize) -> Vec<equalizer::Filter> {
-        self.eq_filters
+        self.session
+            .eq_filters
             .get(&index)
             .map(|rows| {
                 rows.iter()
@@ -2081,8 +1912,9 @@ impl CrinGraphApp {
         &self,
         group_index: usize,
     ) -> Result<Vec<FRPoint>, processing::ProcessingError> {
-        let group = &self.groups[group_index];
+        let group = &self.session.groups[group_index];
         let variant_index = self
+            .session
             .variant_choices
             .get(&group_index)
             .copied()
@@ -2090,21 +1922,21 @@ impl CrinGraphApp {
             .min(group.variants.len().saturating_sub(1));
         let variant = &group.variants[variant_index];
         let channels = prepare_channels(
-            &self.curves,
+            &self.session.curves,
             &variant.curve_indices,
             ChannelMode::Both,
-            self.smooth_level,
+            self.session.smooth_level,
         )?;
         let channel_points: Vec<&[FRPoint]> = channels
             .iter()
             .map(|(_, points)| points.as_slice())
             .collect();
         let mut average = processing::average_curves(&channel_points)?;
-        let offset = if self.phon_normalization {
+        let offset = if self.session.phon_normalization {
             let params = processing::NormParams::for_curve(&average)?;
-            processing::normalize(&average, self.target_phon, &params)?
+            processing::normalize(&average, self.session.target_phon, &params)?
         } else {
-            processing::normalize_by_hz(&channel_points, self.target_hz)?
+            processing::normalize_by_hz(&channel_points, self.session.target_hz)?
         };
         for point in &mut average {
             point.db += offset;
@@ -2141,14 +1973,19 @@ impl CrinGraphApp {
                 return;
             }
         };
-        let fitted = equalizer::autoeq(&source, &target_curve, self.eq_max_filters, self.eq_range);
+        let fitted = equalizer::autoeq(
+            &source,
+            &target_curve,
+            self.session.eq_max_filters,
+            self.session.eq_range,
+        );
         self.eq_export_error = None;
         self.eq_export_message = Some(format!(
             "Auto EQ fitted {} filters against {}.",
             fitted.len(),
-            self.groups[target].name
+            self.session.groups[target].name
         ));
-        self.eq_filters.insert(
+        self.session.eq_filters.insert(
             phone,
             fitted
                 .into_iter()
@@ -2176,7 +2013,7 @@ impl CrinGraphApp {
         let equalized = equalizer::apply(&source, &filters, equalizer::DEFAULT_SAMPLE_RATE);
         let preamp = equalizer::calc_preamp(&source, &equalized);
         Some((
-            format!("{} Filters.txt", self.groups[phone].name),
+            format!("{} Filters.txt", self.session.groups[phone].name),
             equalizer::export_parametric(&filters, preamp),
         ))
     }
@@ -2186,7 +2023,7 @@ impl CrinGraphApp {
     fn graphic_eq_export(&self) -> Option<(String, String)> {
         let phone = self.eq_phone()?;
         Some((
-            format!("{} Wavelet.txt", self.groups[phone].name),
+            format!("{} Wavelet.txt", self.session.groups[phone].name),
             equalizer::export_graphic_eq(
                 &self.enabled_filters(phone),
                 equalizer::DEFAULT_SAMPLE_RATE,
@@ -2228,7 +2065,7 @@ impl CrinGraphApp {
         match equalizer::import_parametric(&text) {
             Ok(imported) => {
                 let count = imported.filters.len();
-                self.eq_filters.insert(
+                self.session.eq_filters.insert(
                     phone,
                     imported
                         .filters
@@ -2278,17 +2115,19 @@ impl CrinGraphApp {
             }
         };
         let target = self.upload_as_target;
-        let uploaded = match data::parse_upload(&file_name, &contents, &self.upload_grid, target) {
-            Ok(uploaded) => uploaded,
-            Err(error) => {
-                self.upload_error = Some(format!("{file_name} was not accepted: {error}"));
-                return;
-            }
-        };
+        let uploaded =
+            match data::parse_upload(&file_name, &contents, &self.session.upload_grid, target) {
+                Ok(uploaded) => uploaded,
+                Err(error) => {
+                    self.upload_error = Some(format!("{file_name} was not accepted: {error}"));
+                    return;
+                }
+            };
         if target {
             // A target the database already carries would draw twice, so the
             // upload is refused rather than shadowing it.
             if self
+                .session
                 .groups
                 .iter()
                 .any(|group| group.target && group.name == file_name)
@@ -2305,13 +2144,14 @@ impl CrinGraphApp {
         let model = curve.model.clone();
         let right_only = curve.variant == "R";
         let mut indices = Vec::new();
-        self.curves.push(curve);
-        indices.push(self.curves.len() - 1);
+        self.session.curves.push(curve);
+        indices.push(self.session.curves.len() - 1);
         if !target && right_only {
-            self.curves.push(data::CurveInfo {
+            self.session.curves.push(data::CurveInfo {
                 model,
                 variant: "L".to_owned(),
                 points: self
+                    .session
                     .upload_grid
                     .iter()
                     .map(|frequency| FRPoint {
@@ -2322,9 +2162,9 @@ impl CrinGraphApp {
                     })
                     .collect(),
             });
-            indices.push(self.curves.len() - 1);
+            indices.push(self.session.curves.len() - 1);
         }
-        self.uploaded_names.insert(file_name.clone());
+        self.session.uploaded_names.insert(file_name.clone());
         self.rebuild_uploaded_group(&file_name, target, &indices);
         self.upload_error = None;
         self.upload_message = Some(if target {
@@ -2344,6 +2184,7 @@ impl CrinGraphApp {
             UPLOADED_BRAND.to_owned()
         };
         let existing = self
+            .session
             .groups
             .iter()
             .position(|group| group.brand == brand && group.name == name);
@@ -2352,12 +2193,12 @@ impl CrinGraphApp {
             // group's curves rather than piling a second copy of the same
             // model into it.
             Some(index) if self.is_uploaded(index) => {
-                self.groups[index].variants[0].curve_indices.clear();
+                self.session.groups[index].variants[0].curve_indices.clear();
                 index
             }
             Some(index) => index,
             None => {
-                self.groups.push(MeasurementGroup {
+                self.session.groups.push(MeasurementGroup {
                     brand,
                     brand_suffix: None,
                     name: name.to_owned(),
@@ -2367,16 +2208,16 @@ impl CrinGraphApp {
                     }],
                     target,
                 });
-                self.groups.len() - 1
+                self.session.groups.len() - 1
             }
         };
-        let variant = &mut self.groups[index].variants[0];
+        let variant = &mut self.session.groups[index].variants[0];
         variant.curve_indices.extend(curve_indices.iter().copied());
         variant.curve_indices.sort_unstable();
         variant.curve_indices.dedup();
         // Keep the group list in the same order the database loader uses, so
         // the library and the shared links do not reshuffle.
-        self.groups.sort_by(|left, right| {
+        self.session.groups.sort_by(|left, right| {
             left.brand
                 .cmp(&right.brand)
                 .then(left.name.cmp(&right.name))
@@ -2397,7 +2238,7 @@ impl CrinGraphApp {
         }
         let mut open = true;
         let mut finished = false;
-        let palette = squiglab::theme::Palette::resolve(self.dark_mode);
+        let palette = squiglab::theme::Palette::resolve(self.session.dark_mode);
         egui::Window::new("How to use the equalizer")
             .open(&mut open)
             .resizable(false)
@@ -2500,7 +2341,7 @@ impl CrinGraphApp {
         }
         let mut open = true;
         let mut cancelled = false;
-        let palette = squiglab::theme::Palette::resolve(self.dark_mode);
+        let palette = squiglab::theme::Palette::resolve(self.session.dark_mode);
         egui::Window::new("Upload measurement")
             .open(&mut open)
             .resizable(false)
@@ -2574,10 +2415,10 @@ impl CrinGraphApp {
             cgui::segmented(
                 ui,
                 &[(0usize, "Compare A"), (1usize, "Compare B")],
-                &mut self.sound_slot,
+                &mut self.session.sound_slot,
                 Some("Switch between the two sound settings"),
             );
-            let playing = self.player.is_some();
+            let playing = self.session.player.is_some();
             if cgui::action_button(
                 ui,
                 if playing { "Stop" } else { "Play" },
@@ -2594,7 +2435,7 @@ impl CrinGraphApp {
 
         // Edited on a copy, so the panel does not hold a borrow across the
         // player's own state.
-        let mut settings = self.sound_settings[self.sound_slot];
+        let mut settings = self.session.sound_settings[self.session.sound_slot];
         let mut choice = match settings.source {
             Source::Tone { .. } => 0,
             Source::PinkNoise => 1,
@@ -2660,14 +2501,14 @@ impl CrinGraphApp {
             );
         }
         ui.add(egui::Slider::new(&mut settings.volume, 0.0..=1.0).text("Volume"));
-        self.sound_settings[self.sound_slot] = settings;
+        self.session.sound_settings[self.session.sound_slot] = settings;
         // A playing tone follows the controls: the pitch glides to a new
         // frequency rather than jumping, which is the reference's behaviour
         // when the slider is dragged.
-        if let Some(player) = &self.player {
+        if let Some(player) = &self.session.player {
             player.set_settings(settings);
         }
-        if let Some(message) = self.player.as_mut().and_then(Player::take_message) {
+        if let Some(message) = self.session.player.as_mut().and_then(Player::take_message) {
             self.sound_message = Some(message);
         }
         if let Some(message) = &self.sound_message {
@@ -2677,10 +2518,10 @@ impl CrinGraphApp {
 
     /// Start the sound, reporting why not if the audio path is unavailable.
     fn start_sound(&mut self) {
-        let settings = self.sound_settings[self.sound_slot];
+        let settings = self.session.sound_settings[self.session.sound_slot];
         match Player::start(settings) {
             Ok(player) => {
-                self.player = Some(player);
+                self.session.player = Some(player);
                 self.sound_message = Some(format!("Playing {}.", settings.source.name()));
             }
             Err(error) => {
@@ -2692,7 +2533,7 @@ impl CrinGraphApp {
     /// Stop the sound. Dropping the player closes the stream and joins the
     /// thread that was writing to it.
     fn stop_sound(&mut self) {
-        self.player = None;
+        self.session.player = None;
         self.sound_message = Some("Stopped.".to_owned());
     }
 
@@ -2731,7 +2572,7 @@ impl CrinGraphApp {
                             .size(squiglab::theme::TypeStep::Caption.size())
                             .color(palette.text_secondary),
                     );
-                    let mut budget = self.eq_max_filters as f64;
+                    let mut budget = self.session.eq_max_filters as f64;
                     if ui
                         .add(
                             egui::Slider::new(&mut budget, 1.0..=MAX_EQ_ROWS as f64)
@@ -2739,12 +2580,13 @@ impl CrinGraphApp {
                         )
                         .changed()
                     {
-                        self.eq_max_filters = budget.clamp(1.0, MAX_EQ_ROWS as f64) as usize;
+                        self.session.eq_max_filters =
+                            budget.clamp(1.0, MAX_EQ_ROWS as f64) as usize;
                     }
                 });
                 if cgui::action_button(ui, "Reset", "Clear this curve's filters.") {
                     if let Some(phone) = self.eq_phone() {
-                        self.eq_filters.insert(phone, Vec::new());
+                        self.session.eq_filters.insert(phone, Vec::new());
                         self.dirty = true;
                     }
                 }
@@ -2759,7 +2601,9 @@ impl CrinGraphApp {
         // A curve that has never been edited starts with empty bands, mirroring
         // the reference tool. A curve whose rows were emptied keeps them empty:
         // the empty list is the record that the user cleared it.
-        if let std::collections::btree_map::Entry::Vacant(slot) = self.eq_filters.entry(phone) {
+        if let std::collections::btree_map::Entry::Vacant(slot) =
+            self.session.eq_filters.entry(phone)
+        {
             slot.insert(
                 (0..5)
                     .map(|_| EqRow {
@@ -2781,12 +2625,12 @@ impl CrinGraphApp {
         let measurements = self.active_measurements();
         let names: Vec<String> = measurements
             .iter()
-            .map(|&index| self.groups[index].name.clone())
+            .map(|&index| self.session.groups[index].name.clone())
             .collect();
-        let targets: Vec<usize> = self.active_targets.iter().copied().collect();
+        let targets: Vec<usize> = self.session.active_targets.iter().copied().collect();
         let target_label = self
             .eq_target()
-            .map(|index| self.groups[index].name.clone())
+            .map(|index| self.session.groups[index].name.clone())
             .unwrap_or_else(|| "None".to_owned());
         ui.horizontal(|ui| {
             let mut selected_phone = Some(phone);
@@ -2804,7 +2648,7 @@ impl CrinGraphApp {
                     }
                 });
             if selected_phone != Some(phone) {
-                self.eq_phone = selected_phone;
+                self.session.eq_phone = selected_phone;
             }
             ui.add_space(cgui::Spacing::COMPACT);
             let mut selected_target = self.eq_target();
@@ -2815,12 +2659,12 @@ impl CrinGraphApp {
                         ui.selectable_value(
                             &mut selected_target,
                             Some(*index),
-                            &self.groups[*index].name,
+                            &self.session.groups[*index].name,
                         );
                     }
                 });
             if selected_target != self.eq_target() {
-                self.eq_target = selected_target;
+                self.session.eq_target = selected_target;
             }
             ui.add_space(cgui::Spacing::COMPACT);
             if ui.button("AutoEQ").clicked() {
@@ -2848,7 +2692,12 @@ impl CrinGraphApp {
                 ui.end_row();
             });
 
-        let mut rows = self.eq_filters.get(&phone).cloned().unwrap_or_default();
+        let mut rows = self
+            .session
+            .eq_filters
+            .get(&phone)
+            .cloned()
+            .unwrap_or_default();
         let mut changed = false;
         let mut sort_requested = false;
         egui::Grid::new("eq_rows")
@@ -2924,7 +2773,7 @@ impl CrinGraphApp {
                 }
             });
         if changed {
-            self.eq_filters.insert(phone, rows);
+            self.session.eq_filters.insert(phone, rows);
             self.dirty = true;
         }
 
@@ -2936,7 +2785,12 @@ impl CrinGraphApp {
                 .on_hover_text("Add a band after the last one")
                 .clicked()
             {
-                let mut rows = self.eq_filters.get(&phone).cloned().unwrap_or_default();
+                let mut rows = self
+                    .session
+                    .eq_filters
+                    .get(&phone)
+                    .cloned()
+                    .unwrap_or_default();
                 rows.push(EqRow {
                     filter: equalizer::Filter::new(
                         equalizer::FilterType::Peaking,
@@ -2946,7 +2800,7 @@ impl CrinGraphApp {
                     ),
                     enabled: true,
                 });
-                self.eq_filters.insert(phone, rows);
+                self.session.eq_filters.insert(phone, rows);
                 self.dirty = true;
             }
             if ui
@@ -2954,9 +2808,9 @@ impl CrinGraphApp {
                 .on_hover_text("Remove the last band")
                 .clicked()
             {
-                if let Some(mut rows) = self.eq_filters.get(&phone).cloned() {
+                if let Some(mut rows) = self.session.eq_filters.get(&phone).cloned() {
                     rows.pop();
-                    self.eq_filters.insert(phone, rows);
+                    self.session.eq_filters.insert(phone, rows);
                     self.dirty = true;
                 }
             }
@@ -2969,9 +2823,9 @@ impl CrinGraphApp {
             }
         });
         if sort_requested {
-            if let Some(mut rows) = self.eq_filters.get(&phone).cloned() {
+            if let Some(mut rows) = self.session.eq_filters.get(&phone).cloned() {
                 rows.sort_by(|left, right| left.filter.freq.total_cmp(&right.filter.freq));
-                self.eq_filters.insert(phone, rows);
+                self.session.eq_filters.insert(phone, rows);
                 self.dirty = true;
             }
         }
@@ -2983,8 +2837,8 @@ impl CrinGraphApp {
         ui.add_space(cgui::Spacing::TIGHT);
         ui.horizontal(|ui| {
             cgui::cluster_label(ui, "AutoEQ Range");
-            let mut from = self.eq_range.0;
-            let mut to = self.eq_range.1;
+            let mut from = self.session.eq_range.0;
+            let mut to = self.session.eq_range.1;
             if ui
                 .add(
                     egui::DragValue::new(&mut from)
@@ -2995,7 +2849,7 @@ impl CrinGraphApp {
                 .on_hover_text("Lowest frequency AutoEQ may place a filter at")
                 .changed()
             {
-                self.eq_range.0 = from;
+                self.session.eq_range.0 = from;
             }
             if ui
                 .add(
@@ -3007,11 +2861,11 @@ impl CrinGraphApp {
                 .on_hover_text("Highest frequency AutoEQ may place a filter at")
                 .changed()
             {
-                self.eq_range.1 = to;
+                self.session.eq_range.1 = to;
             }
             // The high bound never falls below the low one, as in the
             // reference.
-            self.eq_range.1 = self.eq_range.1.max(self.eq_range.0);
+            self.session.eq_range.1 = self.session.eq_range.1.max(self.session.eq_range.0);
         });
 
         // --- the two export formats ---
@@ -3093,7 +2947,11 @@ impl CrinGraphApp {
         squiglab::ui::section_header(
             ui,
             "Library",
-            Some(&format!("{}/{}", self.active.len(), MAX_ACTIVE_CURVES)),
+            Some(&format!(
+                "{}/{}",
+                self.session.active.len(),
+                MAX_ACTIVE_CURVES
+            )),
         );
         ui.add_space(cgui::Spacing::TIGHT);
         ui.add(
@@ -3216,7 +3074,7 @@ impl CrinGraphApp {
         let mut toggles = Vec::new();
         ui.spacing_mut().item_spacing.y = cgui::Spacing::TIGHT;
         for (index, model_name) in models {
-            let selected = self.active.contains(index);
+            let selected = self.session.active.contains(index);
             let response = ui.horizontal(|ui| {
                 ui.label(RichText::new(model_name).size(squiglab::theme::TypeStep::Body.size()));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -3240,10 +3098,10 @@ impl CrinGraphApp {
     /// eight measurement slots, for the same reason targets do not.
     /// Turn a rig correction on or off.
     fn toggle_delta(&mut self, index: usize) {
-        if self.active_deltas.contains(&index) {
-            self.active_deltas.remove(&index);
+        if self.session.active_deltas.contains(&index) {
+            self.session.active_deltas.remove(&index);
         } else {
-            self.active_deltas.insert(index);
+            self.session.active_deltas.insert(index);
         }
         self.dirty = true;
     }
@@ -3259,7 +3117,9 @@ impl CrinGraphApp {
     /// strip never spans under the library column.
     fn manager_content(&mut self, ui: &mut Ui) {
         use squiglab::ui as cgui;
-        let count = self.active.len() + self.active_targets.len() + self.active_deltas.len();
+        let count = self.session.active.len()
+            + self.session.active_targets.len()
+            + self.session.active_deltas.len();
         squiglab::ui::section_header(
             ui,
             "Active curves",
@@ -3277,20 +3137,27 @@ impl CrinGraphApp {
             // stacks them instead of clipping the controls off the edge.
             let stack_rows = ui.available_width() < MANAGER_ROW_STACK_WIDTH;
             for index in self
+                .session
                 .active
                 .iter()
-                .chain(self.active_targets.iter())
+                .chain(self.session.active_targets.iter())
                 .copied()
                 .collect::<Vec<_>>()
             {
-                let group = self.groups[index].clone();
+                let group = self.session.groups[index].clone();
                 self.manager_row(ui, index, &group, stack_rows, &mut removals);
                 ui.separator();
             }
             // Rig corrections come last: they are corrections to what
             // is above them, not independent curves to read against.
-            for index in self.active_deltas.iter().copied().collect::<Vec<_>>() {
-                let target = self.delta_targets[index].clone();
+            for index in self
+                .session
+                .active_deltas
+                .iter()
+                .copied()
+                .collect::<Vec<_>>()
+            {
+                let target = self.session.delta_targets[index].clone();
                 self.manager_delta_row(ui, index, &target, stack_rows, &mut delta_removals);
                 ui.separator();
             }
@@ -3434,6 +3301,7 @@ impl CrinGraphApp {
         // as a form control sitting in one.
         if group.variants.len() > 1 {
             let mut selected_variant = self
+                .session
                 .variant_choices
                 .get(&index)
                 .copied()
@@ -3462,8 +3330,15 @@ impl CrinGraphApp {
                             );
                         }
                     });
-                if self.variant_choices.get(&index).copied().unwrap_or(0) != selected_variant {
-                    self.variant_choices.insert(index, selected_variant);
+                if self
+                    .session
+                    .variant_choices
+                    .get(&index)
+                    .copied()
+                    .unwrap_or(0)
+                    != selected_variant
+                {
+                    self.session.variant_choices.insert(index, selected_variant);
                     self.dirty = true;
                 }
             }
@@ -3483,7 +3358,7 @@ impl CrinGraphApp {
         color: egui::Color32,
     ) -> egui::Response {
         let palette = squiglab::theme::Palette::resolve(ui.visuals().dark_mode);
-        let is_target = self.groups[group_index].target;
+        let is_target = self.session.groups[group_index].target;
         let (rect, response) = ui.allocate_exact_size(
             egui::vec2(PREVIEW_WIDTH, PREVIEW_HEIGHT),
             egui::Sense::hover(),
@@ -3497,17 +3372,18 @@ impl CrinGraphApp {
             );
             return response.on_hover_text(format!(
                 "{}: the reference the others are read against.",
-                self.groups[group_index].name
+                self.session.groups[group_index].name
             ));
         }
         let Some(curve) = self
+            .session
             .display_curves
             .iter()
             .find(|curve| curve.group_index == group_index)
         else {
             return response;
         };
-        let (hz_min, hz_max) = self.zoom.x_range();
+        let (hz_min, hz_max) = self.session.zoom.x_range();
         let visible: Vec<&FRPoint> = curve
             .points
             .iter()
@@ -3558,9 +3434,9 @@ impl CrinGraphApp {
     ) {
         use squiglab::ui as cgui;
         let palette = squiglab::theme::Palette::resolve(ui.visuals().dark_mode);
-        let pinned = self.pinned.contains(&index);
-        let hidden = self.hidden.contains(&index);
-        let baseline = self.baseline == Some(index);
+        let pinned = self.session.pinned.contains(&index);
+        let hidden = self.session.hidden.contains(&index);
+        let baseline = self.session.baseline == Some(index);
         let mut order = RowControl::ORDER.to_vec();
         if right_to_left {
             order.reverse();
@@ -3568,7 +3444,7 @@ impl CrinGraphApp {
         for control in order {
             match control {
                 RowControl::Offset => {
-                    let offset = self.offsets.entry(index).or_default();
+                    let offset = self.session.offsets.entry(index).or_default();
                     if ui
                         .add(egui::DragValue::new(offset).speed(0.1).suffix(" dB"))
                         .changed()
@@ -3586,7 +3462,7 @@ impl CrinGraphApp {
                     )
                     .clicked()
                     {
-                        self.smooth_level = next_smoothing_level(self.smooth_level);
+                        self.session.smooth_level = next_smoothing_level(self.session.smooth_level);
                         self.dirty = true;
                     }
                 }
@@ -3604,9 +3480,9 @@ impl CrinGraphApp {
                     .clicked()
                     {
                         if hidden {
-                            self.hidden.remove(&index);
+                            self.session.hidden.remove(&index);
                         } else {
-                            self.hidden.insert(index);
+                            self.session.hidden.insert(index);
                         }
                         self.dirty = true;
                     }
@@ -3621,9 +3497,9 @@ impl CrinGraphApp {
                     .clicked()
                     {
                         if pinned {
-                            self.pinned.remove(&index);
+                            self.session.pinned.remove(&index);
                         } else {
-                            self.pinned.insert(index);
+                            self.session.pinned.insert(index);
                         }
                     }
                 }
@@ -3636,7 +3512,7 @@ impl CrinGraphApp {
                     )
                     .clicked()
                     {
-                        self.baseline = if baseline { None } else { Some(index) };
+                        self.session.baseline = if baseline { None } else { Some(index) };
                         self.dirty = true;
                     }
                 }
@@ -3673,7 +3549,12 @@ impl CrinGraphApp {
         // reading which channel is showing without seeing its shape is how you
         // end up comparing a left ear to a right one.
         if !group.target {
-            let mut channel_mode = self.channel_modes.get(&index).copied().unwrap_or_default();
+            let mut channel_mode = self
+                .session
+                .channel_modes
+                .get(&index)
+                .copied()
+                .unwrap_or_default();
             let mut modes = [
                 (ChannelMode::Left, "L"),
                 (ChannelMode::Right, "R"),
@@ -3694,18 +3575,22 @@ impl CrinGraphApp {
                     && channel_mode != mode
                 {
                     channel_mode = mode;
-                    self.channel_modes.insert(index, mode);
+                    self.session.channel_modes.insert(index, mode);
                     self.dirty = true;
                 }
             }
             self.curve_preview(ui, index, squiglab::theme::color(self.curve_color(index)));
             let variant_index = self
+                .session
                 .variant_choices
                 .get(&index)
                 .copied()
                 .unwrap_or(0)
                 .min(group.variants.len() - 1);
-            if group_has_imbalance(&self.curves, &group.variants[variant_index].curve_indices) {
+            if group_has_imbalance(
+                &self.session.curves,
+                &group.variants[variant_index].curve_indices,
+            ) {
                 ui.colored_label(palette.warning, "!").on_hover_text(
                     "Left and right channels differ beyond the imbalance threshold.",
                 );
@@ -3723,8 +3608,9 @@ impl CrinGraphApp {
     /// The channel the row is showing is the one written, because that is the
     /// curve the mark was pressed on, and the file says which it is.
     fn export_curve_text(&mut self, group_index: usize) {
-        let group = &self.groups[group_index];
+        let group = &self.session.groups[group_index];
         let variant_index = self
+            .session
             .variant_choices
             .get(&group_index)
             .copied()
@@ -3732,13 +3618,18 @@ impl CrinGraphApp {
             .min(group.variants.len().saturating_sub(1));
         let variant = &group.variants[variant_index];
         let channel_mode = self
+            .session
             .channel_modes
             .get(&group_index)
             .copied()
             .unwrap_or_default();
         // A smoothing level of zero: no smoothing, nothing derived.
-        let channels = match prepare_channels(&self.curves, &variant.curve_indices, channel_mode, 0)
-        {
+        let channels = match prepare_channels(
+            &self.session.curves,
+            &variant.curve_indices,
+            channel_mode,
+            0,
+        ) {
             Ok(channels) => channels,
             Err(error) => {
                 self.curve_export_message = None;
@@ -3785,10 +3676,11 @@ impl CrinGraphApp {
     /// Returns nothing without a target: a deviation from nothing is not a
     /// deviation, and a bar with no curves would only take room from the graph.
     fn delta_bar_deviations(&self) -> Vec<DeviationCurve> {
-        let Some(target_group) = self.active_targets.iter().copied().next() else {
+        let Some(target_group) = self.session.active_targets.iter().copied().next() else {
             return Vec::new();
         };
         let Some(target) = self
+            .session
             .display_curves
             .iter()
             .find(|curve| curve.target && curve.group_index == target_group)
@@ -3799,9 +3691,10 @@ impl CrinGraphApp {
         // two of them remove two rigs' errors. A rig with no calibration is
         // not corrected at all, which is what leaving one out means.
         let corrections: Vec<&[FRPoint]> = self
+            .session
             .active_deltas
             .iter()
-            .map(|&index| self.delta_targets[index].points.as_slice())
+            .map(|&index| self.session.delta_targets[index].points.as_slice())
             .collect();
         let correction_at = |hz: f32| -> f32 {
             corrections
@@ -3810,7 +3703,8 @@ impl CrinGraphApp {
                 .sum()
         };
         let sample = |curve: &[FRPoint]| -> Vec<FRPoint> {
-            self.upload_grid
+            self.session
+                .upload_grid
                 .iter()
                 .map(|&hz| FRPoint {
                     hz,
@@ -3824,7 +3718,7 @@ impl CrinGraphApp {
         let target_points = sample(&target.points);
 
         let mut deviations = Vec::new();
-        for curve in &self.display_curves {
+        for curve in &self.session.display_curves {
             if curve.target || curve.source != CurveSource::Measurement {
                 continue;
             }
@@ -3872,8 +3766,8 @@ impl CrinGraphApp {
 
         // The corrections themselves, dashed: the bar shows what they are doing
         // to the measurements, and this is the curve doing it.
-        for &index in &self.active_deltas {
-            let correction = &self.delta_targets[index];
+        for &index in &self.session.active_deltas {
+            let correction = &self.session.delta_targets[index];
             deviations.push(DeviationCurve {
                 label: correction.name.clone(),
                 points: correction.points.clone(),
@@ -3887,13 +3781,14 @@ impl CrinGraphApp {
     /// What the delta bar's deviations are measured against.
     fn delta_bar_caption(&self) -> String {
         let mut caption = String::new();
-        if let Some(index) = self.active_targets.iter().copied().next() {
-            caption = format!("deviation from {}", self.groups[index].name);
+        if let Some(index) = self.session.active_targets.iter().copied().next() {
+            caption = format!("deviation from {}", self.session.groups[index].name);
         }
         let selected: Vec<&str> = self
+            .session
             .active_deltas
             .iter()
-            .map(|&index| self.delta_targets[index].name.as_str())
+            .map(|&index| self.session.delta_targets[index].name.as_str())
             .collect();
         if !selected.is_empty() {
             caption.push_str(" \u{b7} rig-corrected by ");
@@ -3914,10 +3809,10 @@ impl CrinGraphApp {
     /// With nothing selected it says so instead of opening an empty plot, so
     /// the window is never an explanation-free void.
     fn delta_window(&mut self, ctx: &Context) {
-        if !self.show_delta {
+        if !self.session.show_delta {
             return;
         }
-        let mut open = self.show_delta;
+        let mut open = self.session.show_delta;
         let caption = self.delta_bar_caption();
         let deviations = self.delta_bar_deviations();
         let bar_curves: Vec<PlotCurve<'_>> = deviations
@@ -3943,7 +3838,7 @@ impl CrinGraphApp {
             .show(ctx, |ui| {
                 if productive {
                     DeltaBar {
-                        zoom: self.zoom,
+                        zoom: self.session.zoom,
                         caption,
                     }
                     .show(ui, &bar_curves);
@@ -3958,7 +3853,7 @@ impl CrinGraphApp {
                 };
                 ui.label(RichText::new(message).size(squiglab::theme::TypeStep::Body.size()));
             });
-        self.show_delta = open;
+        self.session.show_delta = open;
     }
 
     /// The strip of targets between the graph and the manager.
@@ -3978,7 +3873,7 @@ impl CrinGraphApp {
     /// and the manager: the manager's rows are the selection you are working
     /// with, and the status line is about the app rather than about them.
     fn status_panel(&mut self, ui: &mut Ui) {
-        let palette = squiglab::theme::Palette::resolve(self.dark_mode);
+        let palette = squiglab::theme::Palette::resolve(self.session.dark_mode);
         egui::Panel::bottom("status")
             .resizable(false)
             .default_size(24.0)
@@ -3987,19 +3882,22 @@ impl CrinGraphApp {
                     ui.label(
                         egui::RichText::new(format!(
                             "{} active · {} total · {} Hz–{} Hz",
-                            self.display_curves.len(),
-                            self.groups.len(),
-                            self.zoom.x_range().0 as u32,
-                            self.zoom.x_range().1 as u32
+                            self.session.display_curves.len(),
+                            self.session.groups.len(),
+                            self.session.zoom.x_range().0 as u32,
+                            self.session.zoom.x_range().1 as u32
                         ))
                         .size(squiglab::theme::TypeStep::Micro.size())
                         .color(palette.text_secondary),
                     );
-                    if let Some(index) = self.baseline {
+                    if let Some(index) = self.session.baseline {
                         ui.label(
-                            egui::RichText::new(format!("Baseline: {}", self.groups[index].name))
-                                .size(squiglab::theme::TypeStep::Micro.size())
-                                .color(palette.text_secondary),
+                            egui::RichText::new(format!(
+                                "Baseline: {}",
+                                self.session.groups[index].name
+                            ))
+                            .size(squiglab::theme::TypeStep::Micro.size())
+                            .color(palette.text_secondary),
                         );
                     }
                     if self.processing_error.is_some()
@@ -4056,13 +3954,13 @@ impl CrinGraphApp {
     /// can say it corrects nothing, and a chip nobody distrusted is worse than
     /// no chip at all.
     fn delta_chips(&self) -> Vec<TargetChip> {
-        self.delta_targets
+        self.session.delta_targets
             .iter()
             .enumerate()
             .map(|(index, target)| TargetChip {
                 index,
                 label: format!("\u{394} {}", target.name),
-                selected: self.active_deltas.contains(&index),
+                selected: self.session.active_deltas.contains(&index),
                 tooltip: if target.is_placeholder() {
                     format!(
                         "{}\n\nBuilt from placeholder calibrations, not measurements. It corrects nothing.",
@@ -4077,14 +3975,15 @@ impl CrinGraphApp {
 
     /// The reference targets, as chips.
     fn target_chips(&self) -> Vec<TargetChip> {
-        self.groups
+        self.session
+            .groups
             .iter()
             .enumerate()
             .filter(|(_, group)| group.target)
             .map(|(index, group)| TargetChip {
                 index,
                 label: group.name.clone(),
-                selected: self.active_targets.contains(&index),
+                selected: self.session.active_targets.contains(&index),
                 tooltip: group.brand.clone(),
             })
             .collect()
@@ -4096,7 +3995,7 @@ impl CrinGraphApp {
     fn target_strip_content(&mut self, ui: &mut Ui) {
         use squiglab::ui as cgui;
         let palette = squiglab::theme::Palette::resolve(ui.visuals().dark_mode);
-        let delta_open = self.show_delta;
+        let delta_open = self.session.show_delta;
         ui.spacing_mut().item_spacing.x = cgui::Spacing::COMPACT;
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = cgui::Spacing::COMPACT;
@@ -4117,7 +4016,7 @@ impl CrinGraphApp {
             )
             .clicked()
             {
-                self.show_delta = !self.show_delta;
+                self.session.show_delta = !self.session.show_delta;
             }
             ui.label(
                 egui::RichText::new("\u{25b2}")
@@ -4129,7 +4028,7 @@ impl CrinGraphApp {
             // need the rest of the strip: a long list of corrections
             // that took everything would leave the targets — the thing
             // the readings are measured against — with nowhere to be.
-            if !self.delta_targets.is_empty() {
+            if !self.session.delta_targets.is_empty() {
                 let cap = ui.available_width() * 0.45;
                 egui::ScrollArea::horizontal()
                     .id_salt("delta_chips")
@@ -4144,7 +4043,7 @@ impl CrinGraphApp {
                         }
                     });
             }
-            if let Some(error) = &self.delta_error {
+            if let Some(error) = &self.session.delta_error {
                 ui.colored_label(Color32::LIGHT_RED, error);
             }
 
@@ -4185,11 +4084,13 @@ impl CrinGraphApp {
     /// graph leaves room; leaving that room empty would put a band between
     /// the graph and the manager.
     fn lower_strip_height(&self, ui: &Ui, desktop: bool) -> f32 {
-        let curve_count = self.active.len() + self.active_targets.len() + self.active_deltas.len();
+        let curve_count = self.session.active.len()
+            + self.session.active_targets.len()
+            + self.session.active_deltas.len();
         let (content_height, min_height) = manager_heights(ui.available_width(), curve_count);
         // The library sits beside the graph in the wide layout and below it in
         // the narrow one, so it only takes width in the first.
-        let library_width = if desktop && self.show_measurements {
+        let library_width = if desktop && self.session.show_measurements {
             LIBRARY_COLUMN_WIDTH
         } else {
             0.0
@@ -4212,7 +4113,9 @@ impl CrinGraphApp {
     }
 
     fn lower_strip(&mut self, ui: &mut Ui, desktop: bool) {
-        let curve_count = self.active.len() + self.active_targets.len() + self.active_deltas.len();
+        let curve_count = self.session.active.len()
+            + self.session.active_targets.len()
+            + self.session.active_deltas.len();
         let (_, min_height) = manager_heights(ui.available_width(), curve_count);
         let default_height = self.lower_strip_height(ui, desktop);
         let maximum = default_height.max(MANAGER_MAX_HEIGHT);
@@ -4230,16 +4133,16 @@ impl CrinGraphApp {
     fn central_panel(&mut self, ui: &mut Ui) {
         egui::CentralPanel::default().show(ui, |ui| {
             if let Some(error) = &self.processing_error {
-                let palette = squiglab::theme::Palette::resolve(self.dark_mode);
+                let palette = squiglab::theme::Palette::resolve(self.session.dark_mode);
                 ui.colored_label(palette.error, error);
             }
-            if self.display_curves.is_empty() {
+            if self.session.display_curves.is_empty() {
                 ui.allocate_ui_with_layout(
                     ui.available_rect_before_wrap().size()
                         - egui::vec2(0.0, ui.available_height() * 0.35),
                     egui::Layout::top_down_justified(egui::Align::Center),
                     |ui| {
-                        ui.heading(if self.curves.is_empty() {
+                        ui.heading(if self.session.curves.is_empty() {
                             "No measurements found"
                         } else {
                             "Select measurements to compare"
@@ -4250,6 +4153,7 @@ impl CrinGraphApp {
             }
             let watermark = self.watermark();
             let plot_curves: Vec<PlotCurve<'_>> = self
+                .session
                 .display_curves
                 .iter()
                 .map(|curve| PlotCurve {
@@ -4262,25 +4166,27 @@ impl CrinGraphApp {
                 })
                 .collect();
             let interaction = GraphCanvas {
-                zoom: self.zoom,
-                smooth_level: self.smooth_level,
-                show_labels: self.show_labels,
-                inspect_mode: self.inspect_mode,
-                label_positions: &self.label_positions,
-                label_layout: self.label_layout,
-                tutorial_band: self.tutorial_segment.map(|index| {
+                zoom: self.session.zoom,
+                smooth_level: self.session.smooth_level,
+                show_labels: self.session.show_labels,
+                inspect_mode: self.session.inspect_mode,
+                label_positions: &self.session.label_positions,
+                label_layout: self.session.label_layout,
+                tutorial_band: self.session.tutorial_segment.map(|index| {
                     let segment = &TUTORIAL_SEGMENTS[index];
                     (segment.title, segment.range_hz)
                 }),
                 bands: &FREQUENCY_BANDS,
                 rig_description: self.rig_description.as_deref(),
                 watermark,
-                y_scale: self.y_scale,
+                y_scale: self.session.y_scale,
             }
             .show(ui, &plot_curves);
-            self.label_positions.extend(interaction.label_positions);
+            self.session
+                .label_positions
+                .extend(interaction.label_positions);
             if let Some(y_scale) = interaction.y_scale {
-                self.y_scale = y_scale;
+                self.session.y_scale = y_scale;
             }
         });
     }
@@ -4301,6 +4207,7 @@ impl CrinGraphApp {
 
     fn export_svg(&mut self) {
         let plot_curves: Vec<PlotCurve<'_>> = self
+            .session
             .display_curves
             .iter()
             .map(|curve| PlotCurve {
@@ -4314,11 +4221,11 @@ impl CrinGraphApp {
             .collect();
         let svg = render_svg(
             &plot_curves,
-            self.zoom,
-            self.smooth_level,
-            &self.label_positions,
-            self.dark_mode,
-            self.y_scale,
+            self.session.zoom,
+            self.session.smooth_level,
+            &self.session.label_positions,
+            self.session.dark_mode,
+            self.session.y_scale,
             Provenance {
                 watermark: self.watermark(),
                 rig_description: self.rig_description.as_deref(),
@@ -4342,7 +4249,7 @@ impl eframe::App for CrinGraphApp {
         let ctx = ui.ctx().clone();
         #[cfg(debug_assertions)]
         ctx.set_debug_on_hover(self.debug_hooks);
-        squiglab::theme::apply(&ctx, self.dark_mode);
+        squiglab::theme::apply(&ctx, self.session.dark_mode);
         if self.screenshot_pending {
             ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(egui::UserData::default()));
             self.screenshot_pending = false;
@@ -5122,7 +5029,7 @@ mod tests {
     #[test]
     fn default_smoothing_matches_the_original_graph_setting() {
         assert_eq!(Preferences::default().smooth_level, 5);
-        assert_eq!(CrinGraphApp::default().smooth_level, 5);
+        assert_eq!(CrinGraphApp::default().session.smooth_level, 5);
     }
 
     #[test]
@@ -5303,13 +5210,11 @@ smoothing_octaves = 3
             }],
             target: false,
         };
-        let mut app = CrinGraphApp {
-            curves,
-            groups: vec![group],
-            active: [0].into_iter().collect(),
-            ..CrinGraphApp::default()
-        };
-        app.eq_filters.insert(
+        let mut app = CrinGraphApp::default();
+        app.session.curves = curves;
+        app.session.groups = vec![group];
+        app.session.active = [0].into_iter().collect();
+        app.session.eq_filters.insert(
             0,
             vec![super::EqRow {
                 filter: squiglab_core::equalizer::Filter::new(
@@ -5325,6 +5230,7 @@ smoothing_octaves = 3
         assert!(app.processing_error.is_none());
         // One EQ child per channel beside the parent's channel.
         let eq_children: Vec<_> = app
+            .session
             .display_curves
             .iter()
             .filter(|curve| curve.source == CurveSource::Equalizer)
@@ -5341,6 +5247,7 @@ smoothing_octaves = 3
         // the filter's 500 Hz centre and vanishes away from it.
         for child in &eq_children {
             let parent = app
+                .session
                 .display_curves
                 .iter()
                 .find(|curve| {
@@ -5380,6 +5287,7 @@ smoothing_octaves = 3
         }
         // The two curves do not share a color.
         let parent = app
+            .session
             .display_curves
             .iter()
             .find(|curve| curve.source == CurveSource::Measurement)
@@ -5403,12 +5311,10 @@ smoothing_octaves = 3
             }],
             target: false,
         };
-        let mut app = CrinGraphApp {
-            curves,
-            groups: vec![group],
-            active: [0].into_iter().collect(),
-            ..CrinGraphApp::default()
-        };
+        let mut app = CrinGraphApp::default();
+        app.session.curves = curves;
+        app.session.groups = vec![group];
+        app.session.active = [0].into_iter().collect();
         let row = |enabled: bool, gain: f64| super::EqRow {
             filter: squiglab_core::equalizer::Filter::new(
                 squiglab_core::equalizer::FilterType::Peaking,
@@ -5418,16 +5324,18 @@ smoothing_octaves = 3
             ),
             enabled,
         };
-        app.eq_filters.insert(0, vec![row(false, -3.5)]);
+        app.session.eq_filters.insert(0, vec![row(false, -3.5)]);
         app.rebuild_display_curves();
         assert!(app
+            .session
             .display_curves
             .iter()
             .all(|curve| curve.source == CurveSource::Measurement));
         // A zero gain is inert: it would not be drawn, so no child curve.
-        app.eq_filters.insert(0, vec![row(true, 0.0)]);
+        app.session.eq_filters.insert(0, vec![row(true, 0.0)]);
         app.rebuild_display_curves();
         assert!(app
+            .session
             .display_curves
             .iter()
             .all(|curve| curve.source == CurveSource::Measurement));
@@ -5438,7 +5346,9 @@ smoothing_octaves = 3
         with_isolated_config(|| {
             let mut app = CrinGraphApp::default();
             app.load_measurements().unwrap();
-            let key = super::group_key(&app.groups[app.active.iter().next().copied().unwrap()]);
+            let key = super::group_key(
+                &app.session.groups[app.session.active.iter().next().copied().unwrap()],
+            );
             let rows = vec![super::EqRow {
                 filter: squiglab_core::equalizer::Filter::new(
                     squiglab_core::equalizer::FilterType::LowShelf,
@@ -5448,21 +5358,22 @@ smoothing_octaves = 3
                 ),
                 enabled: true,
             }];
-            app.eq_filters
-                .insert(app.active.iter().next().copied().unwrap(), rows.clone());
+            app.session.eq_filters.insert(
+                app.session.active.iter().next().copied().unwrap(),
+                rows.clone(),
+            );
             let preferences = app.preferences();
             assert_eq!(preferences.eq_filters.get(&key), Some(&rows));
 
-            let mut restored = CrinGraphApp {
-                curves: app.curves.clone(),
-                groups: app.groups.clone(),
-                ..CrinGraphApp::default()
-            };
+            let mut restored = CrinGraphApp::default();
+            restored.session.curves = app.session.curves.clone();
+            restored.session.groups = app.session.groups.clone();
             assert!(restored.apply_preferences(preferences));
-            assert_eq!(restored.eq_filters.values().next(), Some(&rows));
+            assert_eq!(restored.session.eq_filters.values().next(), Some(&rows));
             restored.dirty = true;
             restored.rebuild_display_curves();
             assert!(restored
+                .session
                 .display_curves
                 .iter()
                 .any(|curve| curve.source == CurveSource::Equalizer));
@@ -5471,20 +5382,18 @@ smoothing_octaves = 3
 
     #[test]
     fn an_invalid_equalizer_is_refused_rather_than_drawn() {
-        let mut app = CrinGraphApp {
-            groups: vec![super::MeasurementGroup {
-                brand: "Brand".into(),
-                brand_suffix: None,
-                name: "Model".into(),
-                variants: vec![super::MeasurementVariant {
-                    name: "Default".into(),
-                    curve_indices: Vec::new(),
-                }],
-                target: false,
+        let mut app = CrinGraphApp::default();
+        app.session.groups = vec![super::MeasurementGroup {
+            brand: "Brand".into(),
+            brand_suffix: None,
+            name: "Model".into(),
+            variants: vec![super::MeasurementVariant {
+                name: "Default".into(),
+                curve_indices: Vec::new(),
             }],
-            ..CrinGraphApp::default()
-        };
-        let key = super::group_key(&app.groups[0]);
+            target: false,
+        }];
+        let key = super::group_key(&app.session.groups[0]);
         let row = |freq: f64| super::EqRow {
             filter: squiglab_core::equalizer::Filter::new(
                 squiglab_core::equalizer::FilterType::Peaking,
@@ -5513,11 +5422,12 @@ smoothing_octaves = 3
             ..Preferences::default()
         };
         assert!(app.apply_preferences(preferences));
-        assert_eq!(app.eq_filters.get(&0).map(Vec::len), Some(1));
+        assert_eq!(app.session.eq_filters.get(&0).map(Vec::len), Some(1));
     }
 
     fn group_named(app: &CrinGraphApp, name: &str) -> usize {
-        app.groups
+        app.session
+            .groups
             .iter()
             .position(|group| group.name == name)
             .unwrap_or_else(|| panic!("no group named {name}"))
@@ -5532,39 +5442,40 @@ smoothing_octaves = 3
             // and falls back to the reference's second-measurement rule for
             // the target, which does not exist yet.
             let phone = group_named(&app, "HTH67");
-            app.active = [phone].into_iter().collect();
-            app.active_targets.clear();
+            app.session.active = [phone].into_iter().collect();
+            app.session.active_targets.clear();
             assert_eq!(app.eq_phone(), Some(phone));
             assert_eq!(app.eq_target(), None);
 
             // A second active measurement becomes the fallback target, in the
             // same display order the groups are listed in.
             let other = app
+                .session
                 .groups
                 .iter()
                 .enumerate()
                 .map(|(index, _)| index)
-                .filter(|&index| index != phone && !app.groups[index].target)
+                .filter(|&index| index != phone && !app.session.groups[index].target)
                 .nth(1)
                 .expect("more than one measurement to fall back to");
-            app.active.insert(other);
-            let mut active_in_order: Vec<_> = app.active.iter().copied().collect();
+            app.session.active.insert(other);
+            let mut active_in_order: Vec<_> = app.session.active.iter().copied().collect();
             active_in_order.sort_unstable();
             assert_eq!(app.eq_target(), active_in_order.get(1).copied());
 
             // An active target wins over the measurement fallback, and the
             // first active target wins over an unset choice.
             let target = group_named(&app, "Harman");
-            app.active_targets = [target].into_iter().collect();
+            app.session.active_targets = [target].into_iter().collect();
             assert_eq!(app.eq_target(), Some(target));
-            app.eq_target = None;
+            app.session.eq_target = None;
             assert_eq!(app.eq_target(), Some(target));
 
             // An explicit choice is honoured while the curve stays active, and
             // forgotten when the curve is switched off.
-            app.eq_phone = Some(other);
+            app.session.eq_phone = Some(other);
             assert_eq!(app.eq_phone(), Some(other));
-            app.active = [phone].into_iter().collect();
+            app.session.active = [phone].into_iter().collect();
             assert_eq!(app.eq_phone(), Some(phone));
         });
     }
@@ -5576,8 +5487,8 @@ smoothing_octaves = 3
             app.load_measurements().unwrap();
             let phone = group_named(&app, "HTH67");
             let target = group_named(&app, "Harman");
-            app.active = [phone].into_iter().collect();
-            app.active_targets = [target].into_iter().collect();
+            app.session.active = [phone].into_iter().collect();
+            app.session.active_targets = [target].into_iter().collect();
             let before = app.normalized_average_points(phone).unwrap();
             let target_points = app.normalized_average_points(target).unwrap();
             let distance = |curve: &[FRPoint]| {
@@ -5591,14 +5502,19 @@ smoothing_octaves = 3
 
             app.run_auto_eq();
             assert!(app.eq_export_error.is_none(), "{:?}", app.eq_export_error);
-            let rows = app.eq_filters.get(&phone).expect("Auto EQ fitted filters");
+            let rows = app
+                .session
+                .eq_filters
+                .get(&phone)
+                .expect("Auto EQ fitted filters");
             assert!(!rows.is_empty());
             assert!(rows.iter().all(|row| row.enabled));
-            assert!(rows.len() <= super::DEFAULT_EQ_MAX_FILTERS);
+            assert!(rows.len() <= squiglab_core::session::DEFAULT_EQ_MAX_FILTERS);
 
             // The fitted filters are what the graph and the exports use.
             app.rebuild_display_curves();
             let equalized: Vec<FRPoint> = app
+                .session
                 .display_curves
                 .iter()
                 .find(|curve| curve.source == CurveSource::Equalizer && curve.group_index == phone)
@@ -5628,10 +5544,10 @@ smoothing_octaves = 3
             let mut app = CrinGraphApp::default();
             app.load_measurements().unwrap();
             let phone = group_named(&app, "HTH67");
-            app.active = [phone].into_iter().collect();
+            app.session.active = [phone].into_iter().collect();
             // Give the curve a band the panel would have installed so the
             // export names it and writes its filter lines.
-            app.eq_filters.insert(
+            app.session.eq_filters.insert(
                 phone,
                 vec![super::EqRow {
                     filter: super::equalizer::Filter::new(
@@ -5680,7 +5596,7 @@ smoothing_octaves = 3
             let mut app = CrinGraphApp::default();
             app.load_measurements().unwrap();
             let phone = group_named(&app, "HTH67");
-            app.active = [phone].into_iter().collect();
+            app.session.active = [phone].into_iter().collect();
 
             let path =
                 std::env::temp_dir().join(format!("squiglab-eq-import-{}.txt", std::process::id()));
@@ -5695,7 +5611,11 @@ smoothing_octaves = 3
             app.import_parametric();
             assert!(app.eq_import_error.is_none(), "{:?}", app.eq_import_error);
 
-            let rows = app.eq_filters.get(&phone).expect("the import landed");
+            let rows = app
+                .session
+                .eq_filters
+                .get(&phone)
+                .expect("the import landed");
             assert_eq!(rows.len(), 1);
             assert_eq!(
                 rows[0].filter,
@@ -5713,7 +5633,7 @@ smoothing_octaves = 3
             std::fs::write(&path, "Filter 1: ON LPQ Fc 500 Hz Gain -3 dB Q 1\r\n").unwrap();
             app.import_parametric();
             assert!(app.eq_import_error.is_some());
-            assert_eq!(app.eq_filters.get(&phone).map(Vec::len), Some(1));
+            assert_eq!(app.session.eq_filters.get(&phone).map(Vec::len), Some(1));
             std::fs::remove_file(path).unwrap();
         });
     }
@@ -5731,15 +5651,13 @@ smoothing_octaves = 3
             }],
             target: false,
         };
-        let mut app = CrinGraphApp {
-            curves,
-            groups: vec![group],
-            active: [0].into_iter().collect(),
-            ..CrinGraphApp::default()
-        };
+        let mut app = CrinGraphApp::default();
+        app.session.curves = curves;
+        app.session.groups = vec![group];
+        app.session.active = [0].into_iter().collect();
         // Nothing installed yet: the panel's default bands are what a first
         // visit would see.
-        assert!(app.eq_filters.is_empty());
+        assert!(app.session.eq_filters.is_empty());
         let defaults: Vec<super::EqRow> = (0..5)
             .map(|_| super::EqRow {
                 filter: super::equalizer::Filter::new(
@@ -5752,16 +5670,17 @@ smoothing_octaves = 3
             })
             .collect();
         assert_eq!(defaults.len(), 5, "the reference shows five default bands");
-        app.eq_filters.insert(0, defaults);
+        app.session.eq_filters.insert(0, defaults);
         assert_eq!(app.enabled_filters(0).len(), 5);
 
         // Clearing a curve is remembered: an empty list is not "never edited".
-        app.eq_filters.insert(0, Vec::new());
+        app.session.eq_filters.insert(0, Vec::new());
         assert!(app.enabled_filters(0).is_empty());
-        assert!(app.eq_filters.contains_key(&0));
+        assert!(app.session.eq_filters.contains_key(&0));
         // And the curve still draws its normalized response with no EQ child.
         app.rebuild_display_curves();
         assert!(app
+            .session
             .display_curves
             .iter()
             .all(|curve| curve.source == CurveSource::Measurement));
@@ -5772,16 +5691,16 @@ smoothing_octaves = 3
         let app = CrinGraphApp::default();
         // Both Compare slots start identical, on a mid tone at a low volume.
         assert_eq!(
-            app.sound_settings[0],
+            app.session.sound_settings[0],
             squiglab_core::audio::Settings {
                 source: squiglab_core::audio::Source::Tone { freq: 1000.0 },
                 volume: 0.2
             }
         );
-        assert_eq!(app.sound_settings[0], app.sound_settings[1]);
-        assert_eq!(app.sound_slot, 0);
+        assert_eq!(app.session.sound_settings[0], app.session.sound_settings[1]);
+        assert_eq!(app.session.sound_slot, 0);
         assert!(
-            app.player.is_none(),
+            app.session.player.is_none(),
             "nothing is playing on a fresh session"
         );
     }
@@ -5793,14 +5712,14 @@ smoothing_octaves = 3
         // left in a coherent state: playing or a message explaining why not.
         let mut app = CrinGraphApp::default();
         app.start_sound();
-        if app.player.is_none() {
+        if app.session.player.is_none() {
             assert!(
                 app.sound_message.is_some(),
                 "a failed start must explain itself"
             );
         } else {
             app.stop_sound();
-            assert!(app.player.is_none());
+            assert!(app.session.player.is_none());
             assert_eq!(app.sound_message.as_deref(), Some("Stopped."));
         }
     }
@@ -5830,7 +5749,7 @@ smoothing_octaves = 3
         with_isolated_config(|| {
             let mut app = CrinGraphApp::default();
             app.load_measurements().unwrap();
-            let groups_before = app.groups.len();
+            let groups_before = app.session.groups.len();
             let path = write_measurement("My Headphones", 300);
             app.upload_path = path.to_string_lossy().into_owned();
             app.import_upload();
@@ -5842,9 +5761,10 @@ smoothing_octaves = 3
                 "{:?}",
                 app.upload_message
             );
-            assert_eq!(app.groups.len(), groups_before + 1);
+            assert_eq!(app.session.groups.len(), groups_before + 1);
 
             let group = app
+                .session
                 .groups
                 .iter()
                 .find(|group| group.name == "My Headphones")
@@ -5852,7 +5772,8 @@ smoothing_octaves = 3
             assert_eq!(group.brand, super::UPLOADED_BRAND);
             assert!(!group.target);
             assert!(app.is_uploaded(
-                app.groups
+                app.session
+                    .groups
                     .iter()
                     .position(|g| g.name == "My Headphones")
                     .unwrap()
@@ -5871,17 +5792,19 @@ smoothing_octaves = 3
             app.import_upload();
             assert!(app.upload_error.is_none());
             let index = app
+                .session
                 .groups
                 .iter()
                 .position(|group| group.name == "Shared Away")
                 .unwrap();
-            app.active.insert(index);
+            app.session.active.insert(index);
             app.rebuild_display_curves();
             assert!(app.processing_error.is_none(), "{:?}", app.processing_error);
             // The upload is on the graph, but a link made now does not carry
             // it: the recipient has no such measurement.
             assert!(
-                app.display_curves
+                app.session
+                    .display_curves
                     .iter()
                     .any(|curve| curve.group_index == index),
                 "the upload did not reach the graph"
@@ -5891,7 +5814,7 @@ smoothing_octaves = 3
                 !preferences
                     .active
                     .iter()
-                    .any(|saved| saved.key == super::group_key(&app.groups[index])),
+                    .any(|saved| saved.key == super::group_key(&app.session.groups[index])),
                 "an uploaded curve leaked into the shared state"
             );
             let uri = encode_share_uri(&preferences).unwrap();
@@ -5910,12 +5833,14 @@ smoothing_octaves = 3
             app.upload_path = path.to_string_lossy().into_owned();
             app.import_upload();
             let groups_after_first = app
+                .session
                 .groups
                 .iter()
                 .filter(|group| group.name == "Twice")
                 .count();
             app.import_upload();
             let groups_after_second = app
+                .session
                 .groups
                 .iter()
                 .filter(|group| group.name == "Twice")
@@ -5931,12 +5856,13 @@ smoothing_octaves = 3
             // And the second file replaced the first rather than being stacked
             // beside it: measuring the same model again shows one curve.
             let index = app
+                .session
                 .groups
                 .iter()
                 .position(|group| group.name == "Twice")
                 .unwrap();
             assert_eq!(
-                app.groups[index].variants[0].curve_indices.len(),
+                app.session.groups[index].variants[0].curve_indices.len(),
                 1,
                 "the second upload was stacked on the first"
             );
@@ -5954,14 +5880,15 @@ smoothing_octaves = 3
             app.import_upload();
             assert!(app.upload_error.is_none(), "{:?}", app.upload_error);
             let index = app
+                .session
                 .groups
                 .iter()
                 .position(|group| group.name == "Right Only R")
                 .unwrap();
-            let indices = &app.groups[index].variants[0].curve_indices;
+            let indices = &app.session.groups[index].variants[0].curve_indices;
             assert_eq!(indices.len(), 2, "a right-only upload needs a left channel");
-            let right = &app.curves[indices[0]];
-            let left = &app.curves[indices[1]];
+            let right = &app.session.curves[indices[0]];
+            let left = &app.session.curves[indices[1]];
             assert_eq!(right.variant, "R");
             assert_eq!(left.variant, "L");
             // The null channel is on the same frequencies as the right one, so
@@ -5988,18 +5915,23 @@ smoothing_octaves = 3
             // The curve is named with the " Target" suffix the database uses, so
             // the loader's own name splitter treats it as a target.
             assert!(app
+                .session
                 .curves
                 .iter()
                 .any(|curve| curve.model == "Brand New Target Target"));
             let index = app
+                .session
                 .groups
                 .iter()
                 .position(|group| group.name == "Brand New Target")
                 .expect("the target is listed");
-            assert!(app.groups[index].target, "an uploaded target is a target");
+            assert!(
+                app.session.groups[index].target,
+                "an uploaded target is a target"
+            );
             assert!(app.is_uploaded(index));
             assert!(
-                app.active_targets.is_empty(),
+                app.session.active_targets.is_empty(),
                 "an upload is not selected on the user's behalf"
             );
 
@@ -6025,8 +5957,8 @@ smoothing_octaves = 3
         with_isolated_config(|| {
             let mut app = CrinGraphApp::default();
             app.load_measurements().unwrap();
-            let groups_before = app.groups.len();
-            let curves_before = app.curves.len();
+            let groups_before = app.session.groups.len();
+            let curves_before = app.session.curves.len();
             let path = write_measurement("Fragment", 50);
             app.upload_path = path.to_string_lossy().into_owned();
             app.import_upload();
@@ -6037,8 +5969,8 @@ smoothing_octaves = 3
                 "{:?}",
                 app.upload_error
             );
-            assert_eq!(app.groups.len(), groups_before);
-            assert_eq!(app.curves.len(), curves_before);
+            assert_eq!(app.session.groups.len(), groups_before);
+            assert_eq!(app.session.curves.len(), curves_before);
             std::fs::remove_file(path).unwrap();
         });
     }
@@ -6117,17 +6049,19 @@ smoothing_octaves = 3
         with_isolated_config(|| {
             let mut app = CrinGraphApp::default();
             app.load_measurements().unwrap();
-            assert!(!app.curves.is_empty());
+            assert!(!app.session.curves.is_empty());
             assert!(app
+                .session
                 .active
                 .iter()
-                .any(|&index| app.groups[index].name == "HTH67"));
+                .any(|&index| app.session.groups[index].name == "HTH67"));
             assert!(app
+                .session
                 .groups
                 .iter()
                 .any(|group| group.name == "Harman" && group.target));
             app.rebuild_display_curves();
-            assert!(app.display_curves.len() >= app.active.len());
+            assert!(app.session.display_curves.len() >= app.session.active.len());
             assert!(app.processing_error.is_none());
         });
     }
@@ -6139,7 +6073,7 @@ smoothing_octaves = 3
             // scroll into view.
             let mut app = CrinGraphApp::default();
             app.load_measurements().unwrap();
-            assert!(!app.active.is_empty());
+            assert!(!app.session.active.is_empty());
             assert!(app.library_reveal_pending);
 
             // A restored session that selected nothing has nothing to reveal.
@@ -6154,7 +6088,7 @@ smoothing_octaves = 3
             .unwrap();
             let mut restored = CrinGraphApp::default();
             restored.load_measurements().unwrap();
-            assert!(restored.active.is_empty());
+            assert!(restored.session.active.is_empty());
             assert!(!restored.library_reveal_pending);
         });
     }
@@ -6198,19 +6132,17 @@ smoothing_octaves = 3
             }],
             target: false,
         };
-        let mut app = CrinGraphApp {
-            curves,
-            groups: vec![group],
-            active: [0].into_iter().collect(),
-            ..CrinGraphApp::default()
-        };
-        app.channel_modes.insert(0, ChannelMode::Both);
+        let mut app = CrinGraphApp::default();
+        app.session.curves = curves;
+        app.session.groups = vec![group];
+        app.session.active = [0].into_iter().collect();
+        app.session.channel_modes.insert(0, ChannelMode::Both);
         app.rebuild_display_curves();
-        let both_left = app.display_curves[0].points[0].db;
-        app.channel_modes.insert(0, ChannelMode::Left);
+        let both_left = app.session.display_curves[0].points[0].db;
+        app.session.channel_modes.insert(0, ChannelMode::Left);
         app.dirty = true;
         app.rebuild_display_curves();
-        assert!((app.display_curves[0].points[0].db - both_left).abs() < 0.001);
+        assert!((app.session.display_curves[0].points[0].db - both_left).abs() < 0.001);
     }
 
     #[test]
@@ -6336,14 +6268,13 @@ smoothing_octaves = 3
                 target: false,
             },
         ];
-        CrinGraphApp {
-            upload_grid: vec![100.0, 1000.0],
-            groups,
-            active_targets: [0].into_iter().collect(),
-            active: [1].into_iter().collect(),
-            display_curves,
-            ..Default::default()
-        }
+        let mut app = CrinGraphApp::default();
+        app.session.upload_grid = vec![100.0, 1000.0];
+        app.session.groups = groups;
+        app.session.active_targets = [0].into_iter().collect();
+        app.session.active = [1].into_iter().collect();
+        app.session.display_curves = display_curves;
+        app
     }
 
     fn delta_target(name: &str, db: f32) -> DeltaTarget {
@@ -6375,7 +6306,7 @@ smoothing_octaves = 3
     fn the_delta_bar_draws_nothing_without_a_target() {
         let mut app = bar_app();
         // A deviation from nothing is not a deviation.
-        app.active_targets.clear();
+        app.session.active_targets.clear();
         assert!(app.delta_bar_deviations().is_empty());
     }
 
@@ -6385,8 +6316,8 @@ smoothing_octaves = 3
         // A rig that reads 2 dB high makes a 65 dB headphone look like 65 dB
         // when the true figure, on the target's rig, would be 63 dB: 3 dB
         // above target rather than 5.
-        app.delta_targets = vec![delta_target("\u{394} Clone", 2.0)];
-        app.active_deltas.insert(0);
+        app.session.delta_targets = vec![delta_target("\u{394} Clone", 2.0)];
+        app.session.active_deltas.insert(0);
         let deviations = app.delta_bar_deviations();
         let corrected = deviations
             .iter()
@@ -6408,8 +6339,8 @@ smoothing_octaves = 3
     #[test]
     fn a_selected_correction_is_drawn_on_the_bar_as_well() {
         let mut app = bar_app();
-        app.delta_targets = vec![delta_target("\u{394} Clone", 2.0)];
-        app.active_deltas.insert(0);
+        app.session.delta_targets = vec![delta_target("\u{394} Clone", 2.0)];
+        app.session.active_deltas.insert(0);
         let deviations = app.delta_bar_deviations();
         let correction = deviations
             .iter()
@@ -6422,8 +6353,8 @@ smoothing_octaves = 3
     #[test]
     fn two_selected_corrections_compose() {
         let mut app = bar_app();
-        app.delta_targets = vec![delta_target("A", 2.0), delta_target("B", 1.0)];
-        app.active_deltas = [0, 1].into_iter().collect();
+        app.session.delta_targets = vec![delta_target("A", 2.0), delta_target("B", 1.0)];
+        app.session.active_deltas = [0, 1].into_iter().collect();
         let deviations = app.delta_bar_deviations();
         let corrected = deviations
             .iter()
@@ -6437,8 +6368,8 @@ smoothing_octaves = 3
     fn the_delta_bar_caption_names_the_target_and_the_corrections() {
         let mut app = bar_app();
         assert_eq!(app.delta_bar_caption(), "deviation from Harman");
-        app.delta_targets = vec![delta_target("\u{394} Clone", 2.0)];
-        app.active_deltas.insert(0);
+        app.session.delta_targets = vec![delta_target("\u{394} Clone", 2.0)];
+        app.session.active_deltas.insert(0);
         assert_eq!(
             app.delta_bar_caption(),
             "deviation from Harman \u{b7} rig-corrected by \u{394} Clone"
@@ -6473,26 +6404,24 @@ smoothing_octaves = 3
 
     #[test]
     fn pinned_measurements_stay_selected_until_unpinned() {
-        let mut app = CrinGraphApp {
-            groups: vec![super::MeasurementGroup {
-                brand: "Brand".into(),
-                brand_suffix: None,
-                name: "Model".into(),
-                variants: vec![super::MeasurementVariant {
-                    name: "Default".into(),
-                    curve_indices: Vec::new(),
-                }],
-                target: false,
+        let mut app = CrinGraphApp::default();
+        app.session.groups = vec![super::MeasurementGroup {
+            brand: "Brand".into(),
+            brand_suffix: None,
+            name: "Model".into(),
+            variants: vec![super::MeasurementVariant {
+                name: "Default".into(),
+                curve_indices: Vec::new(),
             }],
-            active: [0].into_iter().collect(),
-            pinned: [0].into_iter().collect(),
-            ..CrinGraphApp::default()
-        };
+            target: false,
+        }];
+        app.session.active = [0].into_iter().collect();
+        app.session.pinned = [0].into_iter().collect();
         app.toggle_curve(0);
-        assert!(app.active.contains(&0));
-        app.pinned.remove(&0);
+        assert!(app.session.active.contains(&0));
+        app.session.pinned.remove(&0);
         app.toggle_curve(0);
-        assert!(!app.active.contains(&0));
+        assert!(!app.session.active.contains(&0));
     }
 
     #[test]
@@ -6508,12 +6437,10 @@ smoothing_octaves = 3
             target: false,
         };
         let key = super::group_key(&group);
-        let app = CrinGraphApp {
-            groups: vec![group],
-            color_offset: 2,
-            curve_color_offsets: [(key, 3)].into_iter().collect(),
-            ..CrinGraphApp::default()
-        };
+        let mut app = CrinGraphApp::default();
+        app.session.groups = vec![group];
+        app.session.color_offset = 2;
+        app.session.curve_color_offsets = [(key, 3)].into_iter().collect();
         assert_eq!(
             app.curve_color(0),
             squiglab_core::color::get_curve_color_with_offset(0, 5)
@@ -6539,17 +6466,15 @@ smoothing_octaves = 3
                 target: index >= 9,
             })
             .collect();
-        let mut app = CrinGraphApp {
-            groups,
-            ..CrinGraphApp::default()
-        };
+        let mut app = CrinGraphApp::default();
+        app.session.groups = groups;
         for index in 0..9 {
             app.toggle_curve(index);
         }
         app.toggle_curve(9);
         app.toggle_curve(10);
-        assert_eq!(app.active.len(), 8);
-        assert_eq!(app.active_targets, [9, 10].into_iter().collect());
+        assert_eq!(app.session.active.len(), 8);
+        assert_eq!(app.session.active_targets, [9, 10].into_iter().collect());
         assert_eq!(app.preferences().active.len(), 10);
     }
 
@@ -6593,43 +6518,39 @@ smoothing_octaves = 3
             color_offset: 4,
             ..Preferences::default()
         };
-        let mut app = CrinGraphApp {
-            groups,
-            ..CrinGraphApp::default()
-        };
+        let mut app = CrinGraphApp::default();
+        app.session.groups = groups;
         assert!(app.apply_preferences(preferences));
-        assert_eq!(app.active, [0].into_iter().collect());
-        assert_eq!(app.active_targets, [1].into_iter().collect());
-        assert_eq!(app.baseline, Some(1));
-        assert_eq!(app.color_offset, 4);
+        assert_eq!(app.session.active, [0].into_iter().collect());
+        assert_eq!(app.session.active_targets, [1].into_iter().collect());
+        assert_eq!(app.session.baseline, Some(1));
+        assert_eq!(app.session.color_offset, 4);
     }
 
     #[test]
     fn independently_selected_target_is_included_in_graph_data() {
-        let mut app = CrinGraphApp {
-            curves: vec![test_curve("Diffuse Field Target", "", 60.0)],
-            groups: vec![super::MeasurementGroup {
-                brand: "Neutral targets".into(),
-                brand_suffix: None,
-                name: "Diffuse Field".into(),
-                variants: vec![super::MeasurementVariant {
-                    name: "Target".into(),
-                    curve_indices: vec![0],
-                }],
-                target: true,
+        let mut app = CrinGraphApp::default();
+        app.session.curves = vec![test_curve("Diffuse Field Target", "", 60.0)];
+        app.session.groups = vec![super::MeasurementGroup {
+            brand: "Neutral targets".into(),
+            brand_suffix: None,
+            name: "Diffuse Field".into(),
+            variants: vec![super::MeasurementVariant {
+                name: "Target".into(),
+                curve_indices: vec![0],
             }],
-            active_targets: [0].into_iter().collect(),
-            ..CrinGraphApp::default()
-        };
+            target: true,
+        }];
+        app.session.active_targets = [0].into_iter().collect();
         app.rebuild_display_curves();
-        assert_eq!(app.display_curves.len(), 1);
-        assert!(app.display_curves[0].target);
+        assert_eq!(app.session.display_curves.len(), 1);
+        assert!(app.session.display_curves[0].target);
     }
 
     /// An app with one target, one headphone, and one rig correction.
     fn chip_app() -> CrinGraphApp {
         let mut app = bar_app();
-        app.delta_targets = vec![DeltaTarget {
+        app.session.delta_targets = vec![DeltaTarget {
             name: "5128DF".to_owned(),
             clone_rig: "clone".to_owned(),
             original_rig: "original".to_owned(),
@@ -6662,7 +6583,7 @@ smoothing_octaves = 3
         assert_eq!(chips.len(), 1);
         assert!(chips[0].selected);
         // And its own state round-trips through the toggle.
-        assert_eq!(app.active_deltas.len(), 1);
+        assert_eq!(app.session.active_deltas.len(), 1);
         app.toggle_delta(0);
         assert!(!app.delta_chips()[0].selected);
     }
@@ -6670,7 +6591,7 @@ smoothing_octaves = 3
     #[test]
     fn a_placeholder_correction_warns_that_it_corrects_nothing() {
         let mut app = chip_app();
-        app.delta_targets[0].synthetic = true;
+        app.session.delta_targets[0].synthetic = true;
         let chips = app.delta_chips();
         // A chip is the only place a rig correction can carry a warning, and a
         // chip nobody distrusted is worse than no chip at all.
@@ -6698,7 +6619,7 @@ smoothing_octaves = 3
         // Two rig corrections and two targets: the chips have to come back in a
         // stable order or the strip would reshuffle under the pointer.
         let mut app = chip_app();
-        app.delta_targets.push(DeltaTarget {
+        app.session.delta_targets.push(DeltaTarget {
             name: "711 clone".to_owned(),
             clone_rig: "clone".to_owned(),
             original_rig: "original".to_owned(),
@@ -7029,23 +6950,24 @@ smoothing_octaves = 3
             curve_color_offsets: [(super::group_key(&groups[1]), 6)].into_iter().collect(),
             ..Preferences::default()
         };
-        let mut app = CrinGraphApp {
-            groups,
-            active: [0].into_iter().collect(),
-            ..CrinGraphApp::default()
-        };
+        let mut app = CrinGraphApp::default();
+        app.session.groups = groups;
+        app.session.active = [0].into_iter().collect();
         app.restore_shared_state(&encode_share_uri(&state).unwrap())
             .unwrap();
-        assert_eq!(app.active, [1].into_iter().collect());
-        assert_eq!(app.target_hz, 1000.0);
-        assert!(!app.show_measurements);
-        assert_eq!(app.tutorial_segment, Some(2));
-        assert_eq!(app.y_scale, 1.5);
+        assert_eq!(app.session.active, [1].into_iter().collect());
+        assert_eq!(app.session.target_hz, 1000.0);
+        assert!(!app.session.show_measurements);
+        assert_eq!(app.session.tutorial_segment, Some(2));
+        assert_eq!(app.session.y_scale, 1.5);
         assert_eq!(
-            app.curve_color_offsets[&super::group_key(&app.groups[1])],
+            app.session.curve_color_offsets[&super::group_key(&app.session.groups[1])],
             6
         );
-        assert_eq!(app.label_positions["Model · Default · R"], [0.25, 0.75]);
+        assert_eq!(
+            app.session.label_positions["Model · Default · R"],
+            [0.25, 0.75]
+        );
     }
 
     #[test]
