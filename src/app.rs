@@ -1,13 +1,12 @@
 use egui::{Color32, Context, RichText, Ui};
 use serde::{Deserialize, Serialize};
-use squiglab::graph::{
-    export_svg as render_svg, DeltaBar, GraphCanvas, PlotCurve, Provenance, Watermark, ZoomRegion,
-};
+use squiglab::graph::{export_svg as render_svg, DeltaBar, GraphCanvas, Provenance, Watermark};
 use squiglab_core::audio::Player;
 use squiglab_core::color::target_color;
 use squiglab_core::data::{self, CurveInfo, FRPoint, PhoneBook};
 use squiglab_core::delta::{self, DeltaTarget};
 use squiglab_core::equalizer;
+use squiglab_core::graph::{PlotCurve, ZoomRegion};
 use squiglab_core::processing::{self, NormParams, SmoothingParams};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
@@ -1282,20 +1281,20 @@ impl CrinGraphApp {
         self.dirty = true;
     }
 
-    fn curve_color(&self, index: usize) -> Color32 {
+    fn curve_color(&self, index: usize) -> squiglab_core::color::Rgb {
         let group = &self.groups[index];
         if group.target {
-            squiglab::theme::color(target_color())
+            target_color()
         } else {
             let personal_offset = self
                 .curve_color_offsets
                 .get(&group_key(group))
                 .copied()
                 .unwrap_or_default();
-            squiglab::theme::color(squiglab_core::color::get_curve_color_with_offset(
+            squiglab_core::color::get_curve_color_with_offset(
                 index,
                 self.color_offset.wrapping_add(personal_offset),
-            ))
+            )
         }
     }
 
@@ -1311,15 +1310,13 @@ impl CrinGraphApp {
     /// Color for a displayed curve. An EQ curve takes a palette slot spread
     /// away from its parent's, so the two lines are tellable apart while still
     /// coming from the graph's existing palette rather than a new hue.
-    fn display_curve_color(&self, curve: &DisplayCurve) -> Color32 {
+    fn display_curve_color(&self, curve: &DisplayCurve) -> squiglab_core::color::Rgb {
         match curve.source {
             CurveSource::Measurement => self.curve_color(curve.group_index),
-            CurveSource::Equalizer => {
-                squiglab::theme::color(squiglab_core::color::get_curve_color_with_offset(
-                    curve.group_index + EQ_CURVE_COLOR_SPREAD,
-                    self.color_offset,
-                ))
-            }
+            CurveSource::Equalizer => squiglab_core::color::get_curve_color_with_offset(
+                curve.group_index + EQ_CURVE_COLOR_SPREAD,
+                self.color_offset,
+            ),
         }
     }
 
@@ -3404,7 +3401,8 @@ impl CrinGraphApp {
         // A filled disc rather than a square: the reference tool marks a curve
         // with one, and a disc reads as a swatch of ink rather than a chip of UI.
         let (swatch, _) = ui.allocate_exact_size(egui::vec2(11.0, 11.0), egui::Sense::hover());
-        ui.painter().circle_filled(swatch.center(), 5.5, color);
+        ui.painter()
+            .circle_filled(swatch.center(), 5.5, squiglab::theme::color(color));
         if group.target {
             // A target says so, because the row is the reference the other rows
             // are read against rather than a curve in its own right, and
@@ -3420,7 +3418,7 @@ impl CrinGraphApp {
                 egui::RichText::new(&group.name)
                     .strong()
                     .size(squiglab::theme::TypeStep::Body.size())
-                    .color(color),
+                    .color(squiglab::theme::color(color)),
             );
         }
         if !group.brand.is_empty() {
@@ -3700,7 +3698,7 @@ impl CrinGraphApp {
                     self.dirty = true;
                 }
             }
-            self.curve_preview(ui, index, self.curve_color(index));
+            self.curve_preview(ui, index, squiglab::theme::color(self.curve_color(index)));
             let variant_index = self
                 .variant_choices
                 .get(&index)
@@ -3839,7 +3837,9 @@ impl CrinGraphApp {
                     db: measured.db - target.db - correction_at(measured.hz),
                 })
                 .collect();
-            let color = self.display_curve_color(curve);
+            // The deviation strip is drawn by the interface, so the core's
+            // colour is turned into the interface's here.
+            let color = squiglab::theme::color(self.display_curve_color(curve));
             if corrections.is_empty() {
                 deviations.push(DeviationCurve {
                     label: curve.label.clone(),
@@ -3926,7 +3926,7 @@ impl CrinGraphApp {
                 label: &deviation.label,
                 label_key: &deviation.label,
                 points: &deviation.points,
-                color: deviation.color,
+                color: squiglab::theme::core_color(deviation.color),
                 dashed: deviation.dashed,
                 target: true,
             })
@@ -6516,7 +6516,7 @@ smoothing_octaves = 3
         };
         assert_eq!(
             app.curve_color(0),
-            squiglab::theme::color(squiglab_core::color::get_curve_color_with_offset(0, 5))
+            squiglab_core::color::get_curve_color_with_offset(0, 5)
         );
     }
 

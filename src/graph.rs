@@ -1,45 +1,13 @@
 use crate::theme::{self, Palette, TypeStep};
 use egui::{Align2, Color32, Id, Pos2, Rect, Sense, Stroke, Ui, Vec2};
-use serde::{Deserialize, Serialize};
 use squiglab_core::data::FRPoint;
+pub use squiglab_core::graph::{LabelLayout, PlotCurve, ZoomRegion};
 use std::collections::BTreeMap;
 
 const X_TICKS: [f32; 22] = [
     20.0, 30.0, 40.0, 50.0, 60.0, 80.0, 100.0, 200.0, 300.0, 400.0, 500.0, 600.0, 800.0, 1000.0,
     2000.0, 3000.0, 4000.0, 5000.0, 6000.0, 8000.0, 10000.0, 20000.0,
 ];
-
-#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Serialize)]
-pub enum ZoomRegion {
-    #[default]
-    Full,
-    Bass,
-    Mids,
-    Treble,
-}
-
-impl ZoomRegion {
-    pub fn x_range(self) -> (f32, f32) {
-        match self {
-            Self::Full => (20.0, 20000.0),
-            Self::Bass => (20.0, 400.0),
-            Self::Mids => (100.0, 4000.0),
-            Self::Treble => (1000.0, 20000.0),
-        }
-    }
-}
-
-#[derive(Clone, Copy)]
-pub struct PlotCurve<'a> {
-    pub label: &'a str,
-    pub label_key: &'a str,
-    pub points: &'a [FRPoint],
-    pub color: Color32,
-    pub dashed: bool,
-    /// Whether this curve is a reference target rather than a measurement.
-    /// Targets are excluded from the plotted dB range.
-    pub target: bool,
-}
 
 #[derive(Default)]
 pub struct GraphInteraction {
@@ -166,7 +134,7 @@ impl DeltaBar {
             GraphCanvas::draw_curve(
                 &plot_painter,
                 &points,
-                curve.color,
+                theme::color(curve.color),
                 curve.dashed,
                 false,
                 theme::graph::CURVE_WIDTH,
@@ -214,53 +182,6 @@ impl DeltaBar {
     }
 }
 
-/// How curve labels are arranged when the user has not dragged them.
-///
-/// The reference tool groups up to a handful of labels into one corner so they
-/// read as a legend, because its page scrolls and an end-anchored label would
-/// end up far from the graph. `CurveEnd` keeps each label beside its own curve,
-/// which is the more precise arrangement when the graph is the whole window.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Deserialize, Serialize)]
-pub enum LabelLayout {
-    CurveEnd,
-    #[default]
-    CornerBottomLeft,
-    CornerBottomRight,
-    CornerTopLeft,
-}
-
-impl LabelLayout {
-    /// Label for the toolbar toggle, cycling through the layouts.
-    pub fn next(self) -> Self {
-        match self {
-            LabelLayout::CornerBottomLeft => LabelLayout::CornerBottomRight,
-            LabelLayout::CornerBottomRight => LabelLayout::CornerTopLeft,
-            LabelLayout::CornerTopLeft => LabelLayout::CurveEnd,
-            LabelLayout::CurveEnd => LabelLayout::CornerBottomLeft,
-        }
-    }
-
-    /// Short name for a control.
-    pub fn short_name(self) -> &'static str {
-        match self {
-            LabelLayout::CornerBottomLeft => "Labels: corner",
-            LabelLayout::CornerBottomRight => "Labels: corner",
-            LabelLayout::CornerTopLeft => "Labels: corner",
-            LabelLayout::CurveEnd => "Labels: curve",
-        }
-    }
-
-    /// Which corner, for the tooltip.
-    pub fn corner_name(self) -> &'static str {
-        match self {
-            LabelLayout::CornerBottomLeft => "bottom-left",
-            LabelLayout::CornerBottomRight => "bottom-right",
-            LabelLayout::CornerTopLeft => "top-left",
-            LabelLayout::CurveEnd => "",
-        }
-    }
-}
-
 pub struct GraphCanvas<'a> {
     pub zoom: ZoomRegion,
     pub smooth_level: usize,
@@ -286,7 +207,7 @@ pub struct GraphCanvas<'a> {
 /// (`web/config.js`, `watermark()`), so a graph carries the mark wherever it
 /// goes. The screen draws the mark from a texture the caller has loaded; the
 /// export embeds the same bytes.
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Copy, Debug, Default)]
 pub struct Watermark<'a> {
     /// The mark itself, as PNG bytes.
     pub png: Option<&'a [u8]>,
@@ -470,7 +391,7 @@ pub fn export_svg(
         };
         svg.push_str(&format!(
             r#"<path d="{path}" fill="none" stroke="{}" stroke-width="{}"{dash}/>"#,
-            svg_color(curve.color),
+            svg_color(theme::color(curve.color)),
             theme::graph::CURVE_WIDTH,
         ));
     }
@@ -516,7 +437,7 @@ pub fn export_svg(
                 r#"<text x="{:.2}" y="{:.2}" fill="{}" font-family="Open Sans, sans-serif" font-size="{label_size}" font-weight="700">{}</text>"#,
                 position.x,
                 position.y + label_size,
-                svg_color(curve.color),
+                svg_color(theme::color(curve.color)),
                 escape_xml(curve.label),
             ));
         }
@@ -747,7 +668,7 @@ impl GraphCanvas<'_> {
             Self::draw_curve(
                 &plot_painter,
                 &points,
-                curve.color,
+                theme::color(curve.color),
                 curve.dashed,
                 smooth,
                 theme::graph::CURVE_WIDTH,
@@ -765,8 +686,11 @@ impl GraphCanvas<'_> {
                         Pos2::new(transform.hz_to_x(point.hz), transform.db_to_y(point.db))
                     })
                 {
-                    let galley =
-                        painter.layout_no_wrap(curve.label.to_owned(), label_font(), curve.color);
+                    let galley = painter.layout_no_wrap(
+                        curve.label.to_owned(),
+                        label_font(),
+                        theme::color(curve.color),
+                    );
                     label_candidates.push((
                         curve.label_key,
                         point,
@@ -835,7 +759,7 @@ impl GraphCanvas<'_> {
                 ui.ctx()
                     .data_mut(|data| data.remove::<Pos2>(label_response.id));
             }
-            painter.galley(top_left, galley, color);
+            painter.galley(top_left, galley, theme::color(color));
             if normalized.is_some() || label_response.dragged() {
                 updated_label_positions.insert(
                     key.to_owned(),
@@ -911,7 +835,7 @@ impl GraphCanvas<'_> {
                 Self::draw_curve_lines(
                     &plot_painter,
                     &screen_curves[index],
-                    curves[index].color,
+                    theme::color(curves[index].color),
                     curves[index].dashed,
                     theme::graph::CURVE_WIDTH_HOVER,
                 );
@@ -1488,11 +1412,12 @@ fn nearest_point(points: &[FRPoint], frequency: f32) -> Option<&FRPoint> {
 #[cfg(test)]
 mod tests {
     use super::{
-        curve_control_points, export_svg, format_axis_frequency, GraphCanvas, PlotCurve,
-        Provenance, Transform, Watermark, ZoomRegion,
+        curve_control_points, export_svg, format_axis_frequency, GraphCanvas, Provenance,
+        Transform, Watermark,
     };
-    use egui::{pos2, Color32, Rect};
+    use egui::{pos2, Rect};
     use squiglab_core::data::FRPoint;
+    use squiglab_core::graph::{PlotCurve, ZoomRegion};
     use std::collections::BTreeMap;
 
     #[test]
@@ -1547,7 +1472,7 @@ mod tests {
                     db: 72.0,
                 },
             ],
-            color: egui::Color32::WHITE,
+            color: squiglab_core::color::Rgb::new(255, 255, 255),
             dashed: false,
             target: false,
         };
@@ -1561,7 +1486,7 @@ mod tests {
                     db: 14.7,
                 },
             ],
-            color: egui::Color32::GRAY,
+            color: squiglab_core::color::Rgb::new(128, 128, 128),
             dashed: true,
             target: true,
         };
@@ -1576,7 +1501,7 @@ mod tests {
             label: "M",
             label_key: "m",
             points: &measurement_points,
-            color: egui::Color32::WHITE,
+            color: squiglab_core::color::Rgb::new(255, 255, 255),
             dashed: false,
             target: false,
         };
@@ -1601,7 +1526,7 @@ mod tests {
                     db: 14.7,
                 },
             ],
-            color: egui::Color32::GRAY,
+            color: squiglab_core::color::Rgb::new(128, 128, 128),
             dashed: true,
             target: true,
         };
@@ -1766,7 +1691,7 @@ mod tests {
                 label: "IEM <A & B>",
                 label_key: "measurement",
                 points: &points,
-                color: Color32::from_rgb(12, 34, 56),
+                color: squiglab_core::color::Rgb::new(12, 34, 56),
                 dashed: false,
                 target: false,
             },
@@ -1774,7 +1699,7 @@ mod tests {
                 label: "Target",
                 label_key: "target",
                 points: &points,
-                color: Color32::from_rgb(90, 100, 110),
+                color: squiglab_core::color::Rgb::new(90, 100, 110),
                 dashed: true,
                 target: true,
             },
@@ -1818,7 +1743,7 @@ mod tests {
             label: "Curve",
             label_key: "curve",
             points: &points,
-            color: Color32::WHITE,
+            color: squiglab_core::color::Rgb::new(255, 255, 255),
             dashed: false,
             target: false,
         }];
@@ -1864,7 +1789,7 @@ mod tests {
             label: "Curve",
             label_key: "curve",
             points: &points,
-            color: Color32::WHITE,
+            color: squiglab_core::color::Rgb::new(255, 255, 255),
             dashed: false,
             target: false,
         }];
@@ -1932,7 +1857,7 @@ mod tests {
             label: "Curve",
             label_key: "curve",
             points: &points,
-            color: Color32::WHITE,
+            color: squiglab_core::color::Rgb::new(255, 255, 255),
             dashed: false,
             target: false,
         }];
