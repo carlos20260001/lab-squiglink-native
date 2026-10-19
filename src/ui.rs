@@ -73,15 +73,31 @@ pub fn cluster_label(ui: &mut Ui, text: &str) {
     );
 }
 
-/// The application wordmark in the toolbar.
-pub fn wordmark(ui: &mut Ui) {
+/// The wordmark, drawn in a box the height of the control row beside it, with
+/// the text centred in it. The category control's frame leaves a few points
+/// above its own text, so a wordmark laid out at the top of the row rides
+/// above the small caps it should share a cap line with.
+///
+/// Returns the rect the text sits in.
+pub fn wordmark(ui: &mut Ui) -> egui::Rect {
     let palette = Palette::resolve(ui.visuals().dark_mode);
-    ui.label(
-        RichText::new("SquigLab")
-            .font(theme::font_bold(TypeStep::Subtitle))
-            .color(palette.text_primary),
+    let font = theme::font_bold(TypeStep::Subtitle);
+    let galley = ui
+        .painter()
+        .layout_no_wrap("SquigLab".to_owned(), font, palette.text_primary);
+    let (rect, _) = ui.allocate_exact_size(
+        egui::vec2(galley.size().x, CONTROL_ROW_HEIGHT),
+        egui::Sense::hover(),
     );
+    let position = egui::pos2(rect.left(), rect.center().y - galley.size().y / 2.0);
+    let size = galley.size();
+    ui.painter().galley(position, galley, palette.text_primary);
+    egui::Rect::from_min_size(position, size)
 }
+
+/// The height of a row of header controls. The wordmark is centred against
+/// this band so it shares a cap line with the controls beside it.
+pub const CONTROL_ROW_HEIGHT: f32 = 26.0;
 
 /// A quiet text button used for toolbar actions that are not primary.
 ///
@@ -483,10 +499,74 @@ pub fn icon_button_enabled(
 mod tests {
     use super::*;
 
+    /// The cap line of a piece of text: the top of the ink it puts on the
+    /// screen, measured from the origin its galley is drawn at.
+    ///
+    /// The cap line is what the eye reads as the top of a line of text, so two
+    /// labels that share one are on the same line whatever their sizes.
+    fn cap_line(ui: &mut egui::Ui, text: &str, font: egui::FontId) -> f32 {
+        let galley = ui
+            .painter()
+            .layout_no_wrap(text.to_owned(), font, egui::Color32::WHITE);
+        galley.rows[0].row.visuals.mesh_bounds.min.y + galley.rows[0].pos.y
+    }
+
     /// The icon button's own footprint, which is also what its icon must stay
     /// inside.
     fn button_rect() -> Rect {
         Rect::from_min_size(pos2(100.0, 100.0), egui::vec2(22.0, 22.0))
+    }
+
+    #[test]
+    fn the_wordmark_shares_a_cap_line_with_the_category_control() {
+        let ctx = egui::Context::default();
+        theme::register_fonts(&ctx);
+        let category = 0usize;
+        let mut wordmark_box = egui::Rect::ZERO;
+        let mut pill_box = egui::Rect::ZERO;
+        let mut wordmark_cap = 0.0_f32;
+        let mut pill_cap = 0.0_f32;
+        let output = ctx.run_ui(egui::RawInput::default(), |ui| {
+            ui.horizontal(|ui| {
+                wordmark_box = wordmark(ui);
+                ui.add_space(16.0);
+                egui::Frame::group(ui.style())
+                    .inner_margin(egui::Margin::same(2))
+                    .fill(ui.visuals().extreme_bg_color)
+                    .corner_radius(egui::CornerRadius::same(6))
+                    .show(ui, |ui| {
+                        ui.spacing_mut().item_spacing.x = 0.0;
+                        for (index, label) in ["EARBUDS", "HEADPHONES", "IEMS"].iter().enumerate() {
+                            let response = ui.selectable_label(index == category, *label);
+                            if index == 2 {
+                                pill_box = response.rect;
+                            }
+                        }
+                    });
+                // The cap lines, each measured from the origin its own text is
+                // drawn at.
+                wordmark_cap = wordmark_box.top()
+                    + cap_line(ui, "SquigLab", theme::font_bold(theme::TypeStep::Subtitle));
+                pill_cap =
+                    pill_box.top() + cap_line(ui, "IEMS", theme::font(theme::TypeStep::Body));
+            });
+        });
+        let mut textures = output.textures_delta;
+        let tex_manager = ctx.tex_manager();
+        let mut manager = tex_manager.write();
+        for (id, deltas) in &textures.set {
+            for delta in deltas {
+                manager.set(*id, delta.clone());
+            }
+        }
+        // The delta has been applied; say so, or it complains when it is
+        // dropped.
+        textures.clear();
+        let difference = (wordmark_cap - pill_cap).abs();
+        assert!(
+            difference <= 1.0,
+            "the wordmark's cap line is {difference:.1} points from the control's"
+        );
     }
 
     /// Every icon, so a new one is covered without editing the tests.

@@ -1711,77 +1711,86 @@ impl CrinGraphApp {
             // box around it. As the viewport narrows, whole clusters move into
             // the overflow menu instead of wrapping onto extra rows.
             let density = ToolbarDensity::for_width(ui.available_width());
-            ui.horizontal(|ui| {
-                ui.spacing_mut().item_spacing.x = cgui::Spacing::COMPACT;
+            // The row of controls is wider than a narrow window, and a
+            // control that cannot be reached is a control that is lost, so the
+            // row scrolls sideways rather than being cut off.
+            egui::ScrollArea::horizontal()
+                .id_salt("toolbar-scroll")
+                .auto_shrink([false, true])
+                .show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing.x = cgui::Spacing::COMPACT;
 
-                // ---- View range ----
-                cgui::zoom_segmented(ui, &mut self.zoom);
-                cgui::cluster_rule(ui);
+                        // ---- View range ----
+                        cgui::cluster_label(ui, "Zoom:");
+                        cgui::zoom_segmented(ui, &mut self.zoom);
+                        cgui::cluster_rule(ui);
 
-                // ---- Normalize / smooth / view toggles ----
-                if density.shows_processing() {
-                    self.toolbar_processing(ui);
-                    cgui::cluster_rule(ui);
-                }
-
-                // ---- Actions (secondary: quiet text buttons) ----
-                if density == ToolbarDensity::Full {
-                    self.toolbar_actions(ui);
-                } else {
-                    // Whatever this density dropped out of the row lives here,
-                    // so a narrow viewport hides controls without losing them.
-                    ui.menu_button("⋯", |ui| {
-                        if !density.shows_processing() {
+                        // ---- Normalize / smooth / view toggles ----
+                        if density.shows_processing() {
                             self.toolbar_processing(ui);
-                            ui.separator();
+                            cgui::cluster_rule(ui);
                         }
-                        self.toolbar_actions(ui);
-                        if !density.shows_theme()
-                            && cgui::action_button(
+
+                        // ---- Actions (secondary: quiet text buttons) ----
+                        if density == ToolbarDensity::Full {
+                            self.toolbar_actions(ui);
+                        } else {
+                            // Whatever this density dropped out of the row lives here,
+                            // so a narrow viewport hides controls without losing them.
+                            ui.menu_button("⋯", |ui| {
+                                if !density.shows_processing() {
+                                    self.toolbar_processing(ui);
+                                    ui.separator();
+                                }
+                                self.toolbar_actions(ui);
+                                if !density.shows_theme()
+                                    && cgui::action_button(
+                                        ui,
+                                        if self.dark_mode { "Light" } else { "Dark" },
+                                        "Switch between the dark and light themes",
+                                    )
+                                {
+                                    self.dark_mode = !self.dark_mode;
+                                }
+                            })
+                            .response
+                            .on_hover_text("Controls that do not fit the toolbar at this width.");
+                        }
+                        cgui::cluster_rule(ui);
+
+                        // ---- Appearance ----
+                        if density.shows_theme() {
+                            if cgui::action_button(
                                 ui,
                                 if self.dark_mode { "Light" } else { "Dark" },
                                 "Switch between the dark and light themes",
-                            )
-                        {
-                            self.dark_mode = !self.dark_mode;
+                            ) {
+                                self.dark_mode = !self.dark_mode;
+                            }
+                            cgui::cluster_rule(ui);
                         }
-                    })
-                    .response
-                    .on_hover_text("Controls that do not fit the toolbar at this width.");
-                }
-                cgui::cluster_rule(ui);
 
-                // ---- Appearance ----
-                if density.shows_theme() {
-                    if cgui::action_button(
-                        ui,
-                        if self.dark_mode { "Light" } else { "Dark" },
-                        "Switch between the dark and light themes",
-                    ) {
-                        self.dark_mode = !self.dark_mode;
-                    }
-                    cgui::cluster_rule(ui);
-                }
-
-                // ---- Panel visibility (primary toggles, at the end) ----
-                if ui
-                    .selectable_label(self.show_measurements, "Library")
-                    .on_hover_text("Show or hide the measurement and target library.")
-                    .clicked()
-                {
-                    self.show_measurements = !self.show_measurements;
-                }
-                // The deviation is a second reading of the same selection, so
-                // it is a window rather than a place in the layout: the layout
-                // is the curves themselves, and this is a question about them.
-                if ui
-                    .selectable_label(self.show_delta, "\u{394} Deviation")
-                    .on_hover_text("Show how far each headphone sits from the target.")
-                    .clicked()
-                {
-                    self.show_delta = !self.show_delta;
-                }
-            });
+                        // ---- Panel visibility (primary toggles, at the end) ----
+                        if ui
+                            .selectable_label(self.show_measurements, "Library")
+                            .on_hover_text("Show or hide the measurement and target library.")
+                            .clicked()
+                        {
+                            self.show_measurements = !self.show_measurements;
+                        }
+                        // The deviation is a second reading of the same selection, so
+                        // it is a window rather than a place in the layout: the layout
+                        // is the curves themselves, and this is a question about them.
+                        if ui
+                            .selectable_label(self.show_delta, "\u{394} Deviation")
+                            .on_hover_text("Show how far each headphone sits from the target.")
+                            .clicked()
+                        {
+                            self.show_delta = !self.show_delta;
+                        }
+                    });
+                });
         });
         self.dirty |= previous_processing_settings
             != (
