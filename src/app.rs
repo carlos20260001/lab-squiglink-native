@@ -7,10 +7,10 @@ use squiglab_core::data::{self, CurveInfo, FRPoint, PhoneBook};
 use squiglab_core::delta::{self, DeltaTarget};
 use squiglab_core::equalizer;
 use squiglab_core::graph::PlotCurve;
-use squiglab_core::processing::{self, NormParams, SmoothingParams};
+use squiglab_core::processing;
 use squiglab_core::session::{
     ChannelMode, CurveSource, DisplayCurve, EqRow, MeasurementGroup, MeasurementVariant,
-    Preferences, SavedGroup,
+    Preferences,
 };
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
@@ -650,9 +650,10 @@ impl CrinGraphApp {
         }
         let restored_preferences = if let Some(shared_state) = self.shared_state.take() {
             match decode_share_uri(&shared_state).and_then(|preferences| {
-                self.apply_preferences(preferences)
-                    .then_some(())
-                    .ok_or_else(|| anyhow::anyhow!("shared state contains invalid settings"))
+                self.session
+                    .apply_preferences(preferences)
+                    .map(|_| ())
+                    .map_err(|error| anyhow::anyhow!(error))
             }) {
                 Ok(()) => true,
                 Err(error) => {
@@ -662,7 +663,13 @@ impl CrinGraphApp {
             }
         } else {
             match read_preferences() {
-                Ok(Some(preferences)) => self.apply_preferences(preferences),
+                Ok(Some(preferences)) => match self.session.apply_preferences(preferences) {
+                    Ok(changed) => changed,
+                    Err(error) => {
+                        self.settings_error = Some(error);
+                        false
+                    }
+                },
                 Ok(None) => false,
                 Err(error) => {
                     self.settings_error = Some(format!("Unable to load preferences: {error:#}"));
@@ -691,7 +698,7 @@ impl CrinGraphApp {
         self.session.curves = curves;
         self.loaded = true;
         self.dirty = true;
-        self.session.last_saved_preferences = Some(self.preferences());
+        self.session.last_saved_preferences = Some(self.session.preferences());
         // The library list scrolls independently, so a session restored with a
         // curve selected far down it must scroll that row into view rather
         // than opening at the top of a list of thousands.
@@ -700,198 +707,8 @@ impl CrinGraphApp {
         Ok(())
     }
 
-    fn apply_preferences(&mut self, preferences: Preferences) -> bool {
-        if !preferences.target_phon.is_finite()
-            || !(0.0..=100.0).contains(&preferences.target_phon)
-            || !preferences.target_hz.is_finite()
-            || !(20.0..=20000.0).contains(&preferences.target_hz)
-            || preferences.smooth_level > 12
-            || !preferences.y_scale.is_finite()
-            || !(0.35..=4.0).contains(&preferences.y_scale)
-            || preferences
-                .active
-                .iter()
-                .filter(|saved| {
-                    self.session
-                        .groups
-                        .iter()
-                        .any(|group| !group.target && group_key(group) == saved.key)
-                })
-                .count()
-                > MAX_ACTIVE_CURVES
-            || preferences
-                .active
-                .iter()
-                .any(|group| !group.offset.is_finite())
-            || preferences.label_positions.values().any(|position| {
-                position
-                    .iter()
-                    .any(|value| !value.is_finite() || !(0.0..=1.0).contains(value))
-            })
-            || preferences
-                .tutorial_segment
-                .is_some_and(|index| index >= TUTORIAL_SEGMENTS.len())
-            || !preferences
-                .eq_filters
-                .values()
-                .all(|rows| eq_rows_are_valid(rows))
-        {
-            self.settings_error =
-                Some("Unable to load preferences: invalid settings values".into());
-            return false;
-        }
-        self.session.active.clear();
-        self.session.active_targets.clear();
-        self.session.active_deltas.clear();
-        for name in &preferences.active_deltas {
-            if let Some(index) = self
-                .session
-                .delta_targets
-                .iter()
-                .position(|target| &target.name == name)
-            {
-                self.session.active_deltas.insert(index);
-            }
-        }
-        self.session.show_delta = preferences.show_delta;
-        self.session.hidden.clear();
-        self.session.pinned.clear();
-        self.session.offsets.clear();
-        self.session.channel_modes.clear();
-        self.session.variant_choices.clear();
-        self.session.baseline = None;
-        self.session.label_positions = preferences.label_positions.clone();
-        self.session.label_layout = preferences.label_layout;
-        self.session.tutorial_segment = preferences.tutorial_segment;
-        self.session.y_scale = preferences.y_scale;
-        self.session.curve_color_offsets = preferences.curve_color_offsets.clone();
-        self.session.eq_filters.clear();
-        for (index, group) in self.session.groups.iter().enumerate() {
-            if let Some(rows) = preferences.eq_filters.get(&group_key(group)) {
-                if eq_rows_are_valid(rows) {
-                    self.session.eq_filters.insert(index, rows.clone());
-                }
-            }
-        }
-        for (index, group) in self.session.groups.iter().enumerate() {
-            if let Some(saved) = preferences
-                .active
-                .iter()
-                .find(|saved| saved.key == group_key(group))
-            {
-                if group.target {
-                    self.session.active_targets.insert(index);
-                } else {
-                    self.session.active.insert(index);
-                }
-                self.session.variant_choices.insert(
-                    index,
-                    saved.variant.min(group.variants.len().saturating_sub(1)),
-                );
-                self.session.channel_modes.insert(index, saved.channel_mode);
-                if saved.hidden {
-                    self.session.hidden.insert(index);
-                }
-                if saved.pinned {
-                    self.session.pinned.insert(index);
-                }
-                if saved.offset != 0.0 {
-                    self.session.offsets.insert(index, saved.offset);
-                }
-            }
-        }
-        self.session.baseline = preferences.baseline.and_then(|key| {
-            self.session
-                .groups
-                .iter()
-                .enumerate()
-                .position(|(index, group)| {
-                    (self.session.active.contains(&index)
-                        || self.session.active_targets.contains(&index))
-                        && group_key(group) == key
-                })
-        });
-        self.session.zoom = preferences.zoom;
-        self.session.phon_normalization = preferences.phon_normalization;
-        self.session.target_phon = preferences.target_phon;
-        self.session.target_hz = preferences.target_hz;
-        self.session.smooth_level = preferences.smooth_level;
-        self.session.show_labels = preferences.show_labels;
-        self.session.inspect_mode = preferences.inspect_mode;
-        self.session.dark_mode = preferences.dark_mode;
-        self.session.color_offset = preferences.color_offset;
-        self.session.show_measurements = preferences.show_measurements;
-        true
-    }
-
-    fn preferences(&self) -> Preferences {
-        Preferences {
-            active: self
-                .session
-                .active
-                .iter()
-                .chain(self.session.active_targets.iter())
-                // An uploaded curve is excluded: a shared link is a claim about
-                // the reference database, and a measurement from another rig is
-                // not part of it, so a link that carried one would restore a
-                // curve the recipient does not have and cannot check.
-                .filter(|&&index| !self.is_uploaded(index))
-                .map(|&index| SavedGroup {
-                    key: group_key(&self.session.groups[index]),
-                    variant: self
-                        .session
-                        .variant_choices
-                        .get(&index)
-                        .copied()
-                        .unwrap_or(0),
-                    channel_mode: self
-                        .session
-                        .channel_modes
-                        .get(&index)
-                        .copied()
-                        .unwrap_or_default(),
-                    hidden: self.session.hidden.contains(&index),
-                    pinned: self.session.pinned.contains(&index),
-                    offset: self.session.offsets.get(&index).copied().unwrap_or(0.0),
-                })
-                .collect(),
-            baseline: self
-                .session
-                .baseline
-                .map(|index| group_key(&self.session.groups[index])),
-            zoom: self.session.zoom,
-            phon_normalization: self.session.phon_normalization,
-            target_phon: self.session.target_phon,
-            target_hz: self.session.target_hz,
-            smooth_level: self.session.smooth_level,
-            show_labels: self.session.show_labels,
-            inspect_mode: self.session.inspect_mode,
-            dark_mode: self.session.dark_mode,
-            color_offset: self.session.color_offset,
-            show_measurements: self.session.show_measurements,
-            label_positions: self.session.label_positions.clone(),
-            label_layout: self.session.label_layout,
-            tutorial_segment: self.session.tutorial_segment,
-            y_scale: self.session.y_scale,
-            curve_color_offsets: self.session.curve_color_offsets.clone(),
-            eq_filters: self
-                .session
-                .eq_filters
-                .iter()
-                .map(|(&index, rows)| (group_key(&self.session.groups[index]), rows.clone()))
-                .collect(),
-            active_deltas: self
-                .session
-                .active_deltas
-                .iter()
-                .map(|&index| self.session.delta_targets[index].name.clone())
-                .collect(),
-            show_delta: self.session.show_delta,
-        }
-    }
-
     fn persist_preferences_if_changed(&mut self) {
-        let preferences = self.preferences();
+        let preferences = self.session.preferences();
         if self.session.last_saved_preferences.as_ref() == Some(&preferences) {
             return;
         }
@@ -902,198 +719,6 @@ impl CrinGraphApp {
                 self.settings_error = Some(format!("Unable to save preferences: {error:#}"));
             }
         }
-    }
-
-    fn rebuild_display_curves(&mut self) {
-        let mut output = Vec::with_capacity(self.session.active.len());
-        self.processing_error = None;
-        for &group_index in self
-            .session
-            .active
-            .iter()
-            .chain(self.session.active_targets.iter())
-        {
-            if self.session.hidden.contains(&group_index)
-                && self.session.baseline != Some(group_index)
-            {
-                continue;
-            }
-            let group = &self.session.groups[group_index];
-            let variant_index = self
-                .session
-                .variant_choices
-                .get(&group_index)
-                .copied()
-                .unwrap_or(0)
-                .min(group.variants.len().saturating_sub(1));
-            let variant = &group.variants[variant_index];
-            let channel_mode = self
-                .session
-                .channel_modes
-                .get(&group_index)
-                .copied()
-                .unwrap_or_default();
-            let channels = match prepare_channels(
-                &self.session.curves,
-                &variant.curve_indices,
-                channel_mode,
-                self.session.smooth_level,
-            ) {
-                Ok(channels) => channels,
-                Err(error) => {
-                    self.processing_error = Some(format!("{}: {error}", group.name));
-                    self.session.display_curves.clear();
-                    self.dirty = false;
-                    return;
-                }
-            };
-            if channels.is_empty() {
-                continue;
-            }
-            let normalization_channels = match prepare_channels(
-                &self.session.curves,
-                &variant.curve_indices,
-                ChannelMode::Both,
-                self.session.smooth_level,
-            ) {
-                Ok(channels) => channels,
-                Err(error) => {
-                    self.processing_error = Some(format!("{}: {error}", group.name));
-                    self.session.display_curves.clear();
-                    self.dirty = false;
-                    return;
-                }
-            };
-            let channel_points: Vec<&[FRPoint]> = normalization_channels
-                .iter()
-                .map(|(_, points)| points.as_slice())
-                .collect();
-            let normalization_offset = if self.session.phon_normalization {
-                processing::average_curves(&channel_points).and_then(|average| {
-                    let params = NormParams::for_curve(&average)?;
-                    processing::normalize(&average, self.session.target_phon, &params)
-                })
-            } else {
-                processing::normalize_by_hz(&channel_points, self.session.target_hz)
-            };
-            match normalization_offset {
-                Ok(offset) => {
-                    let manual_offset = self
-                        .session
-                        .offsets
-                        .get(&group_index)
-                        .copied()
-                        .unwrap_or(0.0);
-                    // An equalizer curves its parent's response, so the child is
-                    // built from the parent's already-normalized points and
-                    // inherits the parent's normalization by construction.
-                    let eq_rows = self.session.eq_filters.get(&group_index).filter(|rows| {
-                        !group.target && rows.iter().any(|row| row.enabled && !eq_row_is_inert(row))
-                    });
-                    for (channel_name, mut points) in channels {
-                        for point in &mut points {
-                            point.db += offset + manual_offset;
-                        }
-                        let parent_label =
-                            curve_label(&group.name, &variant.name, channel_name.clone());
-                        if let Some(rows) = eq_rows {
-                            let enabled: Vec<equalizer::Filter> = rows
-                                .iter()
-                                .filter(|row| row.enabled)
-                                .map(|row| row.filter)
-                                .collect();
-                            let response: Vec<equalizer::ResponsePoint> = points
-                                .iter()
-                                .map(|point| {
-                                    equalizer::ResponsePoint::new(point.hz as f64, point.db as f64)
-                                })
-                                .collect();
-                            let equalized = equalizer::apply(
-                                &response,
-                                &enabled,
-                                equalizer::DEFAULT_SAMPLE_RATE,
-                            );
-                            // The child is pushed before its parent so it
-                            // draws on top of the curve it shapes.
-                            output.push(DisplayCurve {
-                                group_index,
-                                source: CurveSource::Equalizer,
-                                label: eq_curve_label(&parent_label),
-                                points: equalized
-                                    .into_iter()
-                                    .map(|point| FRPoint {
-                                        hz: point.hz as f32,
-                                        db: point.db as f32,
-                                    })
-                                    .collect(),
-                                target: false,
-                            });
-                        }
-                        output.push(DisplayCurve {
-                            group_index,
-                            source: CurveSource::Measurement,
-                            label: parent_label,
-                            points,
-                            target: group.target,
-                        });
-                    }
-                }
-                Err(error) => {
-                    self.processing_error = Some(format!("{}: {error}", group.name));
-                    self.session.display_curves.clear();
-                    self.dirty = false;
-                    return;
-                }
-            }
-        }
-        if let Some(baseline) = self.session.baseline {
-            if let Err(error) = apply_baseline(&mut output, baseline) {
-                self.processing_error = Some(format!("Baseline: {error}"));
-                self.session.display_curves.clear();
-                self.dirty = false;
-                return;
-            }
-        }
-        output.retain(|curve| !self.session.hidden.contains(&curve.group_index));
-        self.session.display_curves = output;
-        self.dirty = false;
-    }
-
-    fn toggle_curve(&mut self, index: usize) {
-        let is_target = self.session.groups[index].target;
-        let is_selected = if is_target {
-            self.session.active_targets.contains(&index)
-        } else {
-            self.session.active.contains(&index)
-        };
-        if is_selected && self.session.pinned.contains(&index) {
-            return;
-        }
-        if is_selected {
-            if is_target {
-                self.session.active_targets.remove(&index);
-            } else {
-                self.session.active.remove(&index);
-            }
-            self.session.hidden.remove(&index);
-            self.session.pinned.remove(&index);
-            self.session.offsets.remove(&index);
-            self.session
-                .curve_color_offsets
-                .remove(&group_key(&self.session.groups[index]));
-            if self.session.baseline == Some(index) {
-                self.session.baseline = None;
-            }
-        } else if is_target || self.session.active.len() < MAX_ACTIVE_CURVES {
-            if is_target {
-                self.session.active_targets.insert(index);
-            } else {
-                self.session.active.insert(index);
-            }
-            self.session.variant_choices.entry(index).or_insert(0);
-            self.session.channel_modes.entry(index).or_default();
-        }
-        self.dirty = true;
     }
 
     fn curve_color(&self, index: usize) -> squiglab_core::color::Rgb {
@@ -1118,11 +743,6 @@ impl CrinGraphApp {
     /// reference database. An upload is recorded by name when it is accepted,
     /// because a group can be rebuilt or renamed and the shared state has to
     /// keep excluding it either way.
-    fn is_uploaded(&self, index: usize) -> bool {
-        let group = &self.session.groups[index];
-        group.brand == UPLOADED_BRAND || self.session.uploaded_names.contains(&group.name)
-    }
-
     /// Color for a displayed curve. An EQ curve takes a palette slot spread
     /// away from its parent's, so the two lines are tellable apart while still
     /// coming from the graph's existing palette rather than a new hue.
@@ -1651,7 +1271,7 @@ impl CrinGraphApp {
             .show(ctx, |ui| {
                 ui.label("Copy this versioned state URI, or paste one to restore a graph.");
                 if ui.button("Copy current state URI").clicked() {
-                    match encode_share_uri(&self.preferences()) {
+                    match encode_share_uri(&self.session.preferences()) {
                         Ok(uri) => {
                             ctx.copy_text(uri.clone());
                             self.share_input = uri;
@@ -1730,11 +1350,25 @@ impl CrinGraphApp {
         self.session.tutorial_segment = (open && !finished).then_some(selected);
     }
 
+    /// Show what AutoEQ did, or why it could not be done.
+    fn report_auto_eq(&mut self, outcome: Result<String, String>) {
+        match outcome {
+            Ok(message) => {
+                self.eq_export_error = None;
+                self.eq_export_message = Some(message);
+            }
+            Err(error) => {
+                self.eq_export_message = None;
+                self.eq_export_error = Some(error);
+            }
+        }
+    }
+
     fn restore_shared_state(&mut self, uri: &str) -> anyhow::Result<()> {
         let preferences = decode_share_uri(uri)?;
-        if !self.apply_preferences(preferences) {
-            anyhow::bail!("shared state contains invalid settings");
-        }
+        self.session
+            .apply_preferences(preferences)
+            .map_err(|error| anyhow::anyhow!(error))?;
         self.dirty = true;
         self.settings_error = None;
         self.share_message = None;
@@ -1833,204 +1467,26 @@ impl CrinGraphApp {
     /// `(group index, model name)` pairs. `brand_filter` overrides
     /// `self.brand_filter` so a brand picked this frame narrows the list
     /// within the same frame instead of the next.
-    fn matching_models(
-        &self,
-        _counts: &[(String, usize)],
-        brand_filter: Option<&str>,
-    ) -> Vec<(usize, String)> {
-        let mut models: Vec<(usize, String)> = Vec::new();
-        for (index, group) in self.session.groups.iter().enumerate() {
-            if group.target {
-                continue; // Reference targets live in the target strip, not here.
-            }
-            let brand = brand_name(group);
-            let narrowed = brand_filter.is_none_or(|chosen| chosen == brand);
-            if narrowed && matches_search(&format!("{brand} {}", group.name), &self.search) {
-                models.push((index, group.name.clone()));
-            }
-        }
-        models
-    }
-
     /// The measurement whose equalizer the panel is editing: the one chosen in
     /// its dropdown, or the first active measurement when nothing is chosen.
-    fn eq_phone(&self) -> Option<usize> {
-        self.session
-            .eq_phone
-            .filter(|&index| {
-                self.session.active.contains(&index) && !self.session.groups[index].target
-            })
-            .or_else(|| {
-                self.session
-                    .active
-                    .iter()
-                    .copied()
-                    .find(|&index| !self.session.groups[index].target)
-            })
-    }
-
     /// The curve Auto EQ fits against: the chosen target, else the first
     /// active target, else the second active measurement, which is the
     /// reference tool's fallback.
-    fn eq_target(&self) -> Option<usize> {
-        self.session
-            .eq_target
-            .filter(|&index| self.session.active_targets.contains(&index))
-            .or_else(|| self.session.active_targets.iter().copied().next())
-            .or_else(|| self.session.active.iter().copied().nth(1))
-    }
-
     /// The measurements the panel offers in its dropdown.
-    fn active_measurements(&self) -> Vec<usize> {
-        self.session
-            .active
-            .iter()
-            .copied()
-            .filter(|&index| !self.session.groups[index].target)
-            .collect()
-    }
-
     /// The enabled filters of a curve, which is what the exports and the
     /// response calculation take.
-    fn enabled_filters(&self, index: usize) -> Vec<equalizer::Filter> {
-        self.session
-            .eq_filters
-            .get(&index)
-            .map(|rows| {
-                rows.iter()
-                    .filter(|row| row.enabled)
-                    .map(|row| row.filter)
-                    .collect()
-            })
-            .unwrap_or_default()
-    }
-
     /// A measurement's normalized both-channel average: the curve Auto EQ fits
     /// filters to, on the same basis the normalization uses, so the filters fit
     /// the curve as it is drawn.
-    fn normalized_average_points(
-        &self,
-        group_index: usize,
-    ) -> Result<Vec<FRPoint>, processing::ProcessingError> {
-        let group = &self.session.groups[group_index];
-        let variant_index = self
-            .session
-            .variant_choices
-            .get(&group_index)
-            .copied()
-            .unwrap_or(0)
-            .min(group.variants.len().saturating_sub(1));
-        let variant = &group.variants[variant_index];
-        let channels = prepare_channels(
-            &self.session.curves,
-            &variant.curve_indices,
-            ChannelMode::Both,
-            self.session.smooth_level,
-        )?;
-        let channel_points: Vec<&[FRPoint]> = channels
-            .iter()
-            .map(|(_, points)| points.as_slice())
-            .collect();
-        let mut average = processing::average_curves(&channel_points)?;
-        let offset = if self.session.phon_normalization {
-            let params = processing::NormParams::for_curve(&average)?;
-            processing::normalize(&average, self.session.target_phon, &params)?
-        } else {
-            processing::normalize_by_hz(&channel_points, self.session.target_hz)?
-        };
-        for point in &mut average {
-            point.db += offset;
-        }
-        Ok(average)
-    }
-
     /// A curve on the f64 grid the DSP works in.
-    fn response_points(points: &[FRPoint]) -> Vec<equalizer::ResponsePoint> {
-        points
-            .iter()
-            .map(|point| equalizer::ResponsePoint::new(point.hz as f64, point.db as f64))
-            .collect()
-    }
-
     /// Fit filters to the edited measurement against the chosen target.
-    fn run_auto_eq(&mut self) {
-        let (Some(phone), Some(target)) = (self.eq_phone(), self.eq_target()) else {
-            self.eq_export_error =
-                Some("Auto EQ needs a measurement to fit and a target to fit against".to_owned());
-            return;
-        };
-        let source = match self.normalized_average_points(phone) {
-            Ok(points) => Self::response_points(&points),
-            Err(error) => {
-                self.eq_export_error = Some(format!("Auto EQ: {error}"));
-                return;
-            }
-        };
-        let target_curve = match self.normalized_average_points(target) {
-            Ok(points) => Self::response_points(&points),
-            Err(error) => {
-                self.eq_export_error = Some(format!("Auto EQ target: {error}"));
-                return;
-            }
-        };
-        let fitted = equalizer::autoeq(
-            &source,
-            &target_curve,
-            self.session.eq_max_filters,
-            self.session.eq_range,
-        );
-        self.eq_export_error = None;
-        self.eq_export_message = Some(format!(
-            "Auto EQ fitted {} filters against {}.",
-            fitted.len(),
-            self.session.groups[target].name
-        ));
-        self.session.eq_filters.insert(
-            phone,
-            fitted
-                .into_iter()
-                .map(|filter| EqRow {
-                    filter,
-                    enabled: true,
-                })
-                .collect(),
-        );
-        self.dirty = true;
-    }
-
     /// The edited curve as an Equalizer APO configuration, named after the
     /// curve as the reference names it. None when no curve is being edited.
     ///
     /// The preamp is the peak boost the filters ask for, computed between the
     /// curve and its equalized response, so the exported curve never boosts.
-    fn parametric_export(&self) -> Option<(String, String)> {
-        let phone = self.eq_phone()?;
-        let source = self
-            .normalized_average_points(phone)
-            .ok()
-            .map(|points| Self::response_points(&points))?;
-        let filters = self.enabled_filters(phone);
-        let equalized = equalizer::apply(&source, &filters, equalizer::DEFAULT_SAMPLE_RATE);
-        let preamp = equalizer::calc_preamp(&source, &equalized);
-        Some((
-            format!("{} Filters.txt", self.session.groups[phone].name),
-            equalizer::export_parametric(&filters, preamp),
-        ))
-    }
-
     /// The edited curve as a Wavelet GraphicEQ configuration, on the same
     /// filter set the parametric export writes.
-    fn graphic_eq_export(&self) -> Option<(String, String)> {
-        let phone = self.eq_phone()?;
-        Some((
-            format!("{} Wavelet.txt", self.session.groups[phone].name),
-            equalizer::export_graphic_eq(
-                &self.enabled_filters(phone),
-                equalizer::DEFAULT_SAMPLE_RATE,
-            ),
-        ))
-    }
-
     /// Report an export in the panel, or the error that stopped it.
     fn report_export(&mut self, exported: Option<(String, String)>, what: &str) {
         let Some((name, contents)) = exported else {
@@ -2051,7 +1507,7 @@ impl CrinGraphApp {
 
     /// Read an Equalizer APO configuration from disk into the edited curve.
     fn import_parametric(&mut self) {
-        let Some(phone) = self.eq_phone() else {
+        let Some(phone) = self.session.eq_phone() else {
             self.eq_import_error = Some("Select a measurement to import into first.".to_owned());
             return;
         };
@@ -2192,7 +1648,7 @@ impl CrinGraphApp {
             // Re-uploading a name the user already uploaded replaces that
             // group's curves rather than piling a second copy of the same
             // model into it.
-            Some(index) if self.is_uploaded(index) => {
+            Some(index) if self.session.is_uploaded(index) => {
                 self.session.groups[index].variants[0].curve_indices.clear();
                 index
             }
@@ -2298,7 +1754,8 @@ impl CrinGraphApp {
                             // reference's first active target.
                             0 | 1 => {
                                 if ui.button("AutoEQ now").clicked() {
-                                    self.run_auto_eq();
+                                    let outcome = self.session.run_auto_eq();
+                self.report_auto_eq(outcome);
                                     finished = true;
                                 }
                             }
@@ -2309,7 +1766,7 @@ impl CrinGraphApp {
                             }
                             _ => {
                                 if ui.button("Export now").clicked() {
-                                    let exported = self.parametric_export();
+                                    let exported = self.session.parametric_export();
                                     self.report_export(exported, "Parametric EQ");
                                     finished = true;
                                 }
@@ -2585,7 +2042,7 @@ impl CrinGraphApp {
                     }
                 });
                 if cgui::action_button(ui, "Reset", "Clear this curve's filters.") {
-                    if let Some(phone) = self.eq_phone() {
+                    if let Some(phone) = self.session.eq_phone() {
                         self.session.eq_filters.insert(phone, Vec::new());
                         self.dirty = true;
                     }
@@ -2593,7 +2050,7 @@ impl CrinGraphApp {
             });
         });
 
-        let Some(phone) = self.eq_phone() else {
+        let Some(phone) = self.session.eq_phone() else {
             ui.add_space(cgui::Spacing::TIGHT);
             ui.label("Select a measurement to give it an equalizer.");
             return;
@@ -2622,13 +2079,14 @@ impl CrinGraphApp {
 
         // --- the curve being edited, the target, and Auto EQ ---
         ui.add_space(cgui::Spacing::TIGHT);
-        let measurements = self.active_measurements();
+        let measurements = self.session.active_measurements();
         let names: Vec<String> = measurements
             .iter()
             .map(|&index| self.session.groups[index].name.clone())
             .collect();
         let targets: Vec<usize> = self.session.active_targets.iter().copied().collect();
         let target_label = self
+            .session
             .eq_target()
             .map(|index| self.session.groups[index].name.clone())
             .unwrap_or_else(|| "None".to_owned());
@@ -2651,7 +2109,7 @@ impl CrinGraphApp {
                 self.session.eq_phone = selected_phone;
             }
             ui.add_space(cgui::Spacing::COMPACT);
-            let mut selected_target = self.eq_target();
+            let mut selected_target = self.session.eq_target();
             egui::ComboBox::from_id_salt("eq_target")
                 .selected_text(target_label.as_str())
                 .show_ui(ui, |ui| {
@@ -2663,12 +2121,13 @@ impl CrinGraphApp {
                         );
                     }
                 });
-            if selected_target != self.eq_target() {
+            if selected_target != self.session.eq_target() {
                 self.session.eq_target = selected_target;
             }
             ui.add_space(cgui::Spacing::COMPACT);
             if ui.button("AutoEQ").clicked() {
-                self.run_auto_eq();
+                let outcome = self.session.run_auto_eq();
+                self.report_auto_eq(outcome);
             }
         });
 
@@ -2877,7 +2336,7 @@ impl CrinGraphApp {
                 self.close_all_overlays_except(Some("eq_import"));
             }
             if cgui::action_button(ui, "Export", "Save an Equalizer APO file.") {
-                let exported = self.parametric_export();
+                let exported = self.session.parametric_export();
                 self.report_export(exported, "Parametric EQ");
             }
         });
@@ -2888,7 +2347,7 @@ impl CrinGraphApp {
             )
             .clicked()
         {
-            let exported = self.graphic_eq_export();
+            let exported = self.session.graphic_eq_export();
             self.report_export(exported, "Graphic EQ");
         }
         if let Some(message) = &self.eq_export_message {
@@ -2995,7 +2454,9 @@ impl CrinGraphApp {
                     .as_ref()
                     .and_then(|change| change.as_deref())
                     .or(self.brand_filter.as_deref());
-                let models = self.matching_models(counts.as_slice(), effective);
+                let models =
+                    self.session
+                        .matching_models(counts.as_slice(), effective, &self.search);
                 let toggles = ui
                     .allocate_ui_with_layout(
                         egui::vec2(model_width, f32::INFINITY),
@@ -3012,7 +2473,9 @@ impl CrinGraphApp {
                 .as_ref()
                 .and_then(|change| change.as_deref())
                 .or(self.brand_filter.as_deref());
-            let models = self.matching_models(counts.as_slice(), effective);
+            let models = self
+                .session
+                .matching_models(counts.as_slice(), effective, &self.search);
             let toggles = self.model_column(ui, &models, &mut section);
             (brand_change, toggles)
         };
@@ -3022,7 +2485,7 @@ impl CrinGraphApp {
             self.library_tab = LibraryTab::Models;
         }
         for index in toggles {
-            self.toggle_curve(index);
+            self.session.toggle_curve(index);
         }
         // Scroll the first selected row into view once: a session restored
         // with a curve far down a list of thousands would otherwise open at
@@ -3097,15 +2560,6 @@ impl CrinGraphApp {
     /// rig that needs correcting, and nothing else. They never spend one of the
     /// eight measurement slots, for the same reason targets do not.
     /// Turn a rig correction on or off.
-    fn toggle_delta(&mut self, index: usize) {
-        if self.session.active_deltas.contains(&index) {
-            self.session.active_deltas.remove(&index);
-        } else {
-            self.session.active_deltas.insert(index);
-        }
-        self.dirty = true;
-    }
-
     /// One brand of the library: a collapsing header and its checkboxes.
     ///
     /// The header's persistent id is derived from the brand name, so its open
@@ -3162,10 +2616,10 @@ impl CrinGraphApp {
                 ui.separator();
             }
             for index in removals {
-                self.toggle_curve(index);
+                self.session.toggle_curve(index);
             }
             for index in delta_removals {
-                self.toggle_delta(index);
+                self.session.toggle_delta(index);
             }
         });
     }
@@ -3520,7 +2974,16 @@ impl CrinGraphApp {
                     if cgui::icon_button(ui, cgui::Icon::Download, RowControl::Download.tooltip())
                         .clicked()
                     {
-                        self.export_curve_text(index);
+                        match self.session.export_curve_text(index) {
+                            Ok(message) => {
+                                self.curve_export_error = None;
+                                self.curve_export_message = Some(message);
+                            }
+                            Err(error) => {
+                                self.curve_export_message = None;
+                                self.curve_export_error = Some(error);
+                            }
+                        }
                     }
                 }
                 RowControl::Remove => {
@@ -3607,63 +3070,6 @@ impl CrinGraphApp {
     ///
     /// The channel the row is showing is the one written, because that is the
     /// curve the mark was pressed on, and the file says which it is.
-    fn export_curve_text(&mut self, group_index: usize) {
-        let group = &self.session.groups[group_index];
-        let variant_index = self
-            .session
-            .variant_choices
-            .get(&group_index)
-            .copied()
-            .unwrap_or(0)
-            .min(group.variants.len().saturating_sub(1));
-        let variant = &group.variants[variant_index];
-        let channel_mode = self
-            .session
-            .channel_modes
-            .get(&group_index)
-            .copied()
-            .unwrap_or_default();
-        // A smoothing level of zero: no smoothing, nothing derived.
-        let channels = match prepare_channels(
-            &self.session.curves,
-            &variant.curve_indices,
-            channel_mode,
-            0,
-        ) {
-            Ok(channels) => channels,
-            Err(error) => {
-                self.curve_export_message = None;
-                self.curve_export_error = Some(format!("Unable to export {}: {error}", group.name));
-                return;
-            }
-        };
-        let Some((_, points)) = channels
-            .into_iter()
-            .find(|(name, _)| channel_mode.accepts(name.as_str()))
-        else {
-            self.curve_export_message = None;
-            self.curve_export_error = Some(format!(
-                "{} has no {} data to export.",
-                group.name,
-                channel_mode.label()
-            ));
-            return;
-        };
-        let path = download_dir().join(curve_file_name(group, variant, channel_mode));
-        let body = curve_text(&points);
-        match std::fs::write(&path, body) {
-            Ok(()) => {
-                self.curve_export_error = None;
-                self.curve_export_message =
-                    Some(format!("{} exported to {}", group.name, path.display()));
-            }
-            Err(error) => {
-                self.curve_export_message = None;
-                self.curve_export_error = Some(format!("Unable to export {path:?}: {error}"));
-            }
-        }
-    }
-
     /// The deviations the delta bar draws.
     ///
     /// Each measurement is measured against the selected target, which is the
@@ -4038,7 +3444,7 @@ impl CrinGraphApp {
                         ui.spacing_mut().item_spacing.x = cgui::Spacing::COMPACT;
                         for chip in self.delta_chips() {
                             if cgui::pill(ui, &chip.label, chip.selected, chip.tooltip).clicked() {
-                                self.toggle_delta(chip.index);
+                                self.session.toggle_delta(chip.index);
                             }
                         }
                     });
@@ -4065,7 +3471,7 @@ impl CrinGraphApp {
                     ui.spacing_mut().item_spacing.x = cgui::Spacing::COMPACT;
                     for chip in self.target_chips() {
                         if cgui::pill(ui, &chip.label, chip.selected, chip.tooltip).clicked() {
-                            self.toggle_curve(chip.index);
+                            self.session.toggle_curve(chip.index);
                         }
                     }
                 });
@@ -4261,7 +3667,7 @@ impl eframe::App for CrinGraphApp {
             }
         }
         if self.dirty {
-            self.rebuild_display_curves();
+            self.processing_error = self.session.rebuild_display_curves();
         }
         let screen_rect = ui.available_rect_before_wrap();
         // The reference switches on width alone: its one narrow breakpoint is
@@ -4325,44 +3731,6 @@ impl eframe::App for CrinGraphApp {
 #[derive(Default)]
 struct LibrarySection {
     reveal_rect: Option<egui::Rect>,
-}
-
-fn matches_search(candidate: &str, query: &str) -> bool {
-    let candidate = candidate.to_lowercase();
-    let candidate_words = candidate.split_whitespace().collect::<Vec<_>>();
-    query.to_lowercase().split_whitespace().all(|query_word| {
-        candidate.contains(query_word)
-            || candidate_words
-                .iter()
-                .any(|word| fuzzy_word_match(word, query_word))
-    })
-}
-
-fn fuzzy_word_match(candidate: &str, query: &str) -> bool {
-    let query_chars = query.chars().collect::<Vec<_>>();
-    let candidate_chars = candidate.chars().collect::<Vec<_>>();
-    if query_chars.len() < 3 {
-        return false;
-    }
-
-    let threshold = (query_chars.len() / 4).clamp(1, 2);
-    if candidate_chars.len().abs_diff(query_chars.len()) > threshold {
-        return false;
-    }
-
-    let mut previous = (0..=candidate_chars.len()).collect::<Vec<_>>();
-    let mut current = vec![0; candidate_chars.len() + 1];
-    for (query_index, query_char) in query_chars.iter().enumerate() {
-        current[0] = query_index + 1;
-        for (candidate_index, candidate_char) in candidate_chars.iter().enumerate() {
-            current[candidate_index + 1] = (previous[candidate_index + 1] + 1)
-                .min(current[candidate_index] + 1)
-                .min(previous[candidate_index] + usize::from(query_char != candidate_char));
-        }
-        std::mem::swap(&mut previous, &mut current);
-    }
-
-    previous[candidate_chars.len()] <= threshold
 }
 
 fn build_groups(phone_books: &[PhoneBook], curves: &[CurveInfo]) -> Vec<MeasurementGroup> {
@@ -4455,59 +3823,6 @@ fn build_groups(phone_books: &[PhoneBook], curves: &[CurveInfo]) -> Vec<Measurem
 /// it from the parent curve's label keeps the pair readable whatever the
 /// model's variant is named, and names it per channel when the parent shows
 /// more than one.
-fn eq_curve_label(parent_label: &str) -> String {
-    format!("{parent_label} EQ")
-}
-
-/// Whether stored equalizer rows are usable: a bounded number of finite rows
-/// with a frequency, Q, and gain. Anything else is refused rather than
-/// partly trusted, so a corrupt preferences file cannot poison the graph.
-fn eq_rows_are_valid(rows: &[EqRow]) -> bool {
-    !rows.is_empty()
-        && rows.len() <= MAX_EQ_ROWS
-        && rows.iter().all(|row| {
-            let (filter, q) = (row.filter, row.filter.q);
-            filter.freq.is_finite()
-                && (1.0..=24_000.0).contains(&filter.freq)
-                && q.is_finite()
-                && q > 0.0
-                && filter.gain.is_finite()
-                && (-40.0..=40.0).contains(&filter.gain)
-        })
-}
-
-/// Whether a row's filter would contribute nothing, the same condition the
-/// DSP uses to drop inert filters before calculating.
-fn eq_row_is_inert(row: &EqRow) -> bool {
-    let filter = row.filter;
-    filter.freq == 0.0 || filter.q == 0.0 || filter.gain == 0.0
-}
-
-fn curve_label(model: &str, variant: &str, channel_name: String) -> String {
-    let name = if variant.is_empty() || variant == model {
-        model.to_owned()
-    } else {
-        variant.to_owned()
-    };
-    if channel_name.is_empty() {
-        name
-    } else {
-        format!("{name} ({channel_name})")
-    }
-}
-
-/// The brand a measurement is listed under, including the brand's suffix when
-/// it has one.
-fn brand_name(group: &MeasurementGroup) -> String {
-    group
-        .brand_suffix
-        .as_ref()
-        .map(|suffix| format!("{} {suffix}", group.brand))
-        .unwrap_or_else(|| group.brand.clone())
-}
-
-/// Write an export beside the user's pictures, where the PNG and SVG exports
-/// go, under the file name the reference format specifies.
 fn save_export(file_name: &str, contents: &str) -> anyhow::Result<PathBuf> {
     let directory = dirs::picture_dir().ok_or_else(|| {
         anyhow::anyhow!("the operating system did not provide a pictures directory")
@@ -4518,6 +3833,44 @@ fn save_export(file_name: &str, contents: &str) -> anyhow::Result<PathBuf> {
     Ok(path)
 }
 
+/// Whether stored equalizer rows are usable: a bounded number of finite rows
+/// with a frequency, Q, and gain. Anything else is refused rather than
+/// partly trusted, so a corrupt preferences file cannot poison the graph.
+/// Whether a row's filter would contribute nothing, the same condition the
+/// DSP uses to drop inert filters before calculating.
+/// The brand a measurement is listed under, including the brand's suffix when
+/// it has one.
+fn brand_name(group: &MeasurementGroup) -> String {
+    group
+        .brand_suffix
+        .as_ref()
+        .map(|suffix| format!("{} {suffix}", group.brand))
+        .unwrap_or_else(|| group.brand.clone())
+}
+
+fn target_category(target: &str) -> &'static str {
+    match target {
+        "Diffuse Field" | "Etymotic" | "Free Field" | "Innerfidelity ID" | "IEF Neutral" => {
+            "Neutral targets"
+        }
+        "Antdroid" | "Bad Guy" | "Banbeucmas" | "Crinacle" | "Precogvision" | "Super Review" => {
+            "Reviewer targets"
+        }
+        "Harman" | "Rtings" | "Sonarworks" | "IEF \"Harman\"" | "IEF Harman" => {
+            "Preference targets"
+        }
+        _ => "Other targets",
+    }
+}
+
+/// Where an exported curve goes: the download directory, because it is data the
+/// user asked for rather than something the app produced on its own.
+/// One curve's raw points as text.
+///
+/// Comma-separated, so a spreadsheet opens it directly. A header line would
+/// break every naive parser that reads it, so there is none.
+/// What to call an exported curve: the curve, the variant, and the channel,
+/// because two rows can differ on any of the three.
 fn group_key(group: &MeasurementGroup) -> String {
     format!("{}\u{1f}{}", group.brand, group.name)
 }
@@ -4764,173 +4117,14 @@ fn save_screenshot_to(image: &egui::ColorImage, path: &Path) -> anyhow::Result<(
     Ok(())
 }
 
-fn apply_baseline(curves: &mut [DisplayCurve], baseline_group: usize) -> anyhow::Result<()> {
-    let baseline_channels: Vec<&[FRPoint]> = curves
-        .iter()
-        .filter(|curve| curve.group_index == baseline_group)
-        .map(|curve| curve.points.as_slice())
-        .collect();
-    if baseline_channels.is_empty() {
-        anyhow::bail!("the selected baseline has no active curve");
-    }
-    let baseline = processing::average_curves(&baseline_channels)?;
-    for curve in curves {
-        for point in &mut curve.points {
-            point.db -= processing::interpolate_db(&baseline, point.hz)
-                .ok_or_else(|| anyhow::anyhow!("unable to sample the baseline curve"))?;
-        }
-    }
-    Ok(())
-}
-
-fn target_category(target: &str) -> &'static str {
-    match target {
-        "Diffuse Field" | "Etymotic" | "Free Field" | "Innerfidelity ID" | "IEF Neutral" => {
-            "Neutral targets"
-        }
-        "Antdroid" | "Bad Guy" | "Banbeucmas" | "Crinacle" | "Precogvision" | "Super Review" => {
-            "Reviewer targets"
-        }
-        "Harman" | "Rtings" | "Sonarworks" | "IEF \"Harman\"" | "IEF Harman" => {
-            "Preference targets"
-        }
-        _ => "Other targets",
-    }
-}
-
 /// Where an exported curve goes: the download directory, because it is data the
 /// user asked for rather than something the app produced on its own.
-fn download_dir() -> PathBuf {
-    dirs::download_dir().unwrap_or_else(std::env::temp_dir)
-}
-
 /// One curve's raw points as text.
 ///
 /// Comma-separated, so a spreadsheet opens it directly. A header line would
 /// break every naive parser that reads it, so there is none.
-fn curve_text(points: &[FRPoint]) -> String {
-    points
-        .iter()
-        .map(|point| format!("{:.6},{:.6}\n", point.hz, point.db))
-        .collect()
-}
-
 /// What to call an exported curve: the curve, the variant, and the channel,
 /// because two rows can differ on any of the three.
-fn curve_file_name(
-    group: &MeasurementGroup,
-    variant: &MeasurementVariant,
-    mode: ChannelMode,
-) -> String {
-    let safe = |text: &str| {
-        text.chars()
-            .map(|c| match c {
-                'a'..='z' | 'A'..='Z' | '0'..='9' | '-' | '_' | '.' => c,
-                _ => '_',
-            })
-            .collect::<String>()
-    };
-    // A target is the reference the measurements are read against, so it says
-    // so: an exported target sitting in a downloads folder with no marker is
-    // easy to mistake for a measurement of something.
-    let kind = if group.target {
-        "target"
-    } else {
-        "measurement"
-    };
-    let mut name = format!(
-        "{}-{}-{}-{}",
-        safe(&group.name),
-        kind,
-        safe(&variant.name),
-        mode.label()
-    );
-    // A name that is nothing but separators would collide with every other.
-    if name.chars().all(|c| c == '-') {
-        name = format!("curve-{kind}-{}", mode.label());
-    }
-    format!("{name}.txt")
-}
-
-fn prepare_channels(
-    curves: &[CurveInfo],
-    indices: &[usize],
-    mode: ChannelMode,
-    smooth_level: usize,
-) -> Result<Vec<(String, Vec<FRPoint>)>, processing::ProcessingError> {
-    let mut left = Vec::new();
-    let mut right = Vec::new();
-    let mut average = Vec::new();
-    let mut other = Vec::new();
-    for &index in indices {
-        let curve = &curves[index];
-        let prepared = prepare_curve(&curve.points, smooth_level)?;
-        let variant = curve.variant.as_str();
-        if variant.starts_with('L') {
-            left.push(prepared);
-        } else if variant.starts_with('R') {
-            right.push(prepared);
-        } else if variant == "Avg" {
-            average.push(prepared);
-        } else {
-            other.push(prepared);
-        }
-    }
-    let combine =
-        |channels: Vec<Vec<FRPoint>>| -> Result<Option<Vec<FRPoint>>, processing::ProcessingError> {
-            if channels.is_empty() {
-                Ok(None)
-            } else if channels.len() == 1 {
-                Ok(channels.into_iter().next())
-            } else {
-                let refs: Vec<&[FRPoint]> = channels.iter().map(Vec::as_slice).collect();
-                processing::average_curves(&refs).map(Some)
-            }
-        };
-    let mut left = combine(left)?;
-    let mut right = combine(right)?;
-    let mut average = combine(average)?;
-    let mut other = combine(other)?;
-    let selected = match mode {
-        ChannelMode::Left => left
-            .take()
-            .map(|curve| vec![("L".to_owned(), curve)])
-            .or_else(|| right.take().map(|curve| vec![("R".to_owned(), curve)]))
-            .or_else(|| average.take().map(|curve| vec![("Avg".to_owned(), curve)]))
-            .or_else(|| other.take().map(|curve| vec![(String::new(), curve)])),
-        ChannelMode::Right => right
-            .take()
-            .map(|curve| vec![("R".to_owned(), curve)])
-            .or_else(|| left.take().map(|curve| vec![("L".to_owned(), curve)]))
-            .or_else(|| average.take().map(|curve| vec![("Avg".to_owned(), curve)]))
-            .or_else(|| other.take().map(|curve| vec![(String::new(), curve)])),
-        ChannelMode::Both => match (left.take(), right.take()) {
-            (Some(left), Some(right)) => {
-                Some(vec![("L".to_owned(), left), ("R".to_owned(), right)])
-            }
-            (Some(left), None) => Some(vec![("L".to_owned(), left)]),
-            (None, Some(right)) => Some(vec![("R".to_owned(), right)]),
-            (None, None) => average
-                .take()
-                .map(|curve| vec![("Avg".to_owned(), curve)])
-                .or_else(|| other.take().map(|curve| vec![(String::new(), curve)])),
-        },
-        ChannelMode::Average => match (left.take(), right.take()) {
-            (Some(left), Some(right)) => Some(vec![(
-                "Avg".to_owned(),
-                processing::average_curves(&[&left, &right])?,
-            )]),
-            (None, None) => average
-                .take()
-                .map(|curve| vec![("Avg".to_owned(), curve)])
-                .or_else(|| other.take().map(|curve| vec![(String::new(), curve)])),
-            (Some(left), None) => Some(vec![("L".to_owned(), left)]),
-            (None, Some(right)) => Some(vec![("R".to_owned(), right)]),
-        },
-    };
-    Ok(selected.unwrap_or_default())
-}
-
 fn group_has_imbalance(curves: &[CurveInfo], indices: &[usize]) -> bool {
     let left: Vec<usize> = indices
         .iter()
@@ -4971,30 +4165,22 @@ fn group_has_imbalance(curves: &[CurveInfo], indices: &[usize]) -> bool {
     false
 }
 
-fn prepare_curve(
-    curve: &[FRPoint],
-    smooth_level: usize,
-) -> Result<Vec<FRPoint>, processing::ProcessingError> {
-    if smooth_level == 0 {
-        return Ok(curve.to_vec());
-    }
-    let frequencies: Vec<f32> = curve.iter().map(|point| point.hz).collect();
-    let params = SmoothingParams::new(&frequencies, smooth_level)?;
-    processing::smooth(curve, &params)
-}
-
 #[cfg(test)]
 mod tests {
     use super::{
-        apply_baseline, build_groups, decode_share_uri, encode_share_uri, group_has_imbalance,
-        initialize_app_config_from, manager_heights, matches_search, prepare_channels,
-        read_app_config_from, read_preferences_from, resolve_measurement_dir, target_category,
-        validate_app_config, write_preferences_to, AppConfig, ChannelMode, CrinGraphApp,
-        CurveSource, DisplayCurve, MeasurementGroup, MeasurementVariant, Preferences, SavedGroup,
-        MAX_EQ_ROWS, MAX_SHARE_URI_LENGTH, MAX_SMOOTH_LEVEL, TUTORIAL_SEGMENTS,
+        build_groups, decode_share_uri, encode_share_uri, group_has_imbalance,
+        initialize_app_config_from, manager_heights, read_app_config_from, read_preferences_from,
+        resolve_measurement_dir, target_category, validate_app_config, write_preferences_to,
+        AppConfig, ChannelMode, CrinGraphApp, CurveSource, DisplayCurve, MeasurementGroup,
+        MeasurementVariant, Preferences, MAX_EQ_ROWS, MAX_SHARE_URI_LENGTH, MAX_SMOOTH_LEVEL,
+        TUTORIAL_SEGMENTS,
     };
     use squiglab_core::data::{CurveInfo, FRPoint};
     use squiglab_core::delta::DeltaTarget;
+    use squiglab_core::session::{
+        apply_baseline, curve_file_name, curve_label, curve_text, group_key, matches_search,
+        prepare_channels, SavedGroup,
+    };
     use std::collections::BTreeMap;
     use std::path::PathBuf;
 
@@ -5034,20 +4220,14 @@ mod tests {
 
     #[test]
     fn curve_labels_do_not_repeat_the_model_name() {
-        assert_eq!(super::curve_label("GAR5", "GarG5", String::new()), "GarG5");
-        assert_eq!(
-            super::curve_label("GAR5", "GarG5", "R".to_owned()),
-            "GarG5 (R)"
-        );
+        assert_eq!(curve_label("GAR5", "GarG5", String::new()), "GarG5");
+        assert_eq!(curve_label("GAR5", "GarG5", "R".to_owned()), "GarG5 (R)");
         // A model whose single variant carries its own name is not echoed twice.
-        assert_eq!(super::curve_label("GAR5", "GAR5", String::new()), "GAR5");
-        assert_eq!(
-            super::curve_label("HTH67", "HTH67", "R".to_owned()),
-            "HTH67 (R)"
-        );
+        assert_eq!(curve_label("GAR5", "GAR5", String::new()), "GAR5");
+        assert_eq!(curve_label("HTH67", "HTH67", "R".to_owned()), "HTH67 (R)");
         // With no variant named, the model name stands on its own.
         assert_eq!(
-            super::curve_label("SoftCheeks", "", "Avg".to_owned()),
+            curve_label("SoftCheeks", "", "Avg".to_owned()),
             "SoftCheeks (Avg)"
         );
     }
@@ -5226,7 +4406,7 @@ smoothing_octaves = 3
                 enabled: true,
             }],
         );
-        app.rebuild_display_curves();
+        app.session.rebuild_display_curves();
         assert!(app.processing_error.is_none());
         // One EQ child per channel beside the parent's channel.
         let eq_children: Vec<_> = app
@@ -5325,7 +4505,7 @@ smoothing_octaves = 3
             enabled,
         };
         app.session.eq_filters.insert(0, vec![row(false, -3.5)]);
-        app.rebuild_display_curves();
+        app.session.rebuild_display_curves();
         assert!(app
             .session
             .display_curves
@@ -5333,7 +4513,7 @@ smoothing_octaves = 3
             .all(|curve| curve.source == CurveSource::Measurement));
         // A zero gain is inert: it would not be drawn, so no child curve.
         app.session.eq_filters.insert(0, vec![row(true, 0.0)]);
-        app.rebuild_display_curves();
+        app.session.rebuild_display_curves();
         assert!(app
             .session
             .display_curves
@@ -5346,9 +4526,8 @@ smoothing_octaves = 3
         with_isolated_config(|| {
             let mut app = CrinGraphApp::default();
             app.load_measurements().unwrap();
-            let key = super::group_key(
-                &app.session.groups[app.session.active.iter().next().copied().unwrap()],
-            );
+            let key =
+                group_key(&app.session.groups[app.session.active.iter().next().copied().unwrap()]);
             let rows = vec![super::EqRow {
                 filter: squiglab_core::equalizer::Filter::new(
                     squiglab_core::equalizer::FilterType::LowShelf,
@@ -5362,16 +4541,16 @@ smoothing_octaves = 3
                 app.session.active.iter().next().copied().unwrap(),
                 rows.clone(),
             );
-            let preferences = app.preferences();
+            let preferences = app.session.preferences();
             assert_eq!(preferences.eq_filters.get(&key), Some(&rows));
 
             let mut restored = CrinGraphApp::default();
             restored.session.curves = app.session.curves.clone();
             restored.session.groups = app.session.groups.clone();
-            assert!(restored.apply_preferences(preferences));
+            assert!(restored.session.apply_preferences(preferences).is_ok());
             assert_eq!(restored.session.eq_filters.values().next(), Some(&rows));
             restored.dirty = true;
-            restored.rebuild_display_curves();
+            restored.session.rebuild_display_curves();
             assert!(restored
                 .session
                 .display_curves
@@ -5393,7 +4572,7 @@ smoothing_octaves = 3
             }],
             target: false,
         }];
-        let key = super::group_key(&app.session.groups[0]);
+        let key = group_key(&app.session.groups[0]);
         let row = |freq: f64| super::EqRow {
             filter: squiglab_core::equalizer::Filter::new(
                 squiglab_core::equalizer::FilterType::Peaking,
@@ -5414,15 +4593,29 @@ smoothing_octaves = 3
                 eq_filters: [(key.clone(), rows.clone())].into_iter().collect(),
                 ..Preferences::default()
             };
-            assert!(!app.apply_preferences(preferences), "{rows:?}");
+            assert!(
+                app.session.apply_preferences(preferences).is_err(),
+                "{rows:?}"
+            );
         }
         // A valid equalizer is accepted.
         let preferences = Preferences {
             eq_filters: [(key, vec![row(500.0)])].into_iter().collect(),
             ..Preferences::default()
         };
-        assert!(app.apply_preferences(preferences));
+        assert!(app.session.apply_preferences(preferences).is_ok());
         assert_eq!(app.session.eq_filters.get(&0).map(Vec::len), Some(1));
+    }
+
+    pub fn delta_target(name: &str, db: f32) -> DeltaTarget {
+        DeltaTarget {
+            name: name.to_owned(),
+            clone_rig: "clone".to_owned(),
+            original_rig: "original".to_owned(),
+            synthetic: true,
+            note: None,
+            points: flat_pair(db),
+        }
     }
 
     fn group_named(app: &CrinGraphApp, name: &str) -> usize {
@@ -5444,8 +4637,8 @@ smoothing_octaves = 3
             let phone = group_named(&app, "HTH67");
             app.session.active = [phone].into_iter().collect();
             app.session.active_targets.clear();
-            assert_eq!(app.eq_phone(), Some(phone));
-            assert_eq!(app.eq_target(), None);
+            assert_eq!(app.session.eq_phone(), Some(phone));
+            assert_eq!(app.session.eq_target(), None);
 
             // A second active measurement becomes the fallback target, in the
             // same display order the groups are listed in.
@@ -5461,22 +4654,22 @@ smoothing_octaves = 3
             app.session.active.insert(other);
             let mut active_in_order: Vec<_> = app.session.active.iter().copied().collect();
             active_in_order.sort_unstable();
-            assert_eq!(app.eq_target(), active_in_order.get(1).copied());
+            assert_eq!(app.session.eq_target(), active_in_order.get(1).copied());
 
             // An active target wins over the measurement fallback, and the
             // first active target wins over an unset choice.
             let target = group_named(&app, "Harman");
             app.session.active_targets = [target].into_iter().collect();
-            assert_eq!(app.eq_target(), Some(target));
+            assert_eq!(app.session.eq_target(), Some(target));
             app.session.eq_target = None;
-            assert_eq!(app.eq_target(), Some(target));
+            assert_eq!(app.session.eq_target(), Some(target));
 
             // An explicit choice is honoured while the curve stays active, and
             // forgotten when the curve is switched off.
             app.session.eq_phone = Some(other);
-            assert_eq!(app.eq_phone(), Some(other));
+            assert_eq!(app.session.eq_phone(), Some(other));
             app.session.active = [phone].into_iter().collect();
-            assert_eq!(app.eq_phone(), Some(phone));
+            assert_eq!(app.session.eq_phone(), Some(phone));
         });
     }
 
@@ -5489,8 +4682,8 @@ smoothing_octaves = 3
             let target = group_named(&app, "Harman");
             app.session.active = [phone].into_iter().collect();
             app.session.active_targets = [target].into_iter().collect();
-            let before = app.normalized_average_points(phone).unwrap();
-            let target_points = app.normalized_average_points(target).unwrap();
+            let before = app.session.normalized_average_points(phone).unwrap();
+            let target_points = app.session.normalized_average_points(target).unwrap();
             let distance = |curve: &[FRPoint]| {
                 let mut total = 0.0;
                 for (point, goal) in curve.iter().zip(&target_points) {
@@ -5500,7 +4693,7 @@ smoothing_octaves = 3
             };
             let distance_before = distance(&before);
 
-            app.run_auto_eq();
+            app.session.run_auto_eq().expect("a target is selected");
             assert!(app.eq_export_error.is_none(), "{:?}", app.eq_export_error);
             let rows = app
                 .session
@@ -5512,7 +4705,7 @@ smoothing_octaves = 3
             assert!(rows.len() <= squiglab_core::session::DEFAULT_EQ_MAX_FILTERS);
 
             // The fitted filters are what the graph and the exports use.
-            app.rebuild_display_curves();
+            app.session.rebuild_display_curves();
             let equalized: Vec<FRPoint> = app
                 .session
                 .display_curves
@@ -5529,7 +4722,7 @@ smoothing_octaves = 3
             );
             // AutoEQ strips the ports to the optimizer's ranges, which the
             // panel shows without further rounding.
-            let filters = app.enabled_filters(phone);
+            let filters = app.session.enabled_filters(phone);
             assert!(filters.iter().all(|filter| {
                 (20.0..=15_000.0).contains(&filter.freq)
                     && (0.5..=2.0).contains(&filter.q)
@@ -5560,7 +4753,10 @@ smoothing_octaves = 3
                 }],
             );
 
-            let (name, parametric) = app.parametric_export().expect("a curve is being edited");
+            let (name, parametric) = app
+                .session
+                .parametric_export()
+                .expect("a curve is being edited");
             assert_eq!(name, "HTH67 Filters.txt");
             assert!(parametric.starts_with("Preamp: "));
             assert!(parametric.contains("Filter 1: ON LSC "));
@@ -5572,7 +4768,10 @@ smoothing_octaves = 3
                 .expect("the preamp is a number");
             assert!(preamp <= 0.0, "a preamp above zero would boost");
 
-            let (name, graphic) = app.graphic_eq_export().expect("a curve is being edited");
+            let (name, graphic) = app
+                .session
+                .graphic_eq_export()
+                .expect("a curve is being edited");
             assert_eq!(name, "HTH67 Wavelet.txt");
             assert!(graphic.starts_with("GraphicEQ: 20 "));
 
@@ -5586,7 +4785,7 @@ smoothing_octaves = 3
                 .filter(|(_, &enabled)| enabled)
                 .map(|(filter, _)| *filter)
                 .collect();
-            assert_eq!(enabled, app.enabled_filters(phone));
+            assert_eq!(enabled, app.session.enabled_filters(phone));
         });
     }
 
@@ -5671,14 +4870,14 @@ smoothing_octaves = 3
             .collect();
         assert_eq!(defaults.len(), 5, "the reference shows five default bands");
         app.session.eq_filters.insert(0, defaults);
-        assert_eq!(app.enabled_filters(0).len(), 5);
+        assert_eq!(app.session.enabled_filters(0).len(), 5);
 
         // Clearing a curve is remembered: an empty list is not "never edited".
         app.session.eq_filters.insert(0, Vec::new());
-        assert!(app.enabled_filters(0).is_empty());
+        assert!(app.session.enabled_filters(0).is_empty());
         assert!(app.session.eq_filters.contains_key(&0));
         // And the curve still draws its normalized response with no EQ child.
-        app.rebuild_display_curves();
+        app.session.rebuild_display_curves();
         assert!(app
             .session
             .display_curves
@@ -5771,7 +4970,7 @@ smoothing_octaves = 3
                 .expect("the upload is listed");
             assert_eq!(group.brand, super::UPLOADED_BRAND);
             assert!(!group.target);
-            assert!(app.is_uploaded(
+            assert!(app.session.is_uploaded(
                 app.session
                     .groups
                     .iter()
@@ -5798,7 +4997,7 @@ smoothing_octaves = 3
                 .position(|group| group.name == "Shared Away")
                 .unwrap();
             app.session.active.insert(index);
-            app.rebuild_display_curves();
+            app.session.rebuild_display_curves();
             assert!(app.processing_error.is_none(), "{:?}", app.processing_error);
             // The upload is on the graph, but a link made now does not carry
             // it: the recipient has no such measurement.
@@ -5809,12 +5008,12 @@ smoothing_octaves = 3
                     .any(|curve| curve.group_index == index),
                 "the upload did not reach the graph"
             );
-            let preferences = app.preferences();
+            let preferences = app.session.preferences();
             assert!(
                 !preferences
                     .active
                     .iter()
-                    .any(|saved| saved.key == super::group_key(&app.session.groups[index])),
+                    .any(|saved| saved.key == group_key(&app.session.groups[index])),
                 "an uploaded curve leaked into the shared state"
             );
             let uri = encode_share_uri(&preferences).unwrap();
@@ -5929,7 +5128,7 @@ smoothing_octaves = 3
                 app.session.groups[index].target,
                 "an uploaded target is a target"
             );
-            assert!(app.is_uploaded(index));
+            assert!(app.session.is_uploaded(index));
             assert!(
                 app.session.active_targets.is_empty(),
                 "an upload is not selected on the user's behalf"
@@ -6060,7 +5259,7 @@ smoothing_octaves = 3
                 .groups
                 .iter()
                 .any(|group| group.name == "Harman" && group.target));
-            app.rebuild_display_curves();
+            app.session.rebuild_display_curves();
             assert!(app.session.display_curves.len() >= app.session.active.len());
             assert!(app.processing_error.is_none());
         });
@@ -6137,11 +5336,11 @@ smoothing_octaves = 3
         app.session.groups = vec![group];
         app.session.active = [0].into_iter().collect();
         app.session.channel_modes.insert(0, ChannelMode::Both);
-        app.rebuild_display_curves();
+        app.session.rebuild_display_curves();
         let both_left = app.session.display_curves[0].points[0].db;
         app.session.channel_modes.insert(0, ChannelMode::Left);
         app.dirty = true;
-        app.rebuild_display_curves();
+        app.session.rebuild_display_curves();
         assert!((app.session.display_curves[0].points[0].db - both_left).abs() < 0.001);
     }
 
@@ -6277,17 +5476,6 @@ smoothing_octaves = 3
         app
     }
 
-    fn delta_target(name: &str, db: f32) -> DeltaTarget {
-        DeltaTarget {
-            name: name.to_owned(),
-            clone_rig: "clone".to_owned(),
-            original_rig: "original".to_owned(),
-            synthetic: true,
-            note: None,
-            points: flat_pair(db),
-        }
-    }
-
     #[test]
     fn the_delta_bar_measures_a_headphone_against_the_target() {
         let app = bar_app();
@@ -6417,10 +5605,10 @@ smoothing_octaves = 3
         }];
         app.session.active = [0].into_iter().collect();
         app.session.pinned = [0].into_iter().collect();
-        app.toggle_curve(0);
+        app.session.toggle_curve(0);
         assert!(app.session.active.contains(&0));
         app.session.pinned.remove(&0);
-        app.toggle_curve(0);
+        app.session.toggle_curve(0);
         assert!(!app.session.active.contains(&0));
     }
 
@@ -6436,7 +5624,7 @@ smoothing_octaves = 3
             }],
             target: false,
         };
-        let key = super::group_key(&group);
+        let key = group_key(&group);
         let mut app = CrinGraphApp::default();
         app.session.groups = vec![group];
         app.session.color_offset = 2;
@@ -6469,13 +5657,13 @@ smoothing_octaves = 3
         let mut app = CrinGraphApp::default();
         app.session.groups = groups;
         for index in 0..9 {
-            app.toggle_curve(index);
+            app.session.toggle_curve(index);
         }
-        app.toggle_curve(9);
-        app.toggle_curve(10);
+        app.session.toggle_curve(9);
+        app.session.toggle_curve(10);
         assert_eq!(app.session.active.len(), 8);
         assert_eq!(app.session.active_targets, [9, 10].into_iter().collect());
-        assert_eq!(app.preferences().active.len(), 10);
+        assert_eq!(app.session.preferences().active.len(), 10);
     }
 
     #[test]
@@ -6506,7 +5694,7 @@ smoothing_octaves = 3
             active: vec![0, 1]
                 .into_iter()
                 .map(|index| SavedGroup {
-                    key: super::group_key(&groups[index]),
+                    key: group_key(&groups[index]),
                     variant: 0,
                     channel_mode: ChannelMode::Both,
                     hidden: false,
@@ -6514,13 +5702,13 @@ smoothing_octaves = 3
                     offset: 0.0,
                 })
                 .collect(),
-            baseline: Some(super::group_key(&groups[1])),
+            baseline: Some(group_key(&groups[1])),
             color_offset: 4,
             ..Preferences::default()
         };
         let mut app = CrinGraphApp::default();
         app.session.groups = groups;
-        assert!(app.apply_preferences(preferences));
+        assert!(app.session.apply_preferences(preferences).is_ok());
         assert_eq!(app.session.active, [0].into_iter().collect());
         assert_eq!(app.session.active_targets, [1].into_iter().collect());
         assert_eq!(app.session.baseline, Some(1));
@@ -6542,7 +5730,7 @@ smoothing_octaves = 3
             target: true,
         }];
         app.session.active_targets = [0].into_iter().collect();
-        app.rebuild_display_curves();
+        app.session.rebuild_display_curves();
         assert_eq!(app.session.display_curves.len(), 1);
         assert!(app.session.display_curves[0].target);
     }
@@ -6578,13 +5766,13 @@ smoothing_octaves = 3
     #[test]
     fn a_selected_correction_chip_says_it_is_selected() {
         let mut app = chip_app();
-        app.toggle_delta(0);
+        app.session.toggle_delta(0);
         let chips = app.delta_chips();
         assert_eq!(chips.len(), 1);
         assert!(chips[0].selected);
         // And its own state round-trips through the toggle.
         assert_eq!(app.session.active_deltas.len(), 1);
-        app.toggle_delta(0);
+        app.session.toggle_delta(0);
         assert!(!app.delta_chips()[0].selected);
     }
 
@@ -6656,12 +5844,12 @@ smoothing_octaves = 3
     fn an_exported_curve_says_what_it_is_and_which_channel() {
         let (group, variant) = export_group(false);
         assert_eq!(
-            super::curve_file_name(&group, &variant, ChannelMode::Left),
+            curve_file_name(&group, &variant, ChannelMode::Left),
             "Harman-measurement-L-Left.txt"
         );
         let (target, variant) = export_group(true);
         assert_eq!(
-            super::curve_file_name(&target, &variant, ChannelMode::Average),
+            curve_file_name(&target, &variant, ChannelMode::Average),
             "Harman-target-L-Average.txt"
         );
     }
@@ -6675,7 +5863,7 @@ smoothing_octaves = 3
             name: "A/B:C*D".to_owned(),
             ..group
         };
-        let named = super::curve_file_name(&group, &variant, ChannelMode::Both);
+        let named = curve_file_name(&group, &variant, ChannelMode::Both);
         assert!(
             !named.contains('/') && !named.contains(':'),
             "{named} is not a file name"
@@ -6685,7 +5873,7 @@ smoothing_octaves = 3
 
     #[test]
     fn an_exported_curve_is_its_own_digits_and_nothing_else() {
-        let text = super::curve_text(&[
+        let text = curve_text(&[
             FRPoint { hz: 20.0, db: 0.0 },
             FRPoint {
                 hz: 1000.5,
@@ -6712,7 +5900,7 @@ smoothing_octaves = 3
                 db: 0.125,
             },
         ];
-        let text = super::curve_text(&points);
+        let text = curve_text(&points);
         let reparsed: Vec<FRPoint> = text
             .lines()
             .filter_map(squiglab_core::data::parse_point)
@@ -6933,7 +6121,7 @@ smoothing_octaves = 3
         ];
         let state = Preferences {
             active: vec![SavedGroup {
-                key: super::group_key(&groups[1]),
+                key: group_key(&groups[1]),
                 variant: 0,
                 channel_mode: ChannelMode::Right,
                 hidden: false,
@@ -6947,7 +6135,7 @@ smoothing_octaves = 3
             label_positions: [("Model · Default · R".to_owned(), [0.25, 0.75])]
                 .into_iter()
                 .collect(),
-            curve_color_offsets: [(super::group_key(&groups[1]), 6)].into_iter().collect(),
+            curve_color_offsets: [(group_key(&groups[1]), 6)].into_iter().collect(),
             ..Preferences::default()
         };
         let mut app = CrinGraphApp::default();
@@ -6961,7 +6149,7 @@ smoothing_octaves = 3
         assert_eq!(app.session.tutorial_segment, Some(2));
         assert_eq!(app.session.y_scale, 1.5);
         assert_eq!(
-            app.session.curve_color_offsets[&super::group_key(&app.session.groups[1])],
+            app.session.curve_color_offsets[&group_key(&app.session.groups[1])],
             6
         );
         assert_eq!(

@@ -7,8 +7,10 @@
 use crate::data::{CurveInfo, FRPoint};
 use crate::equalizer;
 use crate::graph::{LabelLayout, ZoomRegion};
+use crate::processing::{self, NormParams, SmoothingParams};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
+use std::path::PathBuf;
 
 /// Where a displayed curve came from. The reference tool renders an
 /// equalizer's result as a synthetic curve added on the same path as a
@@ -259,6 +261,8 @@ pub struct Session {
     /// The preferences as they were last written, so a change that writes the
     /// same thing again is not written again.
     pub last_saved_preferences: Option<Preferences>,
+    /// Whether the curves the graph draws are out of date.
+    pub dirty: bool,
 }
 
 impl Default for Session {
@@ -305,9 +309,813 @@ impl Default for Session {
             sound_settings: [crate::audio::Settings::default(); 2],
             player: None,
             last_saved_preferences: None,
+            dirty: false,
         }
     }
 }
 
+/// How many equalizer rows a curve may carry.
+pub const MAX_EQ_ROWS: usize = 20;
+
+/// How many measurements may be compared at once.
+pub const MAX_ACTIVE_CURVES: usize = 8;
+
 /// How many filters AutoEQ may produce when nothing says otherwise.
 pub const DEFAULT_EQ_MAX_FILTERS: usize = 10;
+
+impl Session {
+    pub fn rebuild_display_curves(&mut self) -> Option<String> {
+        let mut output = Vec::with_capacity(self.active.len());
+        for &group_index in self.active.iter().chain(self.active_targets.iter()) {
+            if self.hidden.contains(&group_index) && self.baseline != Some(group_index) {
+                continue;
+            }
+            let group = &self.groups[group_index];
+            let variant_index = self
+                .variant_choices
+                .get(&group_index)
+                .copied()
+                .unwrap_or(0)
+                .min(group.variants.len().saturating_sub(1));
+            let variant = &group.variants[variant_index];
+            let channel_mode = self
+                .channel_modes
+                .get(&group_index)
+                .copied()
+                .unwrap_or_default();
+            let channels = match prepare_channels(
+                &self.curves,
+                &variant.curve_indices,
+                channel_mode,
+                self.smooth_level,
+            ) {
+                Ok(channels) => channels,
+                Err(error) => {
+                    self.display_curves.clear();
+                    self.dirty = false;
+
+                    return Some(format!("{}: {error}", group.name));
+                }
+            };
+            if channels.is_empty() {
+                continue;
+            }
+            let normalization_channels = match prepare_channels(
+                &self.curves,
+                &variant.curve_indices,
+                ChannelMode::Both,
+                self.smooth_level,
+            ) {
+                Ok(channels) => channels,
+                Err(error) => {
+                    self.display_curves.clear();
+                    self.dirty = false;
+
+                    return Some(format!("{}: {error}", group.name));
+                }
+            };
+            let channel_points: Vec<&[FRPoint]> = normalization_channels
+                .iter()
+                .map(|(_, points)| points.as_slice())
+                .collect();
+            let normalization_offset = if self.phon_normalization {
+                processing::average_curves(&channel_points).and_then(|average| {
+                    let params = NormParams::for_curve(&average)?;
+                    processing::normalize(&average, self.target_phon, &params)
+                })
+            } else {
+                processing::normalize_by_hz(&channel_points, self.target_hz)
+            };
+            match normalization_offset {
+                Ok(offset) => {
+                    let manual_offset = self.offsets.get(&group_index).copied().unwrap_or(0.0);
+                    // An equalizer curves its parent's response, so the child is
+                    // built from the parent's already-normalized points and
+                    // inherits the parent's normalization by construction.
+                    let eq_rows = self.eq_filters.get(&group_index).filter(|rows| {
+                        !group.target && rows.iter().any(|row| row.enabled && !eq_row_is_inert(row))
+                    });
+                    for (channel_name, mut points) in channels {
+                        for point in &mut points {
+                            point.db += offset + manual_offset;
+                        }
+                        let parent_label =
+                            curve_label(&group.name, &variant.name, channel_name.clone());
+                        if let Some(rows) = eq_rows {
+                            let enabled: Vec<equalizer::Filter> = rows
+                                .iter()
+                                .filter(|row| row.enabled)
+                                .map(|row| row.filter)
+                                .collect();
+                            let response: Vec<equalizer::ResponsePoint> = points
+                                .iter()
+                                .map(|point| {
+                                    equalizer::ResponsePoint::new(point.hz as f64, point.db as f64)
+                                })
+                                .collect();
+                            let equalized = equalizer::apply(
+                                &response,
+                                &enabled,
+                                equalizer::DEFAULT_SAMPLE_RATE,
+                            );
+                            // The child is pushed before its parent so it
+                            // draws on top of the curve it shapes.
+                            output.push(DisplayCurve {
+                                group_index,
+                                source: CurveSource::Equalizer,
+                                label: eq_curve_label(&parent_label),
+                                points: equalized
+                                    .into_iter()
+                                    .map(|point| FRPoint {
+                                        hz: point.hz as f32,
+                                        db: point.db as f32,
+                                    })
+                                    .collect(),
+                                target: false,
+                            });
+                        }
+                        output.push(DisplayCurve {
+                            group_index,
+                            source: CurveSource::Measurement,
+                            label: parent_label,
+                            points,
+                            target: group.target,
+                        });
+                    }
+                }
+                Err(error) => {
+                    self.display_curves.clear();
+                    self.dirty = false;
+
+                    return Some(format!("{}: {error}", group.name));
+                }
+            }
+        }
+        if let Some(baseline) = self.baseline {
+            if let Err(error) = apply_baseline(&mut output, baseline) {
+                self.display_curves.clear();
+                self.dirty = false;
+                return Some(format!("Baseline: {error}"));
+            }
+        }
+        output.retain(|curve| !self.hidden.contains(&curve.group_index));
+        self.display_curves = output;
+        self.dirty = false;
+        None
+    }
+
+    pub fn toggle_curve(&mut self, index: usize) {
+        let is_target = self.groups[index].target;
+        let is_selected = if is_target {
+            self.active_targets.contains(&index)
+        } else {
+            self.active.contains(&index)
+        };
+        if is_selected && self.pinned.contains(&index) {
+            return;
+        }
+        if is_selected {
+            if is_target {
+                self.active_targets.remove(&index);
+            } else {
+                self.active.remove(&index);
+            }
+            self.hidden.remove(&index);
+            self.pinned.remove(&index);
+            self.offsets.remove(&index);
+            self.curve_color_offsets
+                .remove(&group_key(&self.groups[index]));
+            if self.baseline == Some(index) {
+                self.baseline = None;
+            }
+        } else if is_target || self.active.len() < MAX_ACTIVE_CURVES {
+            if is_target {
+                self.active_targets.insert(index);
+            } else {
+                self.active.insert(index);
+            }
+            self.variant_choices.entry(index).or_insert(0);
+            self.channel_modes.entry(index).or_default();
+        }
+        self.dirty = true;
+    }
+
+    pub fn eq_phone(&self) -> Option<usize> {
+        self.eq_phone
+            .filter(|&index| self.active.contains(&index) && !self.groups[index].target)
+            .or_else(|| {
+                self.active
+                    .iter()
+                    .copied()
+                    .find(|&index| !self.groups[index].target)
+            })
+    }
+
+    pub fn eq_target(&self) -> Option<usize> {
+        self.eq_target
+            .filter(|&index| self.active_targets.contains(&index))
+            .or_else(|| self.active_targets.iter().copied().next())
+            .or_else(|| self.active.iter().copied().nth(1))
+    }
+
+    pub fn active_measurements(&self) -> Vec<usize> {
+        self.active
+            .iter()
+            .copied()
+            .filter(|&index| !self.groups[index].target)
+            .collect()
+    }
+
+    pub fn enabled_filters(&self, index: usize) -> Vec<equalizer::Filter> {
+        self.eq_filters
+            .get(&index)
+            .map(|rows| {
+                rows.iter()
+                    .filter(|row| row.enabled)
+                    .map(|row| row.filter)
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    pub fn normalized_average_points(
+        &self,
+        group_index: usize,
+    ) -> Result<Vec<FRPoint>, processing::ProcessingError> {
+        let group = &self.groups[group_index];
+        let variant_index = self
+            .variant_choices
+            .get(&group_index)
+            .copied()
+            .unwrap_or(0)
+            .min(group.variants.len().saturating_sub(1));
+        let variant = &group.variants[variant_index];
+        let channels = prepare_channels(
+            &self.curves,
+            &variant.curve_indices,
+            ChannelMode::Both,
+            self.smooth_level,
+        )?;
+        let channel_points: Vec<&[FRPoint]> = channels
+            .iter()
+            .map(|(_, points)| points.as_slice())
+            .collect();
+        let mut average = processing::average_curves(&channel_points)?;
+        let offset = if self.phon_normalization {
+            let params = processing::NormParams::for_curve(&average)?;
+            processing::normalize(&average, self.target_phon, &params)?
+        } else {
+            processing::normalize_by_hz(&channel_points, self.target_hz)?
+        };
+        for point in &mut average {
+            point.db += offset;
+        }
+        Ok(average)
+    }
+
+    pub fn response_points(points: &[FRPoint]) -> Vec<equalizer::ResponsePoint> {
+        points
+            .iter()
+            .map(|point| equalizer::ResponsePoint::new(point.hz as f64, point.db as f64))
+            .collect()
+    }
+
+    /// Fit filters to the selected measurement against the selected target.
+    ///
+    /// Returns the message to show, or the reason it could not be done. The
+    /// filters are installed on the session either way.
+    pub fn run_auto_eq(&mut self) -> Result<String, String> {
+        let (Some(phone), Some(target)) = (self.eq_phone(), self.eq_target()) else {
+            return Err(
+                "Auto EQ needs a measurement to fit and a target to fit against".to_owned(),
+            );
+        };
+        let source = Self::response_points(
+            &self
+                .normalized_average_points(phone)
+                .map_err(|error| format!("Auto EQ: {error}"))?,
+        );
+        let target_curve = Self::response_points(
+            &self
+                .normalized_average_points(target)
+                .map_err(|error| format!("Auto EQ target: {error}"))?,
+        );
+        let fitted = equalizer::autoeq(&source, &target_curve, self.eq_max_filters, self.eq_range);
+        let message = format!(
+            "Auto EQ fitted {} filters against {}.",
+            fitted.len(),
+            self.groups[target].name
+        );
+        self.eq_filters.insert(
+            phone,
+            fitted
+                .into_iter()
+                .map(|filter| EqRow {
+                    filter,
+                    enabled: true,
+                })
+                .collect(),
+        );
+        self.dirty = true;
+        Ok(message)
+    }
+
+    pub fn parametric_export(&self) -> Option<(String, String)> {
+        let phone = self.eq_phone()?;
+        let source = self
+            .normalized_average_points(phone)
+            .ok()
+            .map(|points| Self::response_points(&points))?;
+        let filters = self.enabled_filters(phone);
+        let equalized = equalizer::apply(&source, &filters, equalizer::DEFAULT_SAMPLE_RATE);
+        let preamp = equalizer::calc_preamp(&source, &equalized);
+        Some((
+            format!("{} Filters.txt", self.groups[phone].name),
+            equalizer::export_parametric(&filters, preamp),
+        ))
+    }
+
+    pub fn graphic_eq_export(&self) -> Option<(String, String)> {
+        let phone = self.eq_phone()?;
+        Some((
+            format!("{} Wavelet.txt", self.groups[phone].name),
+            equalizer::export_graphic_eq(
+                &self.enabled_filters(phone),
+                equalizer::DEFAULT_SAMPLE_RATE,
+            ),
+        ))
+    }
+
+    pub fn preferences(&self) -> Preferences {
+        Preferences {
+            active: self
+                .active
+                .iter()
+                .chain(self.active_targets.iter())
+                // An uploaded curve is excluded: a shared link is a claim about
+                // the reference database, and a measurement from another rig is
+                // not part of it, so a link that carried one would restore a
+                // curve the recipient does not have and cannot check.
+                .filter(|&&index| !self.is_uploaded(index))
+                .map(|&index| SavedGroup {
+                    key: group_key(&self.groups[index]),
+                    variant: self.variant_choices.get(&index).copied().unwrap_or(0),
+                    channel_mode: self.channel_modes.get(&index).copied().unwrap_or_default(),
+                    hidden: self.hidden.contains(&index),
+                    pinned: self.pinned.contains(&index),
+                    offset: self.offsets.get(&index).copied().unwrap_or(0.0),
+                })
+                .collect(),
+            baseline: self.baseline.map(|index| group_key(&self.groups[index])),
+            zoom: self.zoom,
+            phon_normalization: self.phon_normalization,
+            target_phon: self.target_phon,
+            target_hz: self.target_hz,
+            smooth_level: self.smooth_level,
+            show_labels: self.show_labels,
+            inspect_mode: self.inspect_mode,
+            dark_mode: self.dark_mode,
+            color_offset: self.color_offset,
+            show_measurements: self.show_measurements,
+            label_positions: self.label_positions.clone(),
+            label_layout: self.label_layout,
+            tutorial_segment: self.tutorial_segment,
+            y_scale: self.y_scale,
+            curve_color_offsets: self.curve_color_offsets.clone(),
+            eq_filters: self
+                .eq_filters
+                .iter()
+                .map(|(&index, rows)| (group_key(&self.groups[index]), rows.clone()))
+                .collect(),
+            active_deltas: self
+                .active_deltas
+                .iter()
+                .map(|&index| self.delta_targets[index].name.clone())
+                .collect(),
+            show_delta: self.show_delta,
+        }
+    }
+
+    pub fn apply_preferences(&mut self, preferences: Preferences) -> Result<bool, String> {
+        if !preferences.target_phon.is_finite()
+            || !(0.0..=100.0).contains(&preferences.target_phon)
+            || !preferences.target_hz.is_finite()
+            || !(20.0..=20000.0).contains(&preferences.target_hz)
+            || preferences.smooth_level > 12
+            || !preferences.y_scale.is_finite()
+            || !(0.35..=4.0).contains(&preferences.y_scale)
+            || preferences
+                .active
+                .iter()
+                .filter(|saved| {
+                    self.groups
+                        .iter()
+                        .any(|group| !group.target && group_key(group) == saved.key)
+                })
+                .count()
+                > MAX_ACTIVE_CURVES
+            || preferences
+                .active
+                .iter()
+                .any(|group| !group.offset.is_finite())
+            || preferences.label_positions.values().any(|position| {
+                position
+                    .iter()
+                    .any(|value| !value.is_finite() || !(0.0..=1.0).contains(value))
+            })
+            || !preferences
+                .eq_filters
+                .values()
+                .all(|rows| eq_rows_are_valid(rows))
+        {
+            return Err("Unable to load preferences: invalid settings values".into());
+        }
+        self.active.clear();
+        self.active_targets.clear();
+        self.active_deltas.clear();
+        for name in &preferences.active_deltas {
+            if let Some(index) = self
+                .delta_targets
+                .iter()
+                .position(|target| &target.name == name)
+            {
+                self.active_deltas.insert(index);
+            }
+        }
+        self.show_delta = preferences.show_delta;
+        self.hidden.clear();
+        self.pinned.clear();
+        self.offsets.clear();
+        self.channel_modes.clear();
+        self.variant_choices.clear();
+        self.baseline = None;
+        self.label_positions = preferences.label_positions.clone();
+        self.label_layout = preferences.label_layout;
+        self.tutorial_segment = preferences.tutorial_segment;
+        self.y_scale = preferences.y_scale;
+        self.curve_color_offsets = preferences.curve_color_offsets.clone();
+        self.eq_filters.clear();
+        for (index, group) in self.groups.iter().enumerate() {
+            if let Some(rows) = preferences.eq_filters.get(&group_key(group)) {
+                if eq_rows_are_valid(rows) {
+                    self.eq_filters.insert(index, rows.clone());
+                }
+            }
+        }
+        for (index, group) in self.groups.iter().enumerate() {
+            if let Some(saved) = preferences
+                .active
+                .iter()
+                .find(|saved| saved.key == group_key(group))
+            {
+                if group.target {
+                    self.active_targets.insert(index);
+                } else {
+                    self.active.insert(index);
+                }
+                self.variant_choices.insert(
+                    index,
+                    saved.variant.min(group.variants.len().saturating_sub(1)),
+                );
+                self.channel_modes.insert(index, saved.channel_mode);
+                if saved.hidden {
+                    self.hidden.insert(index);
+                }
+                if saved.pinned {
+                    self.pinned.insert(index);
+                }
+                if saved.offset != 0.0 {
+                    self.offsets.insert(index, saved.offset);
+                }
+            }
+        }
+        self.baseline = preferences.baseline.and_then(|key| {
+            self.groups.iter().enumerate().position(|(index, group)| {
+                (self.active.contains(&index) || self.active_targets.contains(&index))
+                    && group_key(group) == key
+            })
+        });
+        self.zoom = preferences.zoom;
+        self.phon_normalization = preferences.phon_normalization;
+        self.target_phon = preferences.target_phon;
+        self.target_hz = preferences.target_hz;
+        self.smooth_level = preferences.smooth_level;
+        self.show_labels = preferences.show_labels;
+        self.inspect_mode = preferences.inspect_mode;
+        self.dark_mode = preferences.dark_mode;
+        self.color_offset = preferences.color_offset;
+        self.show_measurements = preferences.show_measurements;
+        Ok(true)
+    }
+
+    pub fn toggle_delta(&mut self, index: usize) {
+        if self.active_deltas.contains(&index) {
+            self.active_deltas.remove(&index);
+        } else {
+            self.active_deltas.insert(index);
+        }
+        self.dirty = true;
+    }
+
+    pub fn is_uploaded(&self, index: usize) -> bool {
+        let group = &self.groups[index];
+        group.brand == UPLOADED_BRAND || self.uploaded_names.contains(&group.name)
+    }
+
+    pub fn matching_models(
+        &self,
+        _counts: &[(String, usize)],
+        brand_filter: Option<&str>,
+        search: &str,
+    ) -> Vec<(usize, String)> {
+        let mut models: Vec<(usize, String)> = Vec::new();
+        for (index, group) in self.groups.iter().enumerate() {
+            if group.target {
+                continue; // Reference targets live in the target strip, not here.
+            }
+            let brand = brand_name(group);
+            let narrowed = brand_filter.is_none_or(|chosen| chosen == brand);
+            if narrowed && matches_search(&format!("{brand} {}", group.name), search) {
+                models.push((index, group.name.clone()));
+            }
+        }
+        models
+    }
+
+    pub fn export_curve_text(&mut self, group_index: usize) -> Result<String, String> {
+        let group = &self.groups[group_index];
+        let variant_index = self
+            .variant_choices
+            .get(&group_index)
+            .copied()
+            .unwrap_or(0)
+            .min(group.variants.len().saturating_sub(1));
+        let variant = &group.variants[variant_index];
+        let channel_mode = self
+            .channel_modes
+            .get(&group_index)
+            .copied()
+            .unwrap_or_default();
+        // A smoothing level of zero: no smoothing, nothing derived.
+        let channels = match prepare_channels(&self.curves, &variant.curve_indices, channel_mode, 0)
+        {
+            Ok(channels) => channels,
+            Err(error) => {
+                return Err(format!("Unable to export {}: {error}", group.name));
+            }
+        };
+        let Some((_, points)) = channels
+            .into_iter()
+            .find(|(name, _)| channel_mode.accepts(name.as_str()))
+        else {
+            return Err(format!(
+                "{} has no {} data to export.",
+                group.name,
+                channel_mode.label()
+            ));
+        };
+        let path = download_dir().join(curve_file_name(group, variant, channel_mode));
+        let body = curve_text(&points);
+        match std::fs::write(&path, body) {
+            Ok(()) => Ok(format!("{} exported to {}", group.name, path.display())),
+            Err(error) => Err(format!("Unable to export {path:?}: {error}")),
+        }
+    }
+}
+
+/// The brand an uploaded measurement is filed under.
+pub const UPLOADED_BRAND: &str = "Uploaded";
+
+pub fn prepare_channels(
+    curves: &[CurveInfo],
+    indices: &[usize],
+    mode: ChannelMode,
+    smooth_level: usize,
+) -> Result<Vec<(String, Vec<FRPoint>)>, processing::ProcessingError> {
+    let mut left = Vec::new();
+    let mut right = Vec::new();
+    let mut average = Vec::new();
+    let mut other = Vec::new();
+    for &index in indices {
+        let curve = &curves[index];
+        let prepared = prepare_curve(&curve.points, smooth_level)?;
+        let variant = curve.variant.as_str();
+        if variant.starts_with('L') {
+            left.push(prepared);
+        } else if variant.starts_with('R') {
+            right.push(prepared);
+        } else if variant == "Avg" {
+            average.push(prepared);
+        } else {
+            other.push(prepared);
+        }
+    }
+    let combine =
+        |channels: Vec<Vec<FRPoint>>| -> Result<Option<Vec<FRPoint>>, processing::ProcessingError> {
+            if channels.is_empty() {
+                Ok(None)
+            } else if channels.len() == 1 {
+                Ok(channels.into_iter().next())
+            } else {
+                let refs: Vec<&[FRPoint]> = channels.iter().map(Vec::as_slice).collect();
+                processing::average_curves(&refs).map(Some)
+            }
+        };
+    let mut left = combine(left)?;
+    let mut right = combine(right)?;
+    let mut average = combine(average)?;
+    let mut other = combine(other)?;
+    let selected = match mode {
+        ChannelMode::Left => left
+            .take()
+            .map(|curve| vec![("L".to_owned(), curve)])
+            .or_else(|| right.take().map(|curve| vec![("R".to_owned(), curve)]))
+            .or_else(|| average.take().map(|curve| vec![("Avg".to_owned(), curve)]))
+            .or_else(|| other.take().map(|curve| vec![(String::new(), curve)])),
+        ChannelMode::Right => right
+            .take()
+            .map(|curve| vec![("R".to_owned(), curve)])
+            .or_else(|| left.take().map(|curve| vec![("L".to_owned(), curve)]))
+            .or_else(|| average.take().map(|curve| vec![("Avg".to_owned(), curve)]))
+            .or_else(|| other.take().map(|curve| vec![(String::new(), curve)])),
+        ChannelMode::Both => match (left.take(), right.take()) {
+            (Some(left), Some(right)) => {
+                Some(vec![("L".to_owned(), left), ("R".to_owned(), right)])
+            }
+            (Some(left), None) => Some(vec![("L".to_owned(), left)]),
+            (None, Some(right)) => Some(vec![("R".to_owned(), right)]),
+            (None, None) => average
+                .take()
+                .map(|curve| vec![("Avg".to_owned(), curve)])
+                .or_else(|| other.take().map(|curve| vec![(String::new(), curve)])),
+        },
+        ChannelMode::Average => match (left.take(), right.take()) {
+            (Some(left), Some(right)) => Some(vec![(
+                "Avg".to_owned(),
+                processing::average_curves(&[&left, &right])?,
+            )]),
+            (None, None) => average
+                .take()
+                .map(|curve| vec![("Avg".to_owned(), curve)])
+                .or_else(|| other.take().map(|curve| vec![(String::new(), curve)])),
+            (Some(left), None) => Some(vec![("L".to_owned(), left)]),
+            (None, Some(right)) => Some(vec![("R".to_owned(), right)]),
+        },
+    };
+    Ok(selected.unwrap_or_default())
+}
+pub fn group_key(group: &MeasurementGroup) -> String {
+    format!("{}\u{1f}{}", group.brand, group.name)
+}
+
+pub fn eq_row_is_inert(row: &EqRow) -> bool {
+    let filter = row.filter;
+    filter.freq == 0.0 || filter.q == 0.0 || filter.gain == 0.0
+}
+pub fn curve_label(model: &str, variant: &str, channel_name: String) -> String {
+    let name = if variant.is_empty() || variant == model {
+        model.to_owned()
+    } else {
+        variant.to_owned()
+    };
+    if channel_name.is_empty() {
+        name
+    } else {
+        format!("{name} ({channel_name})")
+    }
+}
+pub fn eq_curve_label(parent_label: &str) -> String {
+    format!("{parent_label} EQ")
+}
+pub fn eq_rows_are_valid(rows: &[EqRow]) -> bool {
+    !rows.is_empty()
+        && rows.len() <= MAX_EQ_ROWS
+        && rows.iter().all(|row| {
+            let (filter, q) = (row.filter, row.filter.q);
+            filter.freq.is_finite()
+                && (1.0..=24_000.0).contains(&filter.freq)
+                && q.is_finite()
+                && q > 0.0
+                && filter.gain.is_finite()
+                && (-40.0..=40.0).contains(&filter.gain)
+        })
+}
+
+pub fn apply_baseline(curves: &mut [DisplayCurve], baseline_group: usize) -> anyhow::Result<()> {
+    let baseline_channels: Vec<&[FRPoint]> = curves
+        .iter()
+        .filter(|curve| curve.group_index == baseline_group)
+        .map(|curve| curve.points.as_slice())
+        .collect();
+    if baseline_channels.is_empty() {
+        anyhow::bail!("the selected baseline has no active curve");
+    }
+    let baseline = processing::average_curves(&baseline_channels)?;
+    for curve in curves {
+        for point in &mut curve.points {
+            point.db -= processing::interpolate_db(&baseline, point.hz)
+                .ok_or_else(|| anyhow::anyhow!("unable to sample the baseline curve"))?;
+        }
+    }
+    Ok(())
+}
+
+pub fn brand_name(group: &MeasurementGroup) -> String {
+    group
+        .brand_suffix
+        .as_ref()
+        .map(|suffix| format!("{} {suffix}", group.brand))
+        .unwrap_or_else(|| group.brand.clone())
+}
+pub fn matches_search(candidate: &str, query: &str) -> bool {
+    let candidate = candidate.to_lowercase();
+    let candidate_words = candidate.split_whitespace().collect::<Vec<_>>();
+    query.to_lowercase().split_whitespace().all(|query_word| {
+        candidate.contains(query_word)
+            || candidate_words
+                .iter()
+                .any(|word| fuzzy_word_match(word, query_word))
+    })
+}
+pub fn fuzzy_word_match(candidate: &str, query: &str) -> bool {
+    let query_chars = query.chars().collect::<Vec<_>>();
+    let candidate_chars = candidate.chars().collect::<Vec<_>>();
+    if query_chars.len() < 3 {
+        return false;
+    }
+
+    let threshold = (query_chars.len() / 4).clamp(1, 2);
+    if candidate_chars.len().abs_diff(query_chars.len()) > threshold {
+        return false;
+    }
+
+    let mut previous = (0..=candidate_chars.len()).collect::<Vec<_>>();
+    let mut current = vec![0; candidate_chars.len() + 1];
+    for (query_index, query_char) in query_chars.iter().enumerate() {
+        current[0] = query_index + 1;
+        for (candidate_index, candidate_char) in candidate_chars.iter().enumerate() {
+            current[candidate_index + 1] = (previous[candidate_index + 1] + 1)
+                .min(current[candidate_index] + 1)
+                .min(previous[candidate_index] + usize::from(query_char != candidate_char));
+        }
+        std::mem::swap(&mut previous, &mut current);
+    }
+
+    previous[candidate_chars.len()] <= threshold
+}
+
+pub fn download_dir() -> PathBuf {
+    dirs::download_dir().unwrap_or_else(std::env::temp_dir)
+}
+pub fn curve_file_name(
+    group: &MeasurementGroup,
+    variant: &MeasurementVariant,
+    mode: ChannelMode,
+) -> String {
+    let safe = |text: &str| {
+        text.chars()
+            .map(|c| match c {
+                'a'..='z' | 'A'..='Z' | '0'..='9' | '-' | '_' | '.' => c,
+                _ => '_',
+            })
+            .collect::<String>()
+    };
+    // A target is the reference the measurements are read against, so it says
+    // so: an exported target sitting in a downloads folder with no marker is
+    // easy to mistake for a measurement of something.
+    let kind = if group.target {
+        "target"
+    } else {
+        "measurement"
+    };
+    let mut name = format!(
+        "{}-{}-{}-{}",
+        safe(&group.name),
+        kind,
+        safe(&variant.name),
+        mode.label()
+    );
+    // A name that is nothing but separators would collide with every other.
+    if name.chars().all(|c| c == '-') {
+        name = format!("curve-{kind}-{}", mode.label());
+    }
+    format!("{name}.txt")
+}
+pub fn curve_text(points: &[FRPoint]) -> String {
+    points
+        .iter()
+        .map(|point| format!("{:.6},{:.6}\n", point.hz, point.db))
+        .collect()
+}
+
+pub fn prepare_curve(
+    curve: &[FRPoint],
+    smooth_level: usize,
+) -> Result<Vec<FRPoint>, processing::ProcessingError> {
+    if smooth_level == 0 {
+        return Ok(curve.to_vec());
+    }
+    let frequencies: Vec<f32> = curve.iter().map(|point| point.hz).collect();
+    let params = SmoothingParams::new(&frequencies, smooth_level)?;
+    processing::smooth(curve, &params)
+}
