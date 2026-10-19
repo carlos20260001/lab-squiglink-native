@@ -69,7 +69,7 @@ else
     cargo build --release --target "$TARGET"
 fi
 
-BINARY="$SCRIPT_DIR/target/$TARGET/release/squiglab"
+BINARY="$SCRIPT_DIR/target/$TARGET/release/squiglab-legacy"
 if [ "$PLATFORM" = windows ]; then
     BINARY="$BINARY.exe"
 fi

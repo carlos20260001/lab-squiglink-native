@@ -2,7 +2,7 @@
 name = "squiglab-legacy"
 version = "0.1.0"
 edition = "2021"
-default-run = "squiglab"
+default-run = "squiglab-legacy"
 
 [lib]
 name = "squiglab_legacy"
@@ -33,7 +33,7 @@ name = "app-bundle"
 path = "tools/app_bundle.rs"
 
 [[bin]]
-name = "squiglab"
+name = "squiglab-legacy"
 path = "src/main.rs"
 
 [build-dependencies]

@@ -1,5 +1,4 @@
 use egui::{Color32, Context, RichText, Ui};
-use serde::{Deserialize, Serialize};
 use squiglab_core::audio::Player;
 use squiglab_core::color::target_color;
 use squiglab_core::data::{self, CurveInfo, FRPoint, PhoneBook};
@@ -23,7 +22,6 @@ use std::path::{Path, PathBuf};
 const WATERMARK_TEXT: &str = squiglab_core::product::APP_NAME;
 
 const MAX_ACTIVE_CURVES: usize = 8;
-const MAX_SMOOTH_LEVEL: usize = 12;
 /// Most filters one curve's equalizer can hold. The reference panel shows five
 /// rows and AutoEQ produces at most a handful more; the bound keeps a corrupt
 /// preferences file from growing without limit.
@@ -146,12 +144,12 @@ fn next_smoothing_level(current: usize) -> usize {
         1 => 2,
         2 => 5,
         5 => 10,
-        10 => MAX_SMOOTH_LEVEL,
+        10 => squiglab_core::config::MAX_SMOOTH_LEVEL,
         _ => 0,
     }
 }
 
-const _: () = assert!(MAX_SMOOTH_LEVEL == 12);
+const _: () = assert!(squiglab_core::config::MAX_SMOOTH_LEVEL == 12);
 
 /// How tall the manager wants to be for a selection, and the smallest it is
 /// allowed to be, at a given viewport width and delta-bar height.
@@ -183,49 +181,6 @@ fn manager_heights(width: f32, curve_count: usize) -> (f32, f32) {
     (content.clamp(min_height, MANAGER_MAX_HEIGHT), min_height)
 }
 const UPLOADED_BRAND: &str = "Uploaded";
-const CONFIG_DIRECTORY_NAME: &str = "squiglab";
-const SHARE_URI_PREFIX: &str = "squiglab://state/v1/";
-/// Share links issued before the rename. Still decoded so links people already
-/// shared keep working.
-const LEGACY_SHARE_URI_PREFIX: &str = "cringraph://state/v1/";
-const MAX_SHARE_URI_LENGTH: usize = 65_536;
-
-#[derive(Clone, Debug, Deserialize, Default, PartialEq, Eq, Serialize)]
-#[serde(default, deny_unknown_fields)]
-struct AppConfig {
-    measurements: MeasurementConfig,
-    defaults: DefaultConfig,
-    /// Optional provenance line drawn in the corner of the graph, e.g. the
-    /// rig the measurements were taken on. The web tool labels every graph this
-    /// way; here it is opt-in because the native app has no rig metadata of its
-    /// own to fall back on.
-    rig_description: Option<String>,
-}
-
-#[derive(Clone, Debug, Deserialize, Default, PartialEq, Eq, Serialize)]
-#[serde(default, deny_unknown_fields)]
-struct MeasurementConfig {
-    database_dir: Option<PathBuf>,
-    headphone_database_dir: Option<PathBuf>,
-    /// Where rig-compensation delta targets live. Kept out of `database_dir`
-    /// on purpose: the calibration curves are not headphones, and the database
-    /// loader would list them as phantom measurements.
-    delta_dir: Option<PathBuf>,
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
-#[serde(default, deny_unknown_fields)]
-struct DefaultConfig {
-    smoothing_octaves: usize,
-}
-
-impl Default for DefaultConfig {
-    fn default() -> Self {
-        Self {
-            smoothing_octaves: 5,
-        }
-    }
-}
 
 struct TutorialSegment {
     title: &'static str,
@@ -578,13 +533,13 @@ impl CrinGraphApp {
     }
 
     fn load_measurements(&mut self) -> anyhow::Result<()> {
-        let config_path = app_config_path()?;
-        let config = initialize_app_config_from(&config_path)?;
-        validate_app_config(&config)?;
+        let config_path = squiglab_core::config::app_config_path()?;
+        let config = squiglab_core::config::initialize_app_config_from(&config_path)?;
+        squiglab_core::config::validate_app_config(&config)?;
         self.session.smooth_level = config.defaults.smoothing_octaves;
         self.rig_description = config.rig_description.clone();
 
-        let database_dir = resolve_measurement_dir(
+        let database_dir = squiglab_core::config::resolve_measurement_dir(
             config.measurements.database_dir.as_deref(),
             &repository_root().join("data"),
             &config_path,
@@ -596,7 +551,7 @@ impl CrinGraphApp {
             &database_dir.join("phone_book.json"),
         )?];
 
-        let headphone_database_dir = resolve_measurement_dir(
+        let headphone_database_dir = squiglab_core::config::resolve_measurement_dir(
             config.measurements.headphone_database_dir.as_deref(),
             &repository_root().join("data_hp"),
             &config_path,
@@ -620,7 +575,7 @@ impl CrinGraphApp {
         // their own section rather than failing the whole load: losing a rig
         // correction should not cost you the measurements as well.
         self.session.delta_error = None;
-        let delta_dir = resolve_measurement_dir(
+        let delta_dir = squiglab_core::config::resolve_measurement_dir(
             config.measurements.delta_dir.as_deref(),
             &repository_root().join("data_deltas"),
             &config_path,
@@ -651,7 +606,7 @@ impl CrinGraphApp {
             );
         }
         let restored_preferences = if let Some(shared_state) = self.shared_state.take() {
-            match decode_share_uri(&shared_state).and_then(|preferences| {
+            match squiglab_core::config::decode_share_uri(&shared_state).and_then(|preferences| {
                 self.session
                     .apply_preferences(preferences)
                     .map(|_| ())
@@ -664,7 +619,7 @@ impl CrinGraphApp {
                 }
             }
         } else {
-            match read_preferences() {
+            match squiglab_core::config::read_preferences() {
                 Ok(Some(preferences)) => match self.session.apply_preferences(preferences) {
                     Ok(changed) => changed,
                     Err(error) => {
@@ -1274,7 +1229,7 @@ impl CrinGraphApp {
             .show(ctx, |ui| {
                 ui.label("Copy this versioned state URI, or paste one to restore a graph.");
                 if ui.button("Copy current state URI").clicked() {
-                    match encode_share_uri(&self.session.preferences()) {
+                    match squiglab_core::config::encode_share_uri(&self.session.preferences()) {
                         Ok(uri) => {
                             ctx.copy_text(uri.clone());
                             self.share_input = uri;
@@ -1368,7 +1323,7 @@ impl CrinGraphApp {
     }
 
     fn restore_shared_state(&mut self, uri: &str) -> anyhow::Result<()> {
-        let preferences = decode_share_uri(uri)?;
+        let preferences = squiglab_core::config::decode_share_uri(uri)?;
         self.session
             .apply_preferences(preferences)
             .map_err(|error| anyhow::anyhow!(error))?;
@@ -3897,103 +3852,9 @@ fn group_key(group: &MeasurementGroup) -> String {
 /// scratch directory. Without this, tests that load measurements read whichever
 /// preferences file happens to exist on the machine running them, so their
 /// result depends on the developer's own app state rather than the test.
-fn config_root() -> anyhow::Result<PathBuf> {
-    if let Some(override_directory) = std::env::var_os("SQUIGLAB_CONFIG_DIR") {
-        if !override_directory.is_empty() {
-            return Ok(PathBuf::from(override_directory));
-        }
-    }
-    dirs::config_dir()
-        .ok_or_else(|| anyhow::anyhow!("the operating system did not provide a config directory"))
-}
-
-fn preferences_path() -> anyhow::Result<PathBuf> {
-    let config_dir = config_root()?;
-    Ok(config_dir
-        .join(CONFIG_DIRECTORY_NAME)
-        .join("preferences.json"))
-}
-
-fn app_config_path() -> anyhow::Result<PathBuf> {
-    let config_dir = config_root()?;
-    Ok(config_dir.join(CONFIG_DIRECTORY_NAME).join("config.toml"))
-}
-
 /// Config directories used before the rename, newest first. Preferences are
 /// only read from these; writes always go to the current location, so the first
 /// successful launch migrates a returning user's settings forward.
-const LEGACY_CONFIG_DIRECTORIES: [&str; 2] = ["cringraph", "CrinGraph-native"];
-
-fn legacy_preferences_paths() -> anyhow::Result<Vec<PathBuf>> {
-    let config_dir = config_root()?;
-    Ok(LEGACY_CONFIG_DIRECTORIES
-        .iter()
-        .map(|directory| config_dir.join(directory).join("preferences.json"))
-        .collect())
-}
-
-fn read_app_config_from(path: &Path) -> anyhow::Result<AppConfig> {
-    match std::fs::read_to_string(path) {
-        Ok(contents) => Ok(toml::from_str(&contents)?),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(AppConfig::default()),
-        Err(error) => Err(error.into()),
-    }
-}
-
-fn initialize_app_config_from(path: &Path) -> anyhow::Result<AppConfig> {
-    match std::fs::read_to_string(path) {
-        Ok(contents) => Ok(toml::from_str(&contents)?),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-            let config = default_app_config()?;
-            let directory = path
-                .parent()
-                .ok_or_else(|| anyhow::anyhow!("configuration path has no parent directory"))?;
-            std::fs::create_dir_all(directory)?;
-            let contents = toml::to_string_pretty(&config)?;
-            let mut file = match std::fs::OpenOptions::new()
-                .write(true)
-                .create_new(true)
-                .open(path)
-            {
-                Ok(file) => file,
-                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
-                    return read_app_config_from(path);
-                }
-                Err(error) => return Err(error.into()),
-            };
-            use std::io::Write;
-            file.write_all(contents.as_bytes())?;
-            file.sync_all()?;
-            Ok(config)
-        }
-        Err(error) => Err(error.into()),
-    }
-}
-
-fn default_app_config() -> anyhow::Result<AppConfig> {
-    let working_directory = std::env::current_dir()?;
-    let headphone_database_dir = working_directory.join("data_hp");
-    let delta_dir = working_directory.join("data_deltas");
-    Ok(AppConfig {
-        measurements: MeasurementConfig {
-            database_dir: Some(working_directory.join("data")),
-            headphone_database_dir: headphone_database_dir
-                .is_dir()
-                .then_some(headphone_database_dir),
-            delta_dir: delta_dir.is_dir().then_some(delta_dir),
-        },
-        defaults: DefaultConfig::default(),
-        rig_description: None,
-    })
-}
-
-fn validate_app_config(config: &AppConfig) -> anyhow::Result<()> {
-    if config.defaults.smoothing_octaves > MAX_SMOOTH_LEVEL {
-        anyhow::bail!("configured smoothing_octaves must be between 0 and {MAX_SMOOTH_LEVEL}");
-    }
-    Ok(())
-}
-
 /// The repository's root: the data and the example configurations live there,
 /// whatever directory the program is run from.
 fn repository_root() -> PathBuf {
@@ -4004,101 +3865,11 @@ fn repository_root() -> PathBuf {
         .to_path_buf()
 }
 
-fn resolve_measurement_dir(
-    configured: Option<&Path>,
-    fallback: &Path,
-    config_path: &Path,
-) -> PathBuf {
-    let Some(path) = configured else {
-        return fallback.to_path_buf();
-    };
-    if path.is_absolute() {
-        path.to_path_buf()
-    } else {
-        config_path
-            .parent()
-            .unwrap_or_else(|| Path::new("."))
-            .join(path)
-    }
-}
-
-fn read_preferences() -> anyhow::Result<Option<Preferences>> {
-    if let Some(preferences) = read_preferences_from(&preferences_path()?)? {
-        return Ok(Some(preferences));
-    }
-    for path in legacy_preferences_paths()? {
-        if let Some(preferences) = read_preferences_from(&path)? {
-            return Ok(Some(preferences));
-        }
-    }
-    Ok(None)
-}
-
-fn read_preferences_from(path: &Path) -> anyhow::Result<Option<Preferences>> {
-    match std::fs::read(path) {
-        Ok(contents) => Ok(Some(serde_json::from_slice(&contents)?)),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
-        Err(error) => Err(error.into()),
-    }
-}
-
 fn write_preferences(preferences: &Preferences) -> anyhow::Result<()> {
-    write_preferences_to(&preferences_path()?, preferences)
-}
-
-fn write_preferences_to(path: &Path, preferences: &Preferences) -> anyhow::Result<()> {
-    let directory = path
-        .parent()
-        .ok_or_else(|| anyhow::anyhow!("preferences path has no parent directory"))?;
-    std::fs::create_dir_all(directory)?;
-    let temporary_path = path.with_extension("json.tmp");
-    let serialized = serde_json::to_vec_pretty(preferences)?;
-    let mut file = std::fs::File::create(&temporary_path)?;
-    use std::io::Write;
-    file.write_all(&serialized)?;
-    file.sync_all()?;
-    std::fs::rename(temporary_path, path)?;
-    Ok(())
-}
-
-fn encode_share_uri(preferences: &Preferences) -> anyhow::Result<String> {
-    let serialized = serde_json::to_vec(preferences)?;
-    let mut uri = String::with_capacity(SHARE_URI_PREFIX.len() + serialized.len() * 2);
-    uri.push_str(SHARE_URI_PREFIX);
-    for byte in serialized {
-        use std::fmt::Write;
-        write!(uri, "{byte:02x}")?;
-    }
-    if uri.len() > MAX_SHARE_URI_LENGTH {
-        anyhow::bail!("shared state exceeds the maximum URI length");
-    }
-    Ok(uri)
-}
-
-fn decode_share_uri(uri: &str) -> anyhow::Result<Preferences> {
-    let payload = uri
-        .strip_prefix(SHARE_URI_PREFIX)
-        .or_else(|| uri.strip_prefix(LEGACY_SHARE_URI_PREFIX))
-        .ok_or_else(|| anyhow::anyhow!("unsupported share URI"))?;
-    if payload.is_empty() || payload.len() % 2 != 0 || uri.len() > MAX_SHARE_URI_LENGTH {
-        anyhow::bail!("share URI payload has an invalid length");
-    }
-    let bytes = payload
-        .as_bytes()
-        .as_chunks::<2>()
-        .0
-        .iter()
-        .map(|pair| {
-            let high = (pair[0] as char)
-                .to_digit(16)
-                .ok_or_else(|| anyhow::anyhow!("share URI contains a non-hex character"))?;
-            let low = (pair[1] as char)
-                .to_digit(16)
-                .ok_or_else(|| anyhow::anyhow!("share URI contains a non-hex character"))?;
-            Ok(((high << 4) | low) as u8)
-        })
-        .collect::<anyhow::Result<Vec<_>>>()?;
-    Ok(serde_json::from_slice(&bytes)?)
+    squiglab_core::config::write_preferences_to(
+        &squiglab_core::config::preferences_path()?,
+        preferences,
+    )
 }
 
 fn save_screenshot(image: &egui::ColorImage) -> anyhow::Result<PathBuf> {
@@ -4194,14 +3965,12 @@ fn group_has_imbalance(curves: &[CurveInfo], indices: &[usize]) -> bool {
 #[cfg(test)]
 mod tests {
     use super::{
-        build_groups, decode_share_uri, encode_share_uri, group_has_imbalance,
-        initialize_app_config_from, manager_heights, read_app_config_from, read_preferences_from,
-        resolve_measurement_dir, target_category, validate_app_config, write_preferences_to,
-        AppConfig, ChannelMode, CrinGraphApp, CurveSource, DisplayCurve, MeasurementGroup,
-        MeasurementVariant, Preferences, MAX_EQ_ROWS, MAX_SHARE_URI_LENGTH, MAX_SMOOTH_LEVEL,
-        TUTORIAL_SEGMENTS,
+        build_groups, group_has_imbalance, manager_heights, target_category, ChannelMode,
+        CrinGraphApp, CurveSource, DisplayCurve, MeasurementGroup, MeasurementVariant, Preferences,
+        MAX_EQ_ROWS, TUTORIAL_SEGMENTS,
     };
-    use crate::app::{app_config_path, repository_root, DefaultConfig, MeasurementConfig};
+    use crate::app::repository_root;
+    use squiglab_core::config::{AppConfig, MeasurementConfig};
     use squiglab_core::data::{CurveInfo, FRPoint};
     use squiglab_core::delta::DeltaTarget;
     use squiglab_core::session::{
@@ -4224,14 +3993,15 @@ mod tests {
     /// runs from the crate's own directory has to say where the repository's
     /// data is.
     fn load_repository_measurements(app: &mut CrinGraphApp) {
-        let config_path = app_config_path().expect("a scratch configuration directory");
+        let config_path =
+            squiglab_core::config::app_config_path().expect("a scratch configuration directory");
         let config = AppConfig {
             measurements: MeasurementConfig {
                 database_dir: Some(repository_root().join("data")),
                 headphone_database_dir: Some(repository_root().join("data_hp")),
                 delta_dir: Some(repository_root().join("data_deltas")),
             },
-            defaults: DefaultConfig::default(),
+            defaults: squiglab_core::config::DefaultConfig::default(),
             rig_description: None,
         };
         if let Some(directory) = config_path.parent() {
@@ -4315,10 +4085,10 @@ smoothing_octaves = 3
         )
         .unwrap();
 
-        let config = read_app_config_from(&path).unwrap();
+        let config = squiglab_core::config::read_app_config_from(&path).unwrap();
         assert_eq!(config.defaults.smoothing_octaves, 3);
         assert_eq!(
-            resolve_measurement_dir(
+            squiglab_core::config::resolve_measurement_dir(
                 config.measurements.database_dir.as_deref(),
                 &repository_root().join("data"),
                 &path
@@ -4326,7 +4096,7 @@ smoothing_octaves = 3
             directory.join("measurements")
         );
         assert_eq!(
-            resolve_measurement_dir(
+            squiglab_core::config::resolve_measurement_dir(
                 config.measurements.headphone_database_dir.as_deref(),
                 &repository_root().join("data_hp"),
                 &path
@@ -4335,7 +4105,7 @@ smoothing_octaves = 3
         );
         let absolute_path = directory.join("external-headphones");
         assert_eq!(
-            resolve_measurement_dir(
+            squiglab_core::config::resolve_measurement_dir(
                 Some(&absolute_path),
                 &repository_root().join("data_hp"),
                 &path,
@@ -4354,8 +4124,8 @@ smoothing_octaves = 3
         ];
         for example in examples {
             let path = repository_root().join(example);
-            let config = read_app_config_from(&path).unwrap();
-            validate_app_config(&config).unwrap();
+            let config = squiglab_core::config::read_app_config_from(&path).unwrap();
+            squiglab_core::config::validate_app_config(&config).unwrap();
             assert!(config.measurements.database_dir.is_some());
             assert!(config.measurements.headphone_database_dir.is_some());
             assert_eq!(config.defaults.smoothing_octaves, 5);
@@ -4374,18 +4144,21 @@ smoothing_octaves = 3
         ));
         std::fs::create_dir_all(&directory).unwrap();
         let path = directory.join("missing.toml");
-        let config = read_app_config_from(&path).unwrap();
-        assert_eq!(config, AppConfig::default());
+        let config = squiglab_core::config::read_app_config_from(&path).unwrap();
+        assert_eq!(config, squiglab_core::config::AppConfig::default());
         assert_eq!(config.defaults.smoothing_octaves, 5);
 
         std::fs::write(
             &path,
-            format!("[defaults]\nsmoothing_octaves = {}\n", MAX_SMOOTH_LEVEL + 1),
+            format!(
+                "[defaults]\nsmoothing_octaves = {}\n",
+                squiglab_core::config::MAX_SMOOTH_LEVEL + 1
+            ),
         )
         .unwrap();
-        let config = read_app_config_from(&path).unwrap();
-        assert!(config.defaults.smoothing_octaves > MAX_SMOOTH_LEVEL);
-        assert!(validate_app_config(&config).is_err());
+        let config = squiglab_core::config::read_app_config_from(&path).unwrap();
+        assert!(config.defaults.smoothing_octaves > squiglab_core::config::MAX_SMOOTH_LEVEL);
+        assert!(squiglab_core::config::validate_app_config(&config).is_err());
         std::fs::remove_dir_all(directory).unwrap();
     }
 
@@ -4400,7 +4173,7 @@ smoothing_octaves = 3
                 .as_nanos()
         ));
         let path = directory.join("config.toml");
-        let config = initialize_app_config_from(&path).unwrap();
+        let config = squiglab_core::config::initialize_app_config_from(&path).unwrap();
         let generated_contents = std::fs::read_to_string(&path).unwrap();
         let current_directory = std::env::current_dir().unwrap();
         assert_eq!(
@@ -4410,13 +4183,13 @@ smoothing_octaves = 3
         assert!(generated_contents.contains("database_dir"));
         assert!(generated_contents.contains("smoothing_octaves = 5"));
 
-        let second_read = initialize_app_config_from(&path).unwrap();
+        let second_read = squiglab_core::config::initialize_app_config_from(&path).unwrap();
         assert_eq!(second_read, config);
         assert_eq!(std::fs::read_to_string(&path).unwrap(), generated_contents);
 
         let user_config = "[defaults]\nsmoothing_octaves = 2\n";
         std::fs::write(&path, user_config).unwrap();
-        let user_config_parsed = initialize_app_config_from(&path).unwrap();
+        let user_config_parsed = squiglab_core::config::initialize_app_config_from(&path).unwrap();
         assert_eq!(user_config_parsed.defaults.smoothing_octaves, 2);
         assert_eq!(std::fs::read_to_string(&path).unwrap(), user_config);
         std::fs::remove_dir_all(directory).unwrap();
@@ -5073,8 +4846,8 @@ smoothing_octaves = 3
                     .any(|saved| saved.key == group_key(&app.session.groups[index])),
                 "an uploaded curve leaked into the shared state"
             );
-            let uri = encode_share_uri(&preferences).unwrap();
-            let restored = decode_share_uri(&uri).unwrap();
+            let uri = squiglab_core::config::encode_share_uri(&preferences).unwrap();
+            let restored = squiglab_core::config::decode_share_uri(&uri).unwrap();
             assert_eq!(restored, preferences);
             std::fs::remove_file(path).unwrap();
         });
@@ -5333,8 +5106,8 @@ smoothing_octaves = 3
             assert!(app.library_reveal_pending);
 
             // A restored session that selected nothing has nothing to reveal.
-            let path = super::preferences_path().unwrap();
-            write_preferences_to(
+            let path = squiglab_core::config::preferences_path().unwrap();
+            squiglab_core::config::write_preferences_to(
                 &path,
                 &Preferences {
                     active: Vec::new(),
@@ -5989,14 +5762,20 @@ smoothing_octaves = 3
         let mut visited = Vec::new();
         loop {
             level = super::next_smoothing_level(level);
-            assert!(level <= super::MAX_SMOOTH_LEVEL, "{level} is off the end");
+            assert!(
+                level <= squiglab_core::config::MAX_SMOOTH_LEVEL,
+                "{level} is off the end"
+            );
             visited.push(level);
             if level == 0 {
                 break;
             }
         }
         // Round values, plus 0, which is the measurement as it was taken.
-        assert_eq!(visited, vec![1, 2, 5, 10, super::MAX_SMOOTH_LEVEL, 0]);
+        assert_eq!(
+            visited,
+            vec![1, 2, 5, 10, squiglab_core::config::MAX_SMOOTH_LEVEL, 0]
+        );
     }
 
     #[test]
@@ -6019,7 +5798,10 @@ smoothing_octaves = 3
             std::env::temp_dir().join(format!("squiglab-preferences-{}", std::process::id()));
         let path = directory.join("preferences.json");
         let _ = std::fs::remove_dir_all(&directory);
-        assert_eq!(read_preferences_from(&path).unwrap(), None);
+        assert_eq!(
+            squiglab_core::config::read_preferences_from(&path).unwrap(),
+            None
+        );
 
         let preferences = Preferences {
             active: vec![SavedGroup {
@@ -6052,11 +5834,14 @@ smoothing_octaves = 3
             eq_filters: BTreeMap::new(),
             active_deltas: vec!["Δ Placeholder clone rig".into()],
         };
-        write_preferences_to(&path, &preferences).unwrap();
-        assert_eq!(read_preferences_from(&path).unwrap(), Some(preferences));
+        squiglab_core::config::write_preferences_to(&path, &preferences).unwrap();
+        assert_eq!(
+            squiglab_core::config::read_preferences_from(&path).unwrap(),
+            Some(preferences)
+        );
 
         std::fs::write(&path, b"{not valid json").unwrap();
-        assert!(read_preferences_from(&path).is_err());
+        assert!(squiglab_core::config::read_preferences_from(&path).is_err());
         std::fs::remove_dir_all(directory).unwrap();
     }
 
@@ -6077,7 +5862,9 @@ smoothing_octaves = 3
             r#"{"show_manager": false, "show_measurements": true}"#,
         )
         .unwrap();
-        let preferences = read_preferences_from(&path).unwrap().unwrap();
+        let preferences = squiglab_core::config::read_preferences_from(&path)
+            .unwrap()
+            .unwrap();
         assert!(preferences.show_measurements);
         std::fs::remove_dir_all(directory).unwrap();
     }
@@ -6126,23 +5913,33 @@ smoothing_octaves = 3
             curve_color_offsets: [("Brand\u{1f}Model".into(), 3)].into_iter().collect(),
             ..Preferences::default()
         };
-        let uri = encode_share_uri(&preferences).unwrap();
-        assert!(uri.starts_with(super::SHARE_URI_PREFIX));
-        assert_eq!(decode_share_uri(&uri).unwrap(), preferences);
-        assert!(decode_share_uri("https://example.com/").is_err());
+        let uri = squiglab_core::config::encode_share_uri(&preferences).unwrap();
+        assert!(uri.starts_with(squiglab_core::config::SHARE_URI_PREFIX));
+        assert_eq!(
+            squiglab_core::config::decode_share_uri(&uri).unwrap(),
+            preferences
+        );
+        assert!(squiglab_core::config::decode_share_uri("https://example.com/").is_err());
         // Links issued under the previous name still decode, and re-encode to
         // the current scheme.
-        let legacy = uri.replacen(super::SHARE_URI_PREFIX, super::LEGACY_SHARE_URI_PREFIX, 1);
-        assert!(legacy.starts_with(super::LEGACY_SHARE_URI_PREFIX));
-        assert_eq!(decode_share_uri(&legacy).unwrap(), preferences);
-        assert!(decode_share_uri("squiglab://state/v1/0").is_err());
-        assert!(decode_share_uri("squiglab://state/v1/zz").is_err());
-        assert!(decode_share_uri("cringraph://state/v1/zz").is_err());
+        let legacy = uri.replacen(
+            squiglab_core::config::SHARE_URI_PREFIX,
+            squiglab_core::config::LEGACY_SHARE_URI_PREFIX,
+            1,
+        );
+        assert!(legacy.starts_with(squiglab_core::config::LEGACY_SHARE_URI_PREFIX));
+        assert_eq!(
+            squiglab_core::config::decode_share_uri(&legacy).unwrap(),
+            preferences
+        );
+        assert!(squiglab_core::config::decode_share_uri("squiglab://state/v1/0").is_err());
+        assert!(squiglab_core::config::decode_share_uri("squiglab://state/v1/zz").is_err());
+        assert!(squiglab_core::config::decode_share_uri("cringraph://state/v1/zz").is_err());
         // An unrelated scheme that merely looks similar is still rejected.
-        assert!(decode_share_uri("squiglabx://state/v1/").is_err());
-        assert!(encode_share_uri(&Preferences {
+        assert!(squiglab_core::config::decode_share_uri("squiglabx://state/v1/").is_err());
+        assert!(squiglab_core::config::encode_share_uri(&Preferences {
             active: vec![SavedGroup {
-                key: "x".repeat(MAX_SHARE_URI_LENGTH),
+                key: "x".repeat(squiglab_core::config::MAX_SHARE_URI_LENGTH),
                 variant: 0,
                 channel_mode: ChannelMode::Both,
                 hidden: false,
@@ -6200,7 +5997,7 @@ smoothing_octaves = 3
         let mut app = CrinGraphApp::default();
         app.session.groups = groups;
         app.session.active = [0].into_iter().collect();
-        app.restore_shared_state(&encode_share_uri(&state).unwrap())
+        app.restore_shared_state(&squiglab_core::config::encode_share_uri(&state).unwrap())
             .unwrap();
         assert_eq!(app.session.active, [1].into_iter().collect());
         assert_eq!(app.session.target_hz, 1000.0);
