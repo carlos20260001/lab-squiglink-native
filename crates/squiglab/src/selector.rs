@@ -166,13 +166,17 @@ fn brand_column(ui: &mut Ui, app: &mut App) {
                 if ui
                     .selectable_label(
                         selected,
-                        RichText::new(shorten(&brand, metrics::BRAND_COLUMN_WIDTH - 16.0))
-                            .font(TypeStep::Body.font())
-                            .color(if selected {
-                                palette.on_accent
-                            } else {
-                                palette.text_primary
-                            }),
+                        RichText::new(shorten(
+                            ui.ctx(),
+                            &brand,
+                            metrics::BRAND_COLUMN_WIDTH - 16.0,
+                        ))
+                        .font(TypeStep::Body.font())
+                        .color(if selected {
+                            palette.on_accent
+                        } else {
+                            palette.text_primary
+                        }),
                     )
                     .on_hover_text(format!("Show {brand}'s measurements"))
                     .clicked()
@@ -297,9 +301,10 @@ fn stars(score: &str) -> String {
 
 /// A name cut short to the width it has, the way the reference cuts the
 /// brands in its narrow column.
-fn shorten(name: &str, width: f32) -> String {
+fn shorten(ctx: &egui::Context, name: &str, width: f32) -> String {
     let font = TypeStep::Body.font();
-    let ctx = egui::Context::default();
+    // The fonts belong to the running context: a context of one's own has none
+    // until it has run a frame, and asking it for them panics.
     let measured = |text: &str| {
         ctx.fonts_mut(|fonts| {
             text.chars()
