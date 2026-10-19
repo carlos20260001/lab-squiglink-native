@@ -1,19 +1,18 @@
 use egui::{Color32, Context, RichText, Ui};
 use squiglab_core::audio::Player;
 use squiglab_core::color::target_color;
-use squiglab_core::data::{self, CurveInfo, FRPoint, PhoneBook};
-use squiglab_core::delta::{self, DeltaTarget};
+use squiglab_core::data::{CurveInfo, FRPoint};
+use squiglab_core::delta::DeltaTarget;
 use squiglab_core::equalizer;
 use squiglab_core::graph::PlotCurve;
 use squiglab_core::processing;
 use squiglab_core::session::{
-    ChannelMode, CurveSource, DisplayCurve, EqRow, MeasurementGroup, MeasurementVariant,
-    Preferences,
+    ChannelMode, CurveSource, DisplayCurve, EqRow, MeasurementGroup, Preferences,
 };
 use squiglab_legacy::graph::{
     export_svg as render_svg, DeltaBar, GraphCanvas, Provenance, Watermark,
 };
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 /// The name the graph carries behind its curves. The web reference stamps it
@@ -394,7 +393,6 @@ pub struct CrinGraphApp {
     share_input: String,
     share_message: Option<String>,
     debug_hooks: bool,
-    rig_description: Option<String>,
     /// Which panel the library column is showing.
     library_tab: LibraryTab,
     /// The brand the model list is narrowed to, chosen in the brands tab.
@@ -453,7 +451,6 @@ impl Default for CrinGraphApp {
         Self {
             session: squiglab_core::session::Session::default(),
             search: String::new(),
-            rig_description: None,
             dirty: true,
             loaded: false,
             load_error: None,
@@ -532,129 +529,32 @@ impl CrinGraphApp {
     }
 
     fn load_measurements(&mut self) -> anyhow::Result<()> {
-        let config_path = squiglab_core::config::app_config_path()?;
-        let config = squiglab_core::config::initialize_app_config_from(&config_path)?;
-        squiglab_core::config::validate_app_config(&config)?;
-        self.session.smooth_level = config.defaults.smoothing_octaves;
-        self.rig_description = config.rig_description.clone();
-
-        let database_dir = squiglab_core::config::resolve_measurement_dir(
-            config.measurements.database_dir.as_deref(),
-            &repository_root().join("data"),
-            &config_path,
-        );
-        let (mut curves, grid) = data::load_data(&database_dir)?;
-        self.session.upload_grid = grid;
-        self.session.uploaded_names.clear();
-        let mut phone_books = vec![data::load_phone_book(
-            &database_dir.join("phone_book.json"),
-        )?];
-
-        let headphone_database_dir = squiglab_core::config::resolve_measurement_dir(
-            config.measurements.headphone_database_dir.as_deref(),
-            &repository_root().join("data_hp"),
-            &config_path,
-        );
-        if config.measurements.headphone_database_dir.is_some() || headphone_database_dir.is_dir() {
-            let (headphone_curves, _) = data::load_data(&headphone_database_dir)?;
-            curves.extend(headphone_curves);
-            let phone_book_path = headphone_database_dir.join("phone_book.json");
-            if phone_book_path.is_file() {
-                phone_books.push(data::load_phone_book(&phone_book_path)?);
+        let shared_state = self.shared_state.take();
+        let paths = squiglab_core::session::DataPaths {
+            measurements: repository_root().join("data"),
+            headphones: repository_root().join("data_hp"),
+            corrections: repository_root().join("data_deltas"),
+        };
+        let loaded = self
+            .session
+            .load(&paths, shared_state.as_deref())
+            .map_err(|error| anyhow::anyhow!(error))?;
+        if let Some(problem) = loaded.problem {
+            if shared_state.is_some() {
+                self.share_message = Some(problem);
+            } else {
+                self.settings_error = Some(problem);
             }
         }
-        curves.sort_by(|left, right| {
-            left.model
-                .cmp(&right.model)
-                .then(left.variant.cmp(&right.variant))
-        });
-        self.session.groups = build_groups(&phone_books, &curves);
-
-        // Delta targets are optional, so a failure to read them is reported in
-        // their own section rather than failing the whole load: losing a rig
-        // correction should not cost you the measurements as well.
-        self.session.delta_error = None;
-        let delta_dir = squiglab_core::config::resolve_measurement_dir(
-            config.measurements.delta_dir.as_deref(),
-            &repository_root().join("data_deltas"),
-            &config_path,
-        );
-        self.session.delta_targets = if delta_dir.is_dir() {
-            match delta::load_delta_targets(&delta_dir, &self.session.upload_grid) {
-                Ok(targets) => targets,
-                Err(error) => {
-                    self.session.delta_error = Some(format!("{error}"));
-                    Vec::new()
-                }
-            }
-        } else {
-            Vec::new()
-        };
-        // A delta target that was selected in an earlier session but is no
-        // longer in the directory cannot be honoured, and must not leave a
-        // dangling index behind for the rest of the session.
-        self.session
-            .active_deltas
-            .retain(|index| *index < self.session.delta_targets.len());
-
         if self.debug_hooks {
             eprintln!(
                 "SquigLab loaded {} curves across {} measurement groups.",
-                curves.len(),
+                self.session.curves.len(),
                 self.session.groups.len()
             );
         }
-        let restored_preferences = if let Some(shared_state) = self.shared_state.take() {
-            match squiglab_core::config::decode_share_uri(&shared_state).and_then(|preferences| {
-                self.session
-                    .apply_preferences(preferences)
-                    .map(|_| ())
-                    .map_err(|error| anyhow::anyhow!(error))
-            }) {
-                Ok(()) => true,
-                Err(error) => {
-                    self.share_message = Some(format!("Unable to restore shared state: {error:#}"));
-                    false
-                }
-            }
-        } else {
-            match squiglab_core::config::read_preferences() {
-                Ok(Some(preferences)) => match self.session.apply_preferences(preferences) {
-                    Ok(changed) => changed,
-                    Err(error) => {
-                        self.settings_error = Some(error);
-                        false
-                    }
-                },
-                Ok(None) => false,
-                Err(error) => {
-                    self.settings_error = Some(format!("Unable to load preferences: {error:#}"));
-                    false
-                }
-            }
-        };
-        if self.session.active.is_empty()
-            && self.session.active_targets.is_empty()
-            && !restored_preferences
-        {
-            self.session.active = self
-                .session
-                .groups
-                .iter()
-                .enumerate()
-                .filter(|(_, group)| group.name == "HTH67")
-                .map(|(index, _)| index)
-                .collect();
-            if self.session.active.is_empty() {
-                if let Some(index) = self.session.groups.iter().position(|group| group.target) {
-                    self.session.active_targets.insert(index);
-                }
-            }
-        }
-        self.session.curves = curves;
         self.loaded = true;
         self.dirty = true;
-        self.session.last_saved_preferences = Some(self.session.preferences());
         // The library list scrolls independently, so a session restored with a
         // curve selected far down it must scroll that row into view rather
         // than opening at the top of a list of thousands.
@@ -3422,7 +3322,7 @@ impl CrinGraphApp {
                     (segment.title, segment.range_hz)
                 }),
                 bands: &FREQUENCY_BANDS,
-                rig_description: self.rig_description.as_deref(),
+                rig_description: self.session.rig_description.as_deref(),
                 watermark,
                 y_scale: self.session.y_scale,
             }
@@ -3473,7 +3373,7 @@ impl CrinGraphApp {
             self.session.y_scale,
             Provenance {
                 watermark: self.watermark(),
-                rig_description: self.rig_description.as_deref(),
+                rig_description: self.session.rig_description.as_deref(),
             },
         );
         match save_svg(&svg) {
@@ -3570,95 +3470,6 @@ impl eframe::App for CrinGraphApp {
 #[derive(Default)]
 struct LibrarySection {
     reveal_rect: Option<egui::Rect>,
-}
-
-fn build_groups(phone_books: &[PhoneBook], curves: &[CurveInfo]) -> Vec<MeasurementGroup> {
-    let mut groups = Vec::new();
-    let mut represented = BTreeSet::new();
-    for book in phone_books {
-        for brand in &book.brands {
-            for model in &brand.models {
-                let variants: Vec<MeasurementVariant> = model
-                    .variants
-                    .iter()
-                    .filter_map(|variant| {
-                        let curve_indices: Vec<usize> = curves
-                            .iter()
-                            .enumerate()
-                            .filter(|(_, curve)| curve.model == variant.file_stem)
-                            .map(|(index, _)| index)
-                            .collect();
-                        if curve_indices.is_empty() {
-                            return None;
-                        }
-                        represented.extend(curve_indices.iter().copied());
-                        Some(MeasurementVariant {
-                            name: variant.name.clone(),
-                            curve_indices,
-                        })
-                    })
-                    .collect();
-                if !variants.is_empty() {
-                    groups.push(MeasurementGroup {
-                        brand: brand.name.clone(),
-                        brand_suffix: brand.suffix.clone(),
-                        name: model.name.clone(),
-                        target: false,
-                        variants,
-                    });
-                }
-            }
-        }
-    }
-
-    let mut targets = BTreeMap::<(String, String), Vec<usize>>::new();
-    let mut other = BTreeMap::<String, Vec<usize>>::new();
-    for (index, curve) in curves.iter().enumerate() {
-        if represented.contains(&index) {
-            continue;
-        }
-        if let Some(name) = curve.model.strip_suffix(" Target") {
-            targets
-                .entry((
-                    squiglab_core::session::target_category(name).to_owned(),
-                    name.to_owned(),
-                ))
-                .or_default()
-                .push(index);
-        } else {
-            other.entry(curve.model.clone()).or_default().push(index);
-        }
-    }
-    for ((category, name), curve_indices) in targets {
-        groups.push(MeasurementGroup {
-            brand: category,
-            brand_suffix: None,
-            name,
-            variants: vec![MeasurementVariant {
-                name: "Target".to_owned(),
-                curve_indices,
-            }],
-            target: true,
-        });
-    }
-    for (name, curve_indices) in other {
-        groups.push(MeasurementGroup {
-            brand: "Other measurements".to_owned(),
-            brand_suffix: None,
-            name: name.clone(),
-            variants: vec![MeasurementVariant {
-                name: "Default".to_owned(),
-                curve_indices,
-            }],
-            target: false,
-        });
-    }
-    groups.sort_by(|left, right| {
-        left.brand
-            .cmp(&right.brand)
-            .then(left.name.cmp(&right.name))
-    });
-    groups
 }
 
 /// Label for an EQ curve. The reference tool names it "<phone> EQ"; deriving
@@ -3821,14 +3632,14 @@ fn group_has_imbalance(curves: &[CurveInfo], indices: &[usize]) -> bool {
 #[cfg(test)]
 mod tests {
     use super::{
-        build_groups, group_has_imbalance, manager_heights, ChannelMode, CrinGraphApp, CurveSource,
-        DisplayCurve, MeasurementGroup, MeasurementVariant, Preferences, MAX_EQ_ROWS,
-        TUTORIAL_SEGMENTS,
+        group_has_imbalance, manager_heights, ChannelMode, CrinGraphApp, CurveSource, DisplayCurve,
+        MeasurementGroup, Preferences, MAX_EQ_ROWS, TUTORIAL_SEGMENTS,
     };
     use crate::app::repository_root;
     use squiglab_core::config::{AppConfig, MeasurementConfig};
     use squiglab_core::data::{CurveInfo, FRPoint};
     use squiglab_core::delta::DeltaTarget;
+    use squiglab_core::session::build_groups;
     use squiglab_core::session::target_category;
     use squiglab_core::session::{
         apply_baseline, curve_file_name, curve_label, curve_text, group_key, matches_search,
@@ -3853,13 +3664,13 @@ mod tests {
         let config_path =
             squiglab_core::config::app_config_path().expect("a scratch configuration directory");
         let config = AppConfig {
+            rig_description: None,
             measurements: MeasurementConfig {
                 database_dir: Some(repository_root().join("data")),
                 headphone_database_dir: Some(repository_root().join("data_hp")),
                 delta_dir: Some(repository_root().join("data_deltas")),
             },
             defaults: squiglab_core::config::DefaultConfig::default(),
-            rig_description: None,
         };
         if let Some(directory) = config_path.parent() {
             std::fs::create_dir_all(directory).expect("the configuration directory exists");
@@ -4071,7 +3882,7 @@ smoothing_octaves = 3
             brand: "Brand".to_owned(),
             brand_suffix: None,
             name: "Model".to_owned(),
-            variants: vec![super::MeasurementVariant {
+            variants: vec![squiglab_core::session::MeasurementVariant {
                 name: "Default".to_owned(),
                 curve_indices: vec![0, 1],
             }],
@@ -4172,7 +3983,7 @@ smoothing_octaves = 3
             brand: "Brand".to_owned(),
             brand_suffix: None,
             name: "Model".to_owned(),
-            variants: vec![super::MeasurementVariant {
+            variants: vec![squiglab_core::session::MeasurementVariant {
                 name: "Default".to_owned(),
                 curve_indices: vec![0],
             }],
@@ -4253,7 +4064,7 @@ smoothing_octaves = 3
             brand: "Brand".into(),
             brand_suffix: None,
             name: "Model".into(),
-            variants: vec![super::MeasurementVariant {
+            variants: vec![squiglab_core::session::MeasurementVariant {
                 name: "Default".into(),
                 curve_indices: Vec::new(),
             }],
@@ -4532,7 +4343,7 @@ smoothing_octaves = 3
             brand: "Brand".to_owned(),
             brand_suffix: None,
             name: "Model".to_owned(),
-            variants: vec![super::MeasurementVariant {
+            variants: vec![squiglab_core::session::MeasurementVariant {
                 name: "Default".to_owned(),
                 curve_indices: vec![0],
             }],
@@ -5015,7 +4826,7 @@ smoothing_octaves = 3
             brand: "Brand".to_owned(),
             brand_suffix: None,
             name: "Model".to_owned(),
-            variants: vec![super::MeasurementVariant {
+            variants: vec![squiglab_core::session::MeasurementVariant {
                 name: "Default".to_owned(),
                 curve_indices: vec![0, 1],
             }],
@@ -5126,7 +4937,7 @@ smoothing_octaves = 3
                 brand: "Neutral targets".to_owned(),
                 brand_suffix: None,
                 name: "Harman".to_owned(),
-                variants: vec![MeasurementVariant {
+                variants: vec![squiglab_core::session::MeasurementVariant {
                     name: "Target".to_owned(),
                     curve_indices: vec![],
                 }],
@@ -5136,7 +4947,7 @@ smoothing_octaves = 3
                 brand: "Brand".to_owned(),
                 brand_suffix: None,
                 name: "Headphone".to_owned(),
-                variants: vec![MeasurementVariant {
+                variants: vec![squiglab_core::session::MeasurementVariant {
                     name: "Avg".to_owned(),
                     curve_indices: vec![],
                 }],
@@ -5289,7 +5100,7 @@ smoothing_octaves = 3
             brand: "Brand".into(),
             brand_suffix: None,
             name: "Model".into(),
-            variants: vec![super::MeasurementVariant {
+            variants: vec![squiglab_core::session::MeasurementVariant {
                 name: "Default".into(),
                 curve_indices: Vec::new(),
             }],
@@ -5310,7 +5121,7 @@ smoothing_octaves = 3
             brand: "Brand".into(),
             brand_suffix: None,
             name: "Model".into(),
-            variants: vec![super::MeasurementVariant {
+            variants: vec![squiglab_core::session::MeasurementVariant {
                 name: "Default".into(),
                 curve_indices: Vec::new(),
             }],
@@ -5339,7 +5150,7 @@ smoothing_octaves = 3
                 .into(),
                 brand_suffix: None,
                 name: format!("Model {index}"),
-                variants: vec![super::MeasurementVariant {
+                variants: vec![squiglab_core::session::MeasurementVariant {
                     name: "Default".into(),
                     curve_indices: Vec::new(),
                 }],
@@ -5365,7 +5176,7 @@ smoothing_octaves = 3
                 brand: "Brand".into(),
                 brand_suffix: None,
                 name: "Model".into(),
-                variants: vec![super::MeasurementVariant {
+                variants: vec![squiglab_core::session::MeasurementVariant {
                     name: "Default".into(),
                     curve_indices: Vec::new(),
                 }],
@@ -5375,7 +5186,7 @@ smoothing_octaves = 3
                 brand: "Neutral targets".into(),
                 brand_suffix: None,
                 name: "Diffuse Field".into(),
-                variants: vec![super::MeasurementVariant {
+                variants: vec![squiglab_core::session::MeasurementVariant {
                     name: "Target".into(),
                     curve_indices: Vec::new(),
                 }],
@@ -5415,7 +5226,7 @@ smoothing_octaves = 3
             brand: "Neutral targets".into(),
             brand_suffix: None,
             name: "Diffuse Field".into(),
-            variants: vec![super::MeasurementVariant {
+            variants: vec![squiglab_core::session::MeasurementVariant {
                 name: "Target".into(),
                 curve_indices: vec![0],
             }],
@@ -5516,7 +5327,9 @@ smoothing_octaves = 3
     }
 
     /// A curve, a variant and a mode, to name and format.
-    fn export_group(target: bool) -> (MeasurementGroup, MeasurementVariant) {
+    fn export_group(
+        target: bool,
+    ) -> (MeasurementGroup, squiglab_core::session::MeasurementVariant) {
         (
             MeasurementGroup {
                 brand: "Neutral targets".to_owned(),
@@ -5525,7 +5338,7 @@ smoothing_octaves = 3
                 variants: Vec::new(),
                 target,
             },
-            MeasurementVariant {
+            squiglab_core::session::MeasurementVariant {
                 name: "L".to_owned(),
                 curve_indices: Vec::new(),
             },
@@ -5818,7 +5631,7 @@ smoothing_octaves = 3
                 brand: "Brand".into(),
                 brand_suffix: None,
                 name: "First".into(),
-                variants: vec![super::MeasurementVariant {
+                variants: vec![squiglab_core::session::MeasurementVariant {
                     name: "Default".into(),
                     curve_indices: Vec::new(),
                 }],
@@ -5828,7 +5641,7 @@ smoothing_octaves = 3
                 brand: "Brand".into(),
                 brand_suffix: None,
                 name: "Second".into(),
-                variants: vec![super::MeasurementVariant {
+                variants: vec![squiglab_core::session::MeasurementVariant {
                     name: "Default".into(),
                     curve_indices: Vec::new(),
                 }],

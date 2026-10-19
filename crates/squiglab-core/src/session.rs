@@ -263,6 +263,9 @@ pub struct Session {
     pub last_saved_preferences: Option<Preferences>,
     /// Whether the curves the graph draws are out of date.
     pub dirty: bool,
+    /// The rig the measurements were taken on, as the configuration names it.
+    /// The graph labels every curve with it.
+    pub rig_description: Option<String>,
 }
 
 impl Default for Session {
@@ -310,6 +313,7 @@ impl Default for Session {
             player: None,
             last_saved_preferences: None,
             dirty: false,
+            rig_description: None,
         }
     }
 }
@@ -323,7 +327,154 @@ pub const MAX_ACTIVE_CURVES: usize = 8;
 /// How many filters AutoEQ may produce when nothing says otherwise.
 pub const DEFAULT_EQ_MAX_FILTERS: usize = 10;
 
+/// Where the data is when the configuration does not say.
+///
+/// A program run from a checkout finds the repository's own directories;
+/// an installed one finds the paths its configuration names.
+#[derive(Clone, Debug)]
+pub struct DataPaths {
+    pub measurements: PathBuf,
+    pub headphones: PathBuf,
+    pub corrections: PathBuf,
+}
+
+/// What a load restored, and what went wrong.
+#[derive(Clone, Debug, Default)]
+pub struct Loaded {
+    /// Whether a view was restored, so the program does not select a
+    /// default curve over one the user asked for.
+    pub restored: bool,
+    /// Why a view could not be restored, if it could not.
+    pub problem: Option<String>,
+}
+
 impl Session {
+    /// Load the measurements, the targets, the rig corrections and the view.
+    ///
+    /// `shared_state` is a link the user opened, which takes precedence over
+    /// the preferences this installation saved.
+    pub fn load(
+        &mut self,
+        paths: &DataPaths,
+        shared_state: Option<&str>,
+    ) -> Result<Loaded, String> {
+        let config_path = crate::config::app_config_path().map_err(|error| format!("{error:#}"))?;
+        let config = crate::config::initialize_app_config_from(&config_path)
+            .map_err(|error| format!("{error:#}"))?;
+        crate::config::validate_app_config(&config).map_err(|error| format!("{error:#}"))?;
+        self.smooth_level = config.defaults.smoothing_octaves;
+        self.rig_description = config.rig_description.clone();
+
+        let database_dir = crate::config::resolve_measurement_dir(
+            config.measurements.database_dir.as_deref(),
+            &paths.measurements,
+            &config_path,
+        );
+        let (mut curves, grid) =
+            crate::data::load_data(&database_dir).map_err(|error| format!("{error:#}"))?;
+        self.upload_grid = grid;
+        self.uploaded_names.clear();
+        let mut phone_books =
+            vec![
+                crate::data::load_phone_book(&database_dir.join("phone_book.json"))
+                    .map_err(|error| format!("{error:#}"))?,
+            ];
+
+        let headphone_database_dir = crate::config::resolve_measurement_dir(
+            config.measurements.headphone_database_dir.as_deref(),
+            &paths.headphones,
+            &config_path,
+        );
+        if config.measurements.headphone_database_dir.is_some() || headphone_database_dir.is_dir() {
+            let (headphone_curves, _) = crate::data::load_data(&headphone_database_dir)
+                .map_err(|error| format!("{error:#}"))?;
+            curves.extend(headphone_curves);
+            let phone_book_path = headphone_database_dir.join("phone_book.json");
+            if phone_book_path.is_file() {
+                phone_books.push(
+                    crate::data::load_phone_book(&phone_book_path)
+                        .map_err(|error| format!("{error:#}"))?,
+                );
+            }
+        }
+        curves.sort_by(|left, right| {
+            left.model
+                .cmp(&right.model)
+                .then(left.variant.cmp(&right.variant))
+        });
+        self.groups = build_groups(&phone_books, &curves);
+
+        // Delta targets are optional, so a failure to read them is reported in
+        // their own section rather than failing the whole load: losing a rig
+        // correction should not cost you the measurements as well.
+        self.delta_error = None;
+        let delta_dir = crate::config::resolve_measurement_dir(
+            config.measurements.delta_dir.as_deref(),
+            &paths.corrections,
+            &config_path,
+        );
+        self.delta_targets = if delta_dir.is_dir() {
+            match crate::delta::load_delta_targets(&delta_dir, &self.upload_grid) {
+                Ok(targets) => targets,
+                Err(error) => {
+                    self.delta_error = Some(format!("{error}"));
+                    Vec::new()
+                }
+            }
+        } else {
+            Vec::new()
+        };
+        // A delta target that was selected in an earlier session but is no
+        // longer in the directory cannot be honoured, and must not leave a
+        // dangling index behind for the rest of the session.
+        self.active_deltas
+            .retain(|index| *index < self.delta_targets.len());
+
+        let mut loaded = Loaded::default();
+        if let Some(shared_state) = shared_state {
+            match crate::config::decode_share_uri(shared_state)
+                .map_err(|error| format!("{error:#}"))
+                .and_then(|preferences| self.apply_preferences(preferences))
+            {
+                Ok(_) => loaded.restored = true,
+                Err(error) => {
+                    loaded.problem = Some(format!("Unable to restore shared state: {error}"));
+                }
+            }
+        } else {
+            match crate::config::read_preferences() {
+                Ok(Some(preferences)) => match self.apply_preferences(preferences) {
+                    Ok(restored) => loaded.restored = restored,
+                    Err(error) => loaded.problem = Some(error),
+                },
+                Ok(None) => {}
+                Err(error) => {
+                    loaded.problem = Some(format!("Unable to load preferences: {error:#}"));
+                }
+            }
+        }
+        if self.active.is_empty() && self.active_targets.is_empty() && !loaded.restored {
+            // The reference opens on one measurement, so the graph is never
+            // empty when there is something to compare.
+            self.active = self
+                .groups
+                .iter()
+                .enumerate()
+                .filter(|(_, group)| group.name == "HTH67")
+                .map(|(index, _)| index)
+                .collect();
+            if self.active.is_empty() {
+                if let Some(index) = self.groups.iter().position(|group| group.target) {
+                    self.active_targets.insert(index);
+                }
+            }
+        }
+        self.curves = curves;
+        self.dirty = true;
+        self.last_saved_preferences = Some(self.preferences());
+        Ok(loaded)
+    }
+
     pub fn rebuild_display_curves(&mut self) -> Option<String> {
         let mut output = Vec::with_capacity(self.active.len());
         for &group_index in self.active.iter().chain(self.active_targets.iter()) {
@@ -1265,4 +1416,93 @@ pub fn target_category(target: &str) -> &'static str {
         }
         _ => "Other targets",
     }
+}
+
+pub fn build_groups(
+    phone_books: &[crate::data::PhoneBook],
+    curves: &[CurveInfo],
+) -> Vec<MeasurementGroup> {
+    let mut groups = Vec::new();
+    let mut represented = BTreeSet::new();
+    for book in phone_books {
+        for brand in &book.brands {
+            for model in &brand.models {
+                let variants: Vec<MeasurementVariant> = model
+                    .variants
+                    .iter()
+                    .filter_map(|variant| {
+                        let curve_indices: Vec<usize> = curves
+                            .iter()
+                            .enumerate()
+                            .filter(|(_, curve)| curve.model == variant.file_stem)
+                            .map(|(index, _)| index)
+                            .collect();
+                        if curve_indices.is_empty() {
+                            return None;
+                        }
+                        represented.extend(curve_indices.iter().copied());
+                        Some(MeasurementVariant {
+                            name: variant.name.clone(),
+                            curve_indices,
+                        })
+                    })
+                    .collect();
+                if !variants.is_empty() {
+                    groups.push(MeasurementGroup {
+                        brand: brand.name.clone(),
+                        brand_suffix: brand.suffix.clone(),
+                        name: model.name.clone(),
+                        target: false,
+                        variants,
+                    });
+                }
+            }
+        }
+    }
+
+    let mut targets = BTreeMap::<(String, String), Vec<usize>>::new();
+    let mut other = BTreeMap::<String, Vec<usize>>::new();
+    for (index, curve) in curves.iter().enumerate() {
+        if represented.contains(&index) {
+            continue;
+        }
+        if let Some(name) = curve.model.strip_suffix(" Target") {
+            targets
+                .entry((target_category(name).to_owned(), name.to_owned()))
+                .or_default()
+                .push(index);
+        } else {
+            other.entry(curve.model.clone()).or_default().push(index);
+        }
+    }
+    for ((category, name), curve_indices) in targets {
+        groups.push(MeasurementGroup {
+            brand: category,
+            brand_suffix: None,
+            name,
+            variants: vec![MeasurementVariant {
+                name: "Target".to_owned(),
+                curve_indices,
+            }],
+            target: true,
+        });
+    }
+    for (name, curve_indices) in other {
+        groups.push(MeasurementGroup {
+            brand: "Other measurements".to_owned(),
+            brand_suffix: None,
+            name: name.clone(),
+            variants: vec![MeasurementVariant {
+                name: "Default".to_owned(),
+                curve_indices,
+            }],
+            target: false,
+        });
+    }
+    groups.sort_by(|left, right| {
+        left.brand
+            .cmp(&right.brand)
+            .then(left.name.cmp(&right.name))
+    });
+    groups
 }
