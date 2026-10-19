@@ -18,17 +18,17 @@ branch of the site repository, and the native is written against it.
 | Left column with three tabs: **Brands / Models / Equalizer** | The same three tabs ✓ |
 | Graph toolbar: Copy URL, Screenshot, `NORMALIZE: [dB 60] [Hz 500]`, `SMOOTH: 5`, `ZOOM: Bass Mids Treble`, a help button | The same controls, in a row that scrolls sideways when it overflows ✓ — but no help button ✗ |
 | Graph: the dB scale and its drag handle, the frequency axis, the band names, the target label, the curve labels, the watermark | The same, except the dB scale cannot be dragged ✗ |
-| Under the graph: the **DELTA** chips, the rig corrections, `REFERENCE TARGETS` / `LEGACY TARGETS` | The target chips and the active curves ✓ — the Δ chips are not offered ✗ |
+| Under the graph: the **DELTA** chips, the rig corrections, `REFERENCE TARGETS` / `LEGACY TARGETS` | The target chips, grouped as the reference groups them, with the rig corrections in a group of their own marked Δ ✓, and the active curves below them ✓ |
 | Manager rows: the curve, `L ONLY / R ONLY`, a dB offset, and the row buttons | The same ✓ |
 
 ## The equalizer panel
 
 | Reference | Native |
 |---|---|
-| `Parametric Equalizer`, a help button, `Reset`, a settings gear | `Parametric Equalizer`, `Reset` ✓ — no help button ✗, no gear ✗. The reference's `Reset` sets the bands' values back to flat and leaves the rows and the constraints alone; the native's does the same ✓ |
+| `Parametric Equalizer`, a help button, `Reset`, a settings gear | `Parametric Equalizer`, `Reset` ✓ — no help button ✗. The reference's `Reset` sets the bands' values back to flat and leaves the rows and the constraints alone; the native's does the same ✓. The reference's gear opens the constraints; the native's heading does ✓ |
 | The model dropdown, the target dropdown, `Auto EQ` | The same ✓ |
 | The band table: `Type / Frequency / Gain / Q` | The same ✓ |
-| `+` `−` `Sort`, `Import` `Export`, `Export Graphic EQ (Wavelet)` | `+` `−` `Sort`, `Export`, `Export Graphic EQ` ✓ — no import ✗. The reference's `−` removes the last band that still says something and never the last row, and `+` stops at twenty bands; the native does both ✓ |
+| `+` `−` `Sort`, `Import` `Export`, `Export Graphic EQ (Wavelet)` | The same ✓ — the import takes a path, as the upload's does ✓. The reference's `−` removes the last band that still says something and never the last row, and `+` stops at twenty bands; the native does both ✓ |
 | **The constraints panel** — see below | **The same** ✓ |
 
 ## The constraints panel
@@ -84,45 +84,26 @@ audio path has to become stereo and run the filters sample by sample.
 **The core work; the interface work is one toggle and a switch in the sound
 tools.**
 
-### 2. The inspector: the line under the pointer, and the readings
-
-The reference draws a vertical line at the pointer's frequency and the value
-of each curve there, and it can follow the pointer as it moves. The native
-has the `Inspect` toggle and the core's nearest-point search, but the graph
-does not draw the line or the readings. **Small: the geometry is in the core
-and the drawing is a line and some text.**
-
-### 3. The dB scale that can be dragged
+### 2. The dB scale that can be dragged
 
 The reference's scale is dragged: the handle moves the range and the circle
 scales it, and a double-click resets it. The native's scale is set from the
 curves and cannot be dragged. **Small to medium: the transform is the core's,
 so this is a drag on the graph and a change of its y range.**
 
-### 4. The Δ chips: the rig corrections
+### 3. The help button
 
-The reference's target strip has a group marked `Δ` — the rig corrections,
-the compensation curves for the rig the measurements were taken on. The
-native reads them (the core loads `data_deltas/` and offers them as delta
-targets) but does not put them in the strip, so they cannot be turned on
-alongside the other targets. **Small: the data is already loaded; the strip
-needs a group for it.**
+The reference's equalizer has a `?` that opens its guidance. The native has
+no such button. **Small: it is a window with the instructions in it.**
 
-### 5. The help buttons and the import
-
-The reference's equalizer has a `?` that opens its guidance, and it can
-import an Equalizer APO file. The native has neither in the interface,
-though the core can import one. **Small: an import is a file read and the
-core's `import_parametric`; the help is a window.**
-
-### 6. The music list
+### 4. The music list
 
 The reference plays music files and searches the Apple Music catalogue. The
 catalogue is the reference's own and does not travel; a local file list
 would. **Not worth doing: the tone generator and the pink noise already
 cover hearing the equalizer.**
 
-### 7. The settings gears
+### 5. The settings gears
 
 The reference hides the sound tools' settings and the equalizer's behind a
 gear. The native shows the volume and the reset in the open. **Not worth
