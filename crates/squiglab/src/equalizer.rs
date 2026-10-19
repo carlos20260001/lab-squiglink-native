@@ -280,12 +280,16 @@ pub fn show(ui: &mut Ui, app: &mut App) {
                 .into_iter()
                 .filter(|row| row.bank == bank)
                 .collect::<Vec<_>>();
-            rows.push(EqRow {
-                filter: Filter::new(FilterType::Peaking, 1000.0, 1.0, 0.0),
-                enabled: true,
-                bank,
-            });
-            write_bank(app, phone, bank, rows);
+            // The reference caps the bands at twenty, and says so on the
+            // button rather than refusing the click.
+            if rows.len() < squiglab_core::session::MAX_EQ_ROWS {
+                rows.push(EqRow {
+                    filter: Filter::new(FilterType::Peaking, 1000.0, 1.0, 0.0),
+                    enabled: true,
+                    bank,
+                });
+                write_bank(app, phone, bank, rows);
+            }
         }
         if ui
             .button("−")
@@ -294,7 +298,18 @@ pub fn show(ui: &mut Ui, app: &mut App) {
         {
             if let Some(mut rows) = app.session.eq_filters.get(&phone).cloned() {
                 rows.retain(|row| row.bank == bank);
-                rows.pop();
+                // A flat band says nothing, so the last one that does is the
+                // one that goes; and the last row stays.
+                while rows.len() > 1
+                    && rows.last().is_some_and(|row| {
+                        row.filter.gain == 0.0 && row.filter.freq == 0.0 && row.filter.q == 0.0
+                    })
+                {
+                    rows.pop();
+                }
+                if rows.len() > 1 {
+                    rows.pop();
+                }
                 write_bank(app, phone, bank, rows);
             }
         }
