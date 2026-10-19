@@ -180,7 +180,6 @@ fn manager_heights(width: f32, curve_count: usize) -> (f32, f32) {
     };
     (content.clamp(min_height, MANAGER_MAX_HEIGHT), min_height)
 }
-const UPLOADED_BRAND: &str = "Uploaded";
 
 struct TutorialSegment {
     title: &'static str,
@@ -1464,43 +1463,6 @@ impl CrinGraphApp {
     }
 
     /// Read an Equalizer APO configuration from disk into the edited curve.
-    fn import_parametric(&mut self) {
-        let Some(phone) = self.session.eq_phone() else {
-            self.eq_import_error = Some("Select a measurement to import into first.".to_owned());
-            return;
-        };
-        let text = match std::fs::read_to_string(&self.eq_import_path) {
-            Ok(text) => text,
-            Err(error) => {
-                self.eq_import_error = Some(format!("Unable to read the file: {error:#}"));
-                return;
-            }
-        };
-        match equalizer::import_parametric(&text) {
-            Ok(imported) => {
-                let count = imported.filters.len();
-                self.session.eq_filters.insert(
-                    phone,
-                    imported
-                        .filters
-                        .iter()
-                        .zip(&imported.enabled)
-                        .map(|(filter, &enabled)| EqRow {
-                            filter: *filter,
-                            enabled,
-                        })
-                        .collect(),
-                );
-                self.dirty = true;
-                self.eq_import_error = None;
-                self.eq_export_message = Some(format!("Imported {count} filters."));
-            }
-            Err(error) => {
-                self.eq_import_error = Some(format!("Unable to import the file: {error:#}"));
-            }
-        }
-    }
-
     /// Read an uploaded file into the database of curves, as a measurement or as
     /// a target.
     ///
@@ -1510,134 +1472,8 @@ impl CrinGraphApp {
     /// the thing the link was sharing. A target upload is named "<name> Target"
     /// and dropped if the database already has that target, which is how the
     /// reference deduplicates uploads against its configured targets.
-    fn import_upload(&mut self) {
-        let file_name = match std::path::Path::new(&self.upload_path)
-            .file_stem()
-            .and_then(|stem| stem.to_str())
-        {
-            Some(name) if !name.is_empty() => name.to_owned(),
-            _ => {
-                self.upload_error = Some("That path has no file name in it.".to_owned());
-                return;
-            }
-        };
-        let contents = match std::fs::read_to_string(&self.upload_path) {
-            Ok(contents) => contents,
-            Err(error) => {
-                self.upload_error = Some(format!("Unable to read the file: {error:#}"));
-                return;
-            }
-        };
-        let target = self.upload_as_target;
-        let uploaded =
-            match data::parse_upload(&file_name, &contents, &self.session.upload_grid, target) {
-                Ok(uploaded) => uploaded,
-                Err(error) => {
-                    self.upload_error = Some(format!("{file_name} was not accepted: {error}"));
-                    return;
-                }
-            };
-        if target {
-            // A target the database already carries would draw twice, so the
-            // upload is refused rather than shadowing it.
-            if self
-                .session
-                .groups
-                .iter()
-                .any(|group| group.target && group.name == file_name)
-            {
-                self.upload_error =
-                    Some(format!("{file_name} is already a target in this database."));
-                return;
-            }
-        }
-        let curve = uploaded.curve;
-        // A right-channel-only file is stored beside a null left channel so the
-        // two line up on the same frequencies, exactly as a right-only
-        // measurement from the database is.
-        let model = curve.model.clone();
-        let right_only = curve.variant == "R";
-        let mut indices = Vec::new();
-        self.session.curves.push(curve);
-        indices.push(self.session.curves.len() - 1);
-        if !target && right_only {
-            self.session.curves.push(data::CurveInfo {
-                model,
-                variant: "L".to_owned(),
-                points: self
-                    .session
-                    .upload_grid
-                    .iter()
-                    .map(|frequency| FRPoint {
-                        hz: *frequency,
-                        // A null channel: every point at zero, which the
-                        // channel picker skips in favour of the right one.
-                        db: 0.0,
-                    })
-                    .collect(),
-            });
-            indices.push(self.session.curves.len() - 1);
-        }
-        self.session.uploaded_names.insert(file_name.clone());
-        self.rebuild_uploaded_group(&file_name, target, &indices);
-        self.upload_error = None;
-        self.upload_message = Some(if target {
-            format!("Added {file_name} as a target.")
-        } else {
-            format!("Added {file_name} under Uploaded.")
-        });
-        self.dirty = true;
-    }
-
     /// Rebuild the group an uploaded curve belongs to, so a second upload of
     /// the same name joins the first rather than making a second group.
-    fn rebuild_uploaded_group(&mut self, name: &str, target: bool, curve_indices: &[usize]) {
-        let brand = if target {
-            target_category(name).to_owned()
-        } else {
-            UPLOADED_BRAND.to_owned()
-        };
-        let existing = self
-            .session
-            .groups
-            .iter()
-            .position(|group| group.brand == brand && group.name == name);
-        let index = match existing {
-            // Re-uploading a name the user already uploaded replaces that
-            // group's curves rather than piling a second copy of the same
-            // model into it.
-            Some(index) if self.session.is_uploaded(index) => {
-                self.session.groups[index].variants[0].curve_indices.clear();
-                index
-            }
-            Some(index) => index,
-            None => {
-                self.session.groups.push(MeasurementGroup {
-                    brand,
-                    brand_suffix: None,
-                    name: name.to_owned(),
-                    variants: vec![MeasurementVariant {
-                        name: "Uploaded".to_owned(),
-                        curve_indices: Vec::new(),
-                    }],
-                    target,
-                });
-                self.session.groups.len() - 1
-            }
-        };
-        let variant = &mut self.session.groups[index].variants[0];
-        variant.curve_indices.extend(curve_indices.iter().copied());
-        variant.curve_indices.sort_unstable();
-        variant.curve_indices.dedup();
-        // Keep the group list in the same order the database loader uses, so
-        // the library and the shared links do not reshuffle.
-        self.session.groups.sort_by(|left, right| {
-            left.brand
-                .cmp(&right.brand)
-                .then(left.name.cmp(&right.name))
-        });
-    }
-
     /// The equalizer's "How to use" window: the four paths the reference's
     /// onboarding modal offers, in the same order and with the same intent.
     ///
@@ -1790,7 +1626,18 @@ impl CrinGraphApp {
                 );
                 ui.horizontal(|ui| {
                     if ui.button("Upload").clicked() {
-                        self.import_upload();
+                        let path = std::path::PathBuf::from(&self.upload_path);
+                        let as_target = self.upload_as_target;
+                        match self.session.import_upload(&path, as_target) {
+                            Ok(message) => {
+                                self.upload_error = None;
+                                self.upload_message = Some(message);
+                            }
+                            Err(error) => {
+                                self.upload_message = None;
+                                self.upload_error = Some(error);
+                            }
+                        }
                     }
                     if ui.button("Cancel").clicked() {
                         cancelled = true;
@@ -2340,7 +2187,28 @@ impl CrinGraphApp {
                 );
                 ui.horizontal(|ui| {
                     if ui.button("Import").clicked() {
-                        self.import_parametric();
+                        let Some(phone) = self.session.eq_phone() else {
+                            self.eq_import_error =
+                                Some("Select a measurement to import into first.".to_owned());
+                            return;
+                        };
+                        match std::fs::read_to_string(&self.eq_import_path) {
+                            Ok(text) => match self.session.import_parametric(phone, &text) {
+                                Ok(count) => {
+                                    self.eq_import_error = None;
+                                    self.eq_export_message =
+                                        Some(format!("Imported {count} filters."));
+                                }
+                                Err(error) => {
+                                    self.eq_export_message = None;
+                                    self.eq_import_error = Some(error);
+                                }
+                            },
+                            Err(error) => {
+                                self.eq_import_error =
+                                    Some(format!("Unable to read the file: {error:#}"));
+                            }
+                        }
                     }
                     if ui.button("Cancel").clicked() {
                         cancelled = true;
@@ -3751,7 +3619,10 @@ fn build_groups(phone_books: &[PhoneBook], curves: &[CurveInfo]) -> Vec<Measurem
         }
         if let Some(name) = curve.model.strip_suffix(" Target") {
             targets
-                .entry((target_category(name).to_owned(), name.to_owned()))
+                .entry((
+                    squiglab_core::session::target_category(name).to_owned(),
+                    name.to_owned(),
+                ))
                 .or_default()
                 .push(index);
         } else {
@@ -3817,21 +3688,6 @@ fn brand_name(group: &MeasurementGroup) -> String {
         .as_ref()
         .map(|suffix| format!("{} {suffix}", group.brand))
         .unwrap_or_else(|| group.brand.clone())
-}
-
-fn target_category(target: &str) -> &'static str {
-    match target {
-        "Diffuse Field" | "Etymotic" | "Free Field" | "Innerfidelity ID" | "IEF Neutral" => {
-            "Neutral targets"
-        }
-        "Antdroid" | "Bad Guy" | "Banbeucmas" | "Crinacle" | "Precogvision" | "Super Review" => {
-            "Reviewer targets"
-        }
-        "Harman" | "Rtings" | "Sonarworks" | "IEF \"Harman\"" | "IEF Harman" => {
-            "Preference targets"
-        }
-        _ => "Other targets",
-    }
 }
 
 /// Where an exported curve goes: the download directory, because it is data the
@@ -3965,14 +3821,15 @@ fn group_has_imbalance(curves: &[CurveInfo], indices: &[usize]) -> bool {
 #[cfg(test)]
 mod tests {
     use super::{
-        build_groups, group_has_imbalance, manager_heights, target_category, ChannelMode,
-        CrinGraphApp, CurveSource, DisplayCurve, MeasurementGroup, MeasurementVariant, Preferences,
-        MAX_EQ_ROWS, TUTORIAL_SEGMENTS,
+        build_groups, group_has_imbalance, manager_heights, ChannelMode, CrinGraphApp, CurveSource,
+        DisplayCurve, MeasurementGroup, MeasurementVariant, Preferences, MAX_EQ_ROWS,
+        TUTORIAL_SEGMENTS,
     };
     use crate::app::repository_root;
     use squiglab_core::config::{AppConfig, MeasurementConfig};
     use squiglab_core::data::{CurveInfo, FRPoint};
     use squiglab_core::delta::DeltaTarget;
+    use squiglab_core::session::target_category;
     use squiglab_core::session::{
         apply_baseline, curve_file_name, curve_label, curve_text, group_key, matches_search,
         prepare_channels, SavedGroup,
@@ -4636,9 +4493,10 @@ smoothing_octaves = 3
                 "Preamp: 0.0002 dB\r\nFilter 1: ON PK Fc 500 Hz Gain -3.5 dB Q 1.2\r\n",
             )
             .unwrap();
-            app.eq_import_path = path.to_string_lossy().into_owned();
-            app.import_parametric();
-            assert!(app.eq_import_error.is_none(), "{:?}", app.eq_import_error);
+            let text = std::fs::read_to_string(&path).unwrap();
+            app.session
+                .import_parametric(phone, &text)
+                .expect("the import lands");
 
             let rows = app
                 .session
@@ -4660,8 +4518,8 @@ smoothing_octaves = 3
             // A file that is not an Equalizer APO configuration is refused and
             // the curve keeps what it had.
             std::fs::write(&path, "Filter 1: ON LPQ Fc 500 Hz Gain -3 dB Q 1\r\n").unwrap();
-            app.import_parametric();
-            assert!(app.eq_import_error.is_some());
+            let text = std::fs::read_to_string(&path).unwrap();
+            assert!(app.session.import_parametric(phone, &text).is_err());
             assert_eq!(app.session.eq_filters.get(&phone).map(Vec::len), Some(1));
             std::fs::remove_file(path).unwrap();
         });
@@ -4754,6 +4612,7 @@ smoothing_octaves = 3
     }
 
     /// A REW export with the given number of points, written to a temp file.
+    /// Write a measurement to a scratch file, for the tests that upload one.
     fn write_measurement(name: &str, points: usize) -> PathBuf {
         // The file's name is the measurement's name, which is what the
         // reference tool uses, so the file is named exactly that.
@@ -4781,15 +4640,11 @@ smoothing_octaves = 3
             let groups_before = app.session.groups.len();
             let path = write_measurement("My Headphones", 300);
             app.upload_path = path.to_string_lossy().into_owned();
-            app.import_upload();
-            assert!(app.upload_error.is_none(), "{:?}", app.upload_error);
-            assert!(
-                app.upload_message
-                    .as_deref()
-                    .is_some_and(|m| m.contains("Uploaded")),
-                "{:?}",
-                app.upload_message
-            );
+            let message = app
+                .session
+                .import_upload(&path, false)
+                .expect("the upload lands");
+            assert!(message.contains("Uploaded"), "{message}");
             assert_eq!(app.session.groups.len(), groups_before + 1);
 
             let group = app
@@ -4798,7 +4653,7 @@ smoothing_octaves = 3
                 .iter()
                 .find(|group| group.name == "My Headphones")
                 .expect("the upload is listed");
-            assert_eq!(group.brand, super::UPLOADED_BRAND);
+            assert_eq!(group.brand, squiglab_core::session::UPLOADED_BRAND);
             assert!(!group.target);
             assert!(app.session.is_uploaded(
                 app.session
@@ -4818,7 +4673,9 @@ smoothing_octaves = 3
             load_repository_measurements(&mut app);
             let path = write_measurement("Shared Away", 300);
             app.upload_path = path.to_string_lossy().into_owned();
-            app.import_upload();
+            app.session
+                .import_upload(&path, false)
+                .expect("the upload lands");
             assert!(app.upload_error.is_none());
             let index = app
                 .session
@@ -4860,14 +4717,18 @@ smoothing_octaves = 3
             load_repository_measurements(&mut app);
             let path = write_measurement("Twice", 300);
             app.upload_path = path.to_string_lossy().into_owned();
-            app.import_upload();
+            app.session
+                .import_upload(&path, false)
+                .expect("the upload lands");
             let groups_after_first = app
                 .session
                 .groups
                 .iter()
                 .filter(|group| group.name == "Twice")
                 .count();
-            app.import_upload();
+            app.session
+                .import_upload(&path, false)
+                .expect("the upload lands");
             let groups_after_second = app
                 .session
                 .groups
@@ -4906,7 +4767,9 @@ smoothing_octaves = 3
             load_repository_measurements(&mut app);
             let path = write_measurement("Right Only R", 300);
             app.upload_path = path.to_string_lossy().into_owned();
-            app.import_upload();
+            app.session
+                .import_upload(&path, false)
+                .expect("the upload lands");
             assert!(app.upload_error.is_none(), "{:?}", app.upload_error);
             let index = app
                 .session
@@ -4939,7 +4802,9 @@ smoothing_octaves = 3
             let path = write_measurement("Brand New Target", 300);
             app.upload_path = path.to_string_lossy().into_owned();
             app.upload_as_target = true;
-            app.import_upload();
+            app.session
+                .import_upload(&path, true)
+                .expect("the upload lands");
             assert!(app.upload_error.is_none(), "{:?}", app.upload_error);
             // The curve is named with the " Target" suffix the database uses, so
             // the loader's own name splitter treats it as a target.
@@ -4969,14 +4834,12 @@ smoothing_octaves = 3
             app.upload_path = write_measurement("Harman", 300)
                 .to_string_lossy()
                 .into_owned();
-            app.import_upload();
-            assert!(
-                app.upload_error
-                    .as_deref()
-                    .is_some_and(|error| error.contains("already a target")),
-                "{:?}",
-                app.upload_error
-            );
+            let duplicate = std::path::PathBuf::from(&app.upload_path);
+            let refusal = app
+                .session
+                .import_upload(&duplicate, true)
+                .expect_err("the duplicate is refused");
+            assert!(refusal.contains("already a target"), "{refusal}");
             std::fs::remove_file(path).unwrap();
         });
     }
@@ -4990,14 +4853,11 @@ smoothing_octaves = 3
             let curves_before = app.session.curves.len();
             let path = write_measurement("Fragment", 50);
             app.upload_path = path.to_string_lossy().into_owned();
-            app.import_upload();
-            assert!(
-                app.upload_error
-                    .as_deref()
-                    .is_some_and(|error| error.contains("at least 128")),
-                "{:?}",
-                app.upload_error
-            );
+            let refusal = app
+                .session
+                .import_upload(&path, false)
+                .expect_err("the short upload is refused");
+            assert!(refusal.contains("at least 128"), "{refusal}");
             assert_eq!(app.session.groups.len(), groups_before);
             assert_eq!(app.session.curves.len(), curves_before);
             std::fs::remove_file(path).unwrap();
@@ -5010,12 +4870,12 @@ smoothing_octaves = 3
             let mut app = CrinGraphApp::default();
             load_repository_measurements(&mut app);
             app.upload_path = "/nonexistent/measurement.txt".to_owned();
-            app.import_upload();
-            assert!(app.upload_error.is_some());
+            let missing = std::path::PathBuf::from(&app.upload_path);
+            assert!(app.session.import_upload(&missing, false).is_err());
             // And a path with no file name in it is refused before any read.
             app.upload_path = "/".to_owned();
-            app.import_upload();
-            assert!(app.upload_error.is_some());
+            let nameless = std::path::PathBuf::from(&app.upload_path);
+            assert!(app.session.import_upload(&nameless, false).is_err());
         });
     }
 

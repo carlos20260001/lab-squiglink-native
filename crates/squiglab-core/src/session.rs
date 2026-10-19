@@ -10,7 +10,7 @@ use crate::graph::{LabelLayout, ZoomRegion};
 use crate::processing::{self, NormParams, SmoothingParams};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// Where a displayed curve came from. The reference tool renders an
 /// equalizer's result as a synthetic curve added on the same path as a
@@ -881,6 +881,138 @@ impl Session {
             Err(error) => Err(format!("Unable to export {path:?}: {error}")),
         }
     }
+    /// Import a set of filters into a measurement's equalizer.
+    ///
+    /// Returns how many filters were imported, or why they could not be.
+    pub fn import_parametric(&mut self, phone: usize, text: &str) -> Result<usize, String> {
+        let imported = equalizer::import_parametric(text)
+            .map_err(|error| format!("Unable to import the file: {error:#}"))?;
+        let count = imported.filters.len();
+        self.eq_filters.insert(
+            phone,
+            imported
+                .filters
+                .iter()
+                .zip(&imported.enabled)
+                .map(|(filter, &enabled)| EqRow {
+                    filter: *filter,
+                    enabled,
+                })
+                .collect(),
+        );
+        self.dirty = true;
+        Ok(count)
+    }
+
+    /// Read an uploaded file into the database of curves, as a measurement or
+    /// as a target.
+    ///
+    /// Returns the message to show, or why the file was refused.
+    pub fn import_upload(&mut self, path: &Path, as_target: bool) -> Result<String, String> {
+        let file_name = path
+            .file_stem()
+            .and_then(|stem| stem.to_str())
+            .filter(|name| !name.is_empty())
+            .ok_or_else(|| "That path has no file name in it.".to_owned())?
+            .to_owned();
+        let contents = std::fs::read_to_string(path)
+            .map_err(|error| format!("Unable to read the file: {error:#}"))?;
+        let uploaded =
+            crate::data::parse_upload(&file_name, &contents, &self.upload_grid, as_target)
+                .map_err(|error| format!("{file_name} was not accepted: {error}"))?;
+        if as_target {
+            // A target the database already carries would draw twice, so the
+            // upload is refused rather than shadowing it.
+            if self
+                .groups
+                .iter()
+                .any(|group| group.target && group.name == file_name)
+            {
+                return Err(format!("{file_name} is already a target in this database."));
+            }
+        }
+        let curve = uploaded.curve;
+        // A right-channel-only file is stored beside a null left channel so the
+        // two line up on the same frequencies, exactly as a right-only
+        // measurement from the database is.
+        let model = curve.model.clone();
+        let right_only = curve.variant == "R";
+        let mut indices = Vec::new();
+        self.curves.push(curve);
+        indices.push(self.curves.len() - 1);
+        if !as_target && right_only {
+            self.curves.push(crate::data::CurveInfo {
+                model,
+                variant: "L".to_owned(),
+                points: self
+                    .upload_grid
+                    .iter()
+                    .map(|frequency| crate::data::FRPoint {
+                        hz: *frequency,
+                        // A null channel: every point at zero, which the
+                        // channel picker skips in favour of the right one.
+                        db: 0.0,
+                    })
+                    .collect(),
+            });
+            indices.push(self.curves.len() - 1);
+        }
+        self.uploaded_names.insert(file_name.clone());
+        self.rebuild_uploaded_group(&file_name, as_target, &indices);
+        self.dirty = true;
+        Ok(if as_target {
+            format!("Added {file_name} as a target.")
+        } else {
+            format!("Added {file_name} under {UPLOADED_BRAND}.")
+        })
+    }
+
+    /// Rebuild the group an uploaded measurement lives in.
+    fn rebuild_uploaded_group(&mut self, name: &str, target: bool, curve_indices: &[usize]) {
+        let brand = if target {
+            target_category(name).to_owned()
+        } else {
+            UPLOADED_BRAND.to_owned()
+        };
+        let existing = self
+            .groups
+            .iter()
+            .position(|group| group.brand == brand && group.name == name);
+        let index = match existing {
+            // Re-uploading a name the user already uploaded replaces that
+            // group's curves rather than piling a second copy of the same
+            // model into it.
+            Some(index) if self.is_uploaded(index) => {
+                self.groups[index].variants[0].curve_indices.clear();
+                index
+            }
+            Some(index) => index,
+            None => {
+                self.groups.push(MeasurementGroup {
+                    brand,
+                    brand_suffix: None,
+                    name: name.to_owned(),
+                    variants: vec![MeasurementVariant {
+                        name: "Uploaded".to_owned(),
+                        curve_indices: Vec::new(),
+                    }],
+                    target,
+                });
+                self.groups.len() - 1
+            }
+        };
+        let variant = &mut self.groups[index].variants[0];
+        variant.curve_indices.extend(curve_indices.iter().copied());
+        variant.curve_indices.sort_unstable();
+        variant.curve_indices.dedup();
+        // Keep the group list in the same order the database loader uses, so
+        // the library and the shared links do not reshuffle.
+        self.groups.sort_by(|left, right| {
+            left.brand
+                .cmp(&right.brand)
+                .then(left.name.cmp(&right.name))
+        });
+    }
 }
 
 /// The brand an uploaded measurement is filed under.
@@ -1118,4 +1250,19 @@ pub fn prepare_curve(
     let frequencies: Vec<f32> = curve.iter().map(|point| point.hz).collect();
     let params = SmoothingParams::new(&frequencies, smooth_level)?;
     processing::smooth(curve, &params)
+}
+
+pub fn target_category(target: &str) -> &'static str {
+    match target {
+        "Diffuse Field" | "Etymotic" | "Free Field" | "Innerfidelity ID" | "IEF Neutral" => {
+            "Neutral targets"
+        }
+        "Antdroid" | "Bad Guy" | "Banbeucmas" | "Crinacle" | "Precogvision" | "Super Review" => {
+            "Reviewer targets"
+        }
+        "Harman" | "Rtings" | "Sonarworks" | "IEF \"Harman\"" | "IEF Harman" => {
+            "Preference targets"
+        }
+        _ => "Other targets",
+    }
 }
