@@ -37,7 +37,7 @@ fn targets(ui: &mut Ui, app: &mut App) {
             // scrolls sideways when there are more targets than it holds.
             ui.horizontal(|ui| {
                 let mut first = true;
-                let mut heading = |ui: &mut Ui, label: &str, first: &mut bool| {
+                let heading = |ui: &mut Ui, label: &str, first: &mut bool| {
                     if !*first {
                         ui.label(
                             RichText::new("|")
