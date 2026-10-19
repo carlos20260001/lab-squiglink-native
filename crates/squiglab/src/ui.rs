@@ -6,7 +6,7 @@
 
 use egui::{pos2, Align, Color32, FontId, Pos2, Rect, RichText, Shape, Stroke, Ui, Vec2};
 
-use crate::theme::{self, Palette, TypeStep};
+use crate::theme::{self, TypeStep};
 use squiglab_core::graph::ZoomRegion;
 
 pub use crate::theme::Spacing;

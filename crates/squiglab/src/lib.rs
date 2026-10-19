@@ -5,6 +5,7 @@
 //! on egui and could be drawn by anything.
 
 pub mod app;
+pub mod constraints;
 pub mod graph;
 pub mod theme;
 pub mod ui;

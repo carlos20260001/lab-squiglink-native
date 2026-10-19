@@ -2019,6 +2019,14 @@ impl CrinGraphApp {
             self.session.eq_range.1 = self.session.eq_range.1.max(self.session.eq_range.0);
         });
 
+        // --- what the fit is allowed to produce ---
+        ui.add_space(cgui::Spacing::TIGHT);
+        let mut constraints = self.session.eq_constraints.clone();
+        if crate::constraints::show(ui, &mut constraints) {
+            self.session.eq_constraints = constraints;
+            self.dirty = true;
+        }
+
         // --- the two export formats ---
         ui.add_space(cgui::Spacing::TIGHT);
         ui.horizontal(|ui| {
