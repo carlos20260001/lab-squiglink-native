@@ -483,4 +483,10 @@ impl Transform {
         self.rect.bottom()
             - (db - self.y_range.0) / (self.y_range.1 - self.y_range.0) * self.rect.height()
     }
+
+    /// The level at a place on the plot, the other way about.
+    pub fn y_at(self, y: f32) -> f32 {
+        self.y_range.0
+            + (self.rect.bottom() - y) / self.rect.height() * (self.y_range.1 - self.y_range.0)
+    }
 }

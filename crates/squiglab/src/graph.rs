@@ -41,15 +41,42 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
     let height = width / metrics::PLOT_ASPECT_RATIO;
 
     let available = ui.available_width();
+    let ctx = ui.ctx().clone();
     ui.horizontal(|ui| {
         ui.add_space((available - width).max(0.0) / 2.0);
         let (response, painter) =
             ui.allocate_painter(Vec2::new(width, height), Sense::click_and_drag());
         let rect = response.rect;
         painter.rect_filled(rect, 0.0, palette.graph);
+        let plot = plot_rect(rect);
+        let transform = transform_for(app, plot);
         draw(app, &painter, rect, response.hover_pos());
         scale(app, &painter, rect, &response);
+        eq_editor(app, &painter, plot, &transform, &response, &ctx);
     });
+}
+
+/// The plot's own area, inside the box: room for the dB scale on the left
+/// and for the frequency axis and the band names below.
+fn plot_rect(rect: Rect) -> Rect {
+    Rect::from_min_max(
+        Pos2::new(rect.left() + 44.0, rect.top() + 10.0),
+        Pos2::new(rect.right() - 10.0, rect.bottom() - 46.0),
+    )
+}
+
+/// The way from the plot back to the curves.
+fn transform_for(app: &App, plot: Rect) -> Transform {
+    let curves = plot_curves(app);
+    let (minimum, maximum) = match app.session.graph_range {
+        Some(range) => range,
+        None => {
+            let (minimum, maximum) = y_range(&curves);
+            scaled_y_range((minimum, maximum), app.session.y_scale)
+        }
+    };
+    let zoom = app.session.zoom;
+    Transform::new(plot, zoom.x_range(), (minimum, maximum))
 }
 
 /// The scale down the left of the graph, and the handles that move it.
@@ -103,12 +130,17 @@ fn scale(app: &mut App, painter: &egui::Painter, rect: Rect, response: &egui::Re
     }
 
     // Dragging the middle mark moves the range; dragging a circle widens it.
-    if response.drag_started() {
+    // The scale is only taken hold of at the scale itself: the rest of the
+    // graph belongs to the equalizer, as it does in the reference.
+    let on_the_scale = response
+        .hover_pos()
+        .is_some_and(|point| (point.x - x).abs() <= 12.0);
+    if response.drag_started() && on_the_scale {
         // Where the pointer took hold, which is what tells the mark from the
         // circles once the pointer has moved.
         app.scale_grab = response.hover_pos();
     }
-    if response.dragged() {
+    if response.dragged() && app.scale_grab.is_some() {
         let delta = response.drag_delta().y;
         if delta != 0.0 {
             let per_pixel = (maximum - minimum) / plot.height();
@@ -142,12 +174,7 @@ fn scale(app: &mut App, painter: &egui::Painter, rect: Rect, response: &egui::Re
 fn draw(app: &App, painter: &egui::Painter, rect: Rect, pointer: Option<Pos2>) {
     let curves = plot_curves(app);
 
-    // The plot's own area, inside the box: room for the dB scale on the left
-    // and for the frequency axis and the band names below.
-    let plot = Rect::from_min_max(
-        Pos2::new(rect.left() + 44.0, rect.top() + 10.0),
-        Pos2::new(rect.right() - 10.0, rect.bottom() - 46.0),
-    );
+    let plot = plot_rect(rect);
     if plot.width() <= 0.0 || plot.height() <= 0.0 {
         return;
     }
@@ -160,8 +187,7 @@ fn draw(app: &App, painter: &egui::Painter, rect: Rect, pointer: Option<Pos2>) {
             scaled_y_range((minimum, maximum), app.session.y_scale)
         }
     };
-    let zoom = app.session.zoom;
-    let transform = Transform::new(plot, zoom.x_range(), (minimum, maximum));
+    let transform = transform_for(app, plot);
 
     grid(painter, plot, &transform, &minimum, &maximum);
     band_names(painter, plot, &transform);
@@ -214,6 +240,387 @@ fn plot_curves(app: &App) -> Vec<PlotCurve<'_>> {
         });
     }
     curves
+}
+
+/// The bands of the curve that is being edited, and where they sit.
+struct Marker {
+    /// The row in the bank.
+    row: usize,
+    /// The frequency, in hertz.
+    hz: f64,
+    /// The response there, in decibels.
+    db: f64,
+}
+
+/// The way a drag on the graph is locked.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Axis {
+    /// The frequency, and the gain stays where it was.
+    Frequency,
+    /// The gain, and the frequency stays where it was.
+    Gain,
+}
+
+/// What the pointer is doing on the graph.
+pub enum GraphDrag {
+    /// A band is being moved, or a new one is being drawn.
+    Band {
+        /// The row being moved; none when a new band is being drawn.
+        row: Option<usize>,
+        /// The way the drag is locked.
+        axis: Option<Axis>,
+        /// The frequency and the gain the band began at.
+        anchor_hz: f64,
+        anchor_db: f64,
+        /// Where the pointer began.
+        origin: Pos2,
+    },
+    /// A range of frequencies is being brushed, for the tone generator.
+    Range {
+        /// The frequency the brush began at.
+        anchor_hz: f64,
+        /// The frequency it has reached.
+        last_hz: f64,
+    },
+}
+
+/// How far the pointer may be from a band and still be on it, in points.
+const MARKER_HIT_PX: f32 = 28.0;
+/// The radius a band's mark is drawn at, in points.
+const MARKER_RADIUS: f32 = 2.5;
+/// How far the pointer must move before the drag is locked to one way.
+const DRAG_THRESHOLD_PX: f32 = 5.0;
+
+/// The equalizer's own graph: the bands, and what the pointer does to them.
+fn eq_editor(
+    app: &mut App,
+    painter: &egui::Painter,
+    plot: Rect,
+    transform: &Transform,
+    response: &egui::Response,
+    ctx: &egui::Context,
+) {
+    // The reference's graph is an editor only while the equalizer is open.
+    if app.tab != crate::app::Tab::Equalizer {
+        return;
+    }
+    let palette = theme::current_palette();
+    let markers = eq_markers(app, transform);
+    let pointer = response.hover_pos().filter(|point| plot.contains(*point));
+
+    // The range being brushed, which the reference shows on the plot while
+    // it is being brushed.
+    if let Some(GraphDrag::Range { anchor_hz, last_hz }) = &app.graph_drag {
+        let (low, high) = if anchor_hz <= last_hz {
+            (*anchor_hz, *last_hz)
+        } else {
+            (*last_hz, *anchor_hz)
+        };
+        let left = transform.hz_to_x(low as f32);
+        let right = transform.hz_to_x(high as f32);
+        painter.rect_filled(
+            Rect::from_min_max(Pos2::new(left, plot.top()), Pos2::new(right, plot.bottom())),
+            0.0,
+            palette.accent.gamma_multiply(0.18),
+        );
+    }
+
+    // The marks.
+    for marker in &markers {
+        let centre = Pos2::new(
+            transform.hz_to_x(marker.hz as f32),
+            transform.db_to_y(marker.db as f32),
+        );
+        let hot = pointer.is_some_and(|point| (point - centre).length() <= MARKER_HIT_PX);
+        let radius = if hot {
+            MARKER_RADIUS * 1.8
+        } else {
+            MARKER_RADIUS
+        };
+        let color = theme::color(crate::graph::curve_color(
+            app,
+            app.session.eq_phone.unwrap_or(0),
+        ));
+        painter.circle_filled(centre, radius, palette.graph);
+        painter.circle_stroke(centre, radius, Stroke::new(1.4, color));
+    }
+
+    // The wheel over a band changes its width, as the reference's does.
+    if let Some(pointer) = pointer {
+        let wheel = ctx.input(|input| input.smooth_scroll_delta.y);
+        if wheel != 0.0 {
+            if let Some(marker) = markers.iter().find(|marker| {
+                (pointer - marker_centre(marker, transform)).length() <= MARKER_HIT_PX
+            }) {
+                let current = band_q(app, marker.row);
+                let fine = current <= 0.3;
+                let step: f32 = if fine { 0.01 } else { 0.1 };
+                let sensitivity: f32 = if current >= 2.0 {
+                    1.0
+                } else {
+                    let t = ((current as f32 - 0.1) / (2.0 - 0.1)).clamp(0.0, 1.0);
+                    0.22 + 0.78 * t.powf(1.2)
+                };
+                let notches = (wheel.abs() / 42.0_f32).powf(0.58).round().clamp(1.0, 5.0);
+                let change = -wheel.signum() * step * notches * sensitivity;
+                crate::equalizer::set_band_q(app, marker.row, current + change as f64);
+            }
+        }
+    }
+
+    // The right button on a band turns its kind round, as the reference's does.
+    if ctx.input(|input| input.pointer.button_clicked(egui::PointerButton::Secondary)) {
+        if let Some(pointer) = pointer {
+            if let Some(marker) = markers.iter().find(|marker| {
+                (pointer - marker_centre(marker, transform)).length() <= MARKER_HIT_PX
+            }) {
+                crate::equalizer::cycle_band_type(app, marker.row);
+            }
+        }
+    }
+
+    // The drag: a band is moved, or drawn, or a range of frequencies is
+    // brushed for the tone generator.
+    if response.drag_started() {
+        if let Some(pointer) = response.interact_pointer_pos() {
+            if plot.contains(pointer) {
+                let hit = markers.iter().find(|marker| {
+                    (pointer - marker_centre(marker, transform)).length() <= MARKER_HIT_PX
+                });
+                match hit {
+                    Some(marker) => {
+                        app.graph_drag = Some(GraphDrag::Band {
+                            row: Some(marker.row),
+                            axis: None,
+                            anchor_hz: marker.hz,
+                            anchor_db: marker.db,
+                            origin: pointer,
+                        });
+                    }
+                    None => {
+                        let hz = frequency_at(transform, pointer);
+                        if near_the_trace(app, transform, pointer) {
+                            // A band is drawn out of the curve, at the
+                            // height the pointer is at above it.
+                            let gain = gain_under(app, transform, pointer);
+                            let row = crate::equalizer::add_band_at(app, hz, gain);
+                            app.graph_drag = Some(GraphDrag::Band {
+                                row,
+                                axis: None,
+                                anchor_hz: hz,
+                                anchor_db: gain,
+                                origin: pointer,
+                            });
+                        } else {
+                            app.graph_drag = Some(GraphDrag::Range {
+                                anchor_hz: hz,
+                                last_hz: hz,
+                            });
+                        }
+                    }
+                }
+            }
+        }
+    }
+    if response.dragged() {
+        let pointer = response.interact_pointer_pos();
+        // The drag is taken out of the program while it is worked on, so that
+        // the band can be written back without borrowing it twice.
+        match app.graph_drag.take() {
+            Some(GraphDrag::Band {
+                row,
+                axis,
+                anchor_hz,
+                anchor_db,
+                origin,
+            }) => {
+                let mut axis = axis;
+                let (mut hz, mut db) = (anchor_hz, anchor_db);
+                if let Some(pointer) = pointer {
+                    if axis.is_none() {
+                        let dx = (pointer.x - origin.x).abs();
+                        let dy = (pointer.y - origin.y).abs();
+                        if dx.max(dy) >= DRAG_THRESHOLD_PX {
+                            axis = Some(if dx >= dy {
+                                Axis::Frequency
+                            } else {
+                                Axis::Gain
+                            });
+                        }
+                    }
+                    if axis == Some(Axis::Frequency) {
+                        hz = frequency_at(transform, pointer);
+                    }
+                    if axis == Some(Axis::Gain) {
+                        db = gain_under(app, transform, pointer);
+                    }
+                    if let Some(row) = row {
+                        crate::equalizer::move_band(app, row, hz, db);
+                    }
+                }
+                app.graph_drag = Some(GraphDrag::Band {
+                    row,
+                    axis,
+                    anchor_hz,
+                    anchor_db,
+                    origin,
+                });
+            }
+            Some(GraphDrag::Range { anchor_hz, last_hz }) => {
+                let mut last_hz = last_hz;
+                if let Some(pointer) = pointer {
+                    last_hz = frequency_at(transform, pointer);
+                    let (low, high) = if anchor_hz <= last_hz {
+                        (anchor_hz, last_hz)
+                    } else {
+                        (last_hz, anchor_hz)
+                    };
+                    app.tone_band = (
+                        low.clamp(20.0, 20_000.0) as f32,
+                        high.clamp(20.0, 20_000.0) as f32,
+                    );
+                }
+                app.graph_drag = Some(GraphDrag::Range { anchor_hz, last_hz });
+            }
+            None => {}
+        }
+    }
+    if response.drag_stopped() {
+        app.graph_drag = None;
+    }
+}
+
+/// Where a band's mark sits.
+fn marker_centre(marker: &Marker, transform: &Transform) -> Pos2 {
+    Pos2::new(
+        transform.hz_to_x(marker.hz as f32),
+        transform.db_to_y(marker.db as f32),
+    )
+}
+
+/// The frequency under the pointer.
+fn frequency_at(transform: &Transform, pointer: Pos2) -> f64 {
+    f64::from(transform.x_at(pointer.x)).clamp(20.0, 20_000.0)
+}
+
+/// The level under the pointer, in decibels.
+fn level_at(transform: &Transform, pointer: Pos2) -> f64 {
+    f64::from(transform.y_at(pointer.y))
+}
+
+/// How far above the curve the pointer is, in decibels.
+fn gain_under(app: &App, transform: &Transform, pointer: Pos2) -> f64 {
+    let level = level_at(transform, pointer);
+    let Some(phone) = app.session.eq_phone else {
+        return level;
+    };
+    let Some(curve) = app.session.display_curves.iter().find(|curve| {
+        curve.group_index == phone
+            && matches!(
+                curve.source,
+                squiglab_core::session::CurveSource::Measurement
+            )
+    }) else {
+        return level;
+    };
+    let hz = frequency_at(transform, pointer) as f32;
+    let trace = f64::from(db_at(&curve.points, f64::from(hz)));
+    (level - trace).clamp(-40.0, 40.0)
+}
+
+/// The bands of the curve that is being edited.
+fn eq_markers(app: &App, transform: &Transform) -> Vec<Marker> {
+    let Some(phone) = app.session.eq_phone else {
+        return Vec::new();
+    };
+    // The measurement the bands sit on, so that a mark is where the curve is.
+    let measurement = app
+        .session
+        .display_curves
+        .iter()
+        .find(|curve| {
+            curve.group_index == phone
+                && matches!(
+                    curve.source,
+                    squiglab_core::session::CurveSource::Measurement
+                )
+        })
+        .map(|curve| &curve.points);
+    crate::equalizer::bank_rows(app)
+        .into_iter()
+        .filter(|(_, row)| row.enabled)
+        .map(|(index, band)| {
+            let hz = band.filter.freq;
+            // The mark sits where the curve is, with the band's own gain
+            // added to it: a shelf is drawn as the peak it would be, so that
+            // turning a band into a shelf does not move its mark.
+            let db = measurement
+                .map(|points| db_at(points, hz) as f64 + band.filter.gain)
+                .unwrap_or(band.filter.gain);
+            Marker { row: index, hz, db }
+        })
+        .filter(|marker| {
+            let x = transform.hz_to_x(marker.hz as f32);
+            let y = transform.db_to_y(marker.db as f32);
+            x.is_finite() && y.is_finite()
+        })
+        .collect()
+}
+
+/// The level of a curve at a frequency.
+fn db_at(points: &[squiglab_core::data::FRPoint], hz: f64) -> f32 {
+    if points.is_empty() {
+        return 0.0;
+    }
+    let hz = hz as f32;
+    for window in points.windows(2) {
+        let (left, right) = (&window[0], &window[1]);
+        if hz >= left.hz && hz <= right.hz {
+            let span = right.hz - left.hz;
+            if span <= 0.0 {
+                return left.db;
+            }
+            let place = (hz - left.hz) / span;
+            return left.db + (right.db - left.db) * place;
+        }
+    }
+    if hz < points[0].hz {
+        points[0].db
+    } else {
+        points[points.len() - 1].db
+    }
+}
+
+/// The width of a band.
+fn band_q(app: &App, row: usize) -> f64 {
+    crate::equalizer::bank_rows(app)
+        .into_iter()
+        .find(|(index, _)| *index == row)
+        .map(|(_, row)| row.filter.q)
+        .unwrap_or(1.0)
+}
+
+/// Whether the pointer is near the curve that is being edited.
+///
+/// The reference measures it at the pointer's own frequency: the distance
+/// from the pointer down to the curve, and no more than a mark's reach.
+fn near_the_trace(app: &App, transform: &Transform, pointer: Pos2) -> bool {
+    let Some(phone) = app.session.eq_phone else {
+        return false;
+    };
+    let Some(curve) = app.session.display_curves.iter().find(|curve| {
+        curve.group_index == phone
+            && matches!(
+                curve.source,
+                squiglab_core::session::CurveSource::Measurement
+            )
+    }) else {
+        return false;
+    };
+    let hz = frequency_at(transform, pointer) as f32;
+    let db = db_at(&curve.points, f64::from(hz));
+    let y = transform.db_to_y(db);
+    (y - pointer.y).abs() <= MARKER_HIT_PX
 }
 
 /// The grid, the dB scale and the frequency axis.

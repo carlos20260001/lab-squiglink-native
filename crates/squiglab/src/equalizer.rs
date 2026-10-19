@@ -218,16 +218,15 @@ pub fn show(ui: &mut Ui, app: &mut App) {
     let bank = app.session.eq_bank;
     rows.retain(|row| row.bank == bank);
     // The reference always shows ten bands, empty ones included, so a curve
-    // with no equalizer of its own still has the table to fill in.
-    let empty = rows.is_empty();
-    if empty {
-        rows = (0..squiglab_core::session::MAX_EQ_ROWS)
-            .map(|_| EqRow {
-                filter: Filter::new(FilterType::Peaking, 0.0, 0.0, 0.0),
-                enabled: true,
-                bank,
-            })
-            .collect();
+    // with no equalizer of its own still has the table to fill in. The bands
+    // that are there keep their places, and the empty ones come after.
+    let empty = rows.len() < squiglab_core::session::MAX_EQ_ROWS;
+    while rows.len() < squiglab_core::session::MAX_EQ_ROWS {
+        rows.push(EqRow {
+            filter: Filter::new(FilterType::Peaking, 0.0, 0.0, 0.0),
+            enabled: true,
+            bank,
+        });
     }
     let mut changed = false;
 
@@ -333,7 +332,7 @@ pub fn show(ui: &mut Ui, app: &mut App) {
     let third = (ui.available_width() - metrics::GAP * 2.0) / 3.0;
     ui.horizontal(|ui| {
         if ui
-            .add_sized([third, 28.0], egui::Button::new("＋"))
+            .add_sized([third, 28.0], egui::Button::new("+"))
             .on_hover_text("Add a band")
             .clicked()
         {
@@ -358,7 +357,7 @@ pub fn show(ui: &mut Ui, app: &mut App) {
             }
         }
         if ui
-            .add_sized([third, 28.0], egui::Button::new("－"))
+            .add_sized([third, 28.0], egui::Button::new("−"))
             .on_hover_text("Remove the last band")
             .clicked()
         {
@@ -719,6 +718,9 @@ pub fn show_summary(ui: &mut Ui, app: &mut App) {
 /// Put a bank's rows back into a curve's whole set, leaving the other banks
 /// as they were.
 fn write_bank(app: &mut App, phone: usize, bank: squiglab_core::session::EqBank, rows: Vec<EqRow>) {
+    // The state before the change is what the history keeps, so that undo
+    // puts it back.
+    let before = snapshot(app);
     let mut all = app
         .session
         .eq_filters
@@ -728,8 +730,114 @@ fn write_bank(app: &mut App, phone: usize, bank: squiglab_core::session::EqBank,
     all.retain(|row| row.bank != bank);
     all.extend(rows);
     app.session.eq_filters.insert(phone, all);
-    app.history.record(snapshot(app));
+    app.history.record(before);
     app.session.rebuild_display_curves();
+}
+
+/// The rows of the bank that is being edited.
+pub fn bank_rows(app: &App) -> Vec<(usize, EqRow)> {
+    let Some(phone) = app.session.eq_phone else {
+        return Vec::new();
+    };
+    let bank = app.session.eq_bank;
+    app.session
+        .eq_filters
+        .get(&phone)
+        .map(|rows| {
+            rows.iter()
+                .enumerate()
+                .filter(|(_, row)| row.bank == bank)
+                .map(|(index, row)| (index, row.clone()))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Draw a new band, as the reference's graph does when a band is dragged out
+/// of the curve. The row it lands in is given back, so that it can be moved.
+pub fn add_band_at(app: &mut App, hz: f64, gain: f64) -> Option<usize> {
+    let phone = app.session.eq_phone?;
+    let bank = app.session.eq_bank;
+    let mut rows = bank_rows(app)
+        .into_iter()
+        .map(|(_, row)| row)
+        .collect::<Vec<_>>();
+    if rows.len() >= squiglab_core::session::MAX_EQ_ROWS {
+        return None;
+    }
+    rows.push(EqRow {
+        filter: Filter::new(
+            FilterType::Peaking,
+            hz.clamp(20.0, 20_000.0).round(),
+            1.0,
+            gain.clamp(-40.0, 40.0),
+        ),
+        enabled: true,
+        bank,
+    });
+    let index = rows.len() - 1;
+    write_bank(app, phone, bank, rows);
+    crate::sound::push_chain(app);
+    Some(index)
+}
+
+/// Move a band, as the reference's graph does when a band is dragged.
+pub fn move_band(app: &mut App, row: usize, hz: f64, gain: f64) {
+    let Some(phone) = app.session.eq_phone else {
+        return;
+    };
+    let bank = app.session.eq_bank;
+    let mut rows = bank_rows(app)
+        .into_iter()
+        .map(|(_, row)| row)
+        .collect::<Vec<_>>();
+    let Some(slot) = rows.get_mut(row) else {
+        return;
+    };
+    slot.filter.freq = hz.clamp(20.0, 20_000.0).round();
+    slot.filter.gain = gain.clamp(-40.0, 40.0);
+    write_bank(app, phone, bank, rows);
+    crate::sound::push_chain(app);
+}
+
+/// The kind of filter a band has, turned round as the reference turns it.
+pub fn cycle_band_type(app: &mut App, row: usize) {
+    let Some(phone) = app.session.eq_phone else {
+        return;
+    };
+    let bank = app.session.eq_bank;
+    let mut rows = bank_rows(app)
+        .into_iter()
+        .map(|(_, row)| row)
+        .collect::<Vec<_>>();
+    let Some(slot) = rows.get_mut(row) else {
+        return;
+    };
+    slot.filter.filter_type = match slot.filter.filter_type {
+        FilterType::Peaking => FilterType::LowShelf,
+        FilterType::LowShelf => FilterType::HighShelf,
+        FilterType::HighShelf => FilterType::Peaking,
+    };
+    write_bank(app, phone, bank, rows);
+    crate::sound::push_chain(app);
+}
+
+/// The width of a band.
+pub fn set_band_q(app: &mut App, row: usize, q: f64) {
+    let Some(phone) = app.session.eq_phone else {
+        return;
+    };
+    let bank = app.session.eq_bank;
+    let mut rows = bank_rows(app)
+        .into_iter()
+        .map(|(_, row)| row)
+        .collect::<Vec<_>>();
+    let Some(slot) = rows.get_mut(row) else {
+        return;
+    };
+    slot.filter.q = q.clamp(0.0, 20.0);
+    write_bank(app, phone, bank, rows);
+    crate::sound::push_chain(app);
 }
 
 /// Add a band to the curve that is being looked at.

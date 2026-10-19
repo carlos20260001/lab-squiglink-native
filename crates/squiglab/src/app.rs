@@ -85,6 +85,8 @@ pub struct App {
     pub constraints_open: bool,
     /// Whether the sound tools' settings are open, behind their gear.
     pub sound_settings_open: bool,
+    /// What the pointer is doing on the graph.
+    pub graph_drag: Option<crate::graph::GraphDrag>,
     /// The file the user is being asked for, and the dialog that is asking.
     pub picker: Option<(Pick, crate::filepick::Picker)>,
     /// The measurement the user chose with the system's dialog, waiting to be
@@ -170,6 +172,7 @@ impl App {
             screenshot_requested: false,
             constraints_open: false,
             sound_settings_open: false,
+            graph_drag: None,
             picker: None,
             pending_upload: None,
             upload_path: String::new(),
