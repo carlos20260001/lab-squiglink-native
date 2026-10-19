@@ -268,15 +268,15 @@ pub fn register_fonts(ctx: &Context) {
 
     fonts.font_data.insert(
         FONT_REGULAR.to_owned(),
-        std::sync::Arc::new(egui::FontData::from_static(include_bytes!(
-            "../assets/fonts/OpenSans-Regular.ttf"
-        ))),
+        std::sync::Arc::new(egui::FontData::from_static(
+            squiglab_core::product::FONT_REGULAR,
+        )),
     );
     fonts.font_data.insert(
         FONT_BOLD.to_owned(),
-        std::sync::Arc::new(egui::FontData::from_static(include_bytes!(
-            "../assets/fonts/OpenSans-Bold.ttf"
-        ))),
+        std::sync::Arc::new(egui::FontData::from_static(
+            squiglab_core::product::FONT_BOLD,
+        )),
     );
 
     fonts.families.insert(

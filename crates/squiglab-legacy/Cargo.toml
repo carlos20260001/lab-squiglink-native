@@ -37,8 +37,6 @@ name = "squiglab"
 path = "src/main.rs"
 
 [build-dependencies]
-png = "0.18"
-resvg = "0.48"
-serde = { version = "1.0", features = ["derive"] }
-toml = "0.8"
+# The product's mark and its manifest, so the executable can carry them.
+squiglab-core = { path = "../squiglab-core" }
 winresource = "0.1"

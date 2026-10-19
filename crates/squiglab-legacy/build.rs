@@ -1,39 +1,26 @@
-#[allow(dead_code)]
-#[path = "src/branding.rs"]
-mod branding;
+// Embeds the product's resources in the Windows executable.
+//
+// The mark itself is the program's: it is rendered by the core's build script
+// and handed over as bytes, so the executable carries the same icon every
+// interface does.
 
-use std::{env, path::PathBuf};
+use std::env;
 
 fn main() {
-    let root = PathBuf::from(env::var_os("CARGO_MANIFEST_DIR").expect("manifest directory"));
-    let manifest_path = root.join("packaging/app.toml");
-    println!("cargo:rerun-if-changed={}", manifest_path.display());
-
-    let manifest = branding::load_manifest(&manifest_path).expect("valid packaging/app.toml");
-    let icon_path = branding::resolve_icon_path(&manifest_path, &manifest);
-    println!("cargo:rerun-if-changed={}", icon_path.display());
-
-    let output = PathBuf::from(env::var_os("OUT_DIR").expect("Cargo output directory"));
-    let icons = branding::render_icons(&icon_path, &output).expect("render application icons");
-    println!(
-        "cargo:rustc-env=CRINGRAPH_APP_NAME={}",
-        manifest.application.name
-    );
-    println!(
-        "cargo:rustc-env=CRINGRAPH_APP_ID={}",
-        manifest.application.identifier
-    );
-    println!(
-        "cargo:rustc-env=CRINGRAPH_WINDOW_ICON_PNG={}",
-        icons.png_128.display()
-    );
-
     if env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows")
         && env::var("HOST").is_ok_and(|host| host.contains("windows"))
     {
+        let manifest = squiglab_core::branding::load_manifest(std::path::Path::new(
+            squiglab_core::product::MANIFEST_PATH,
+        ))
+        .expect("valid packaging/app.toml");
+        let icon = std::env::temp_dir().join(format!("squiglab-{}.ico", std::process::id()));
+        std::fs::write(&icon, squiglab_core::product::WINDOW_ICON_ICO)
+            .expect("the icon is written");
+
         let mut resource = winresource::WindowsResource::new();
         resource
-            .set_icon(icons.ico.to_str().expect("ICO path is valid UTF-8"))
+            .set_icon(icon.to_str().expect("ICO path is valid UTF-8"))
             .set("FileDescription", &manifest.application.description)
             .set("ProductName", &manifest.application.name)
             .set("InternalName", &manifest.application.binary_name)

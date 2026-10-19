@@ -3565,6 +3565,8 @@ dependencies = [
  "libspa-sys",
  "once_cell",
  "pipewire",
+ "png",
+ "resvg",
  "serde",
  "serde_json",
  "toml 0.8.23",

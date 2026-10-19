@@ -20,7 +20,7 @@ use std::path::{Path, PathBuf};
 /// The name the graph carries behind its curves. The web reference stamps it
 /// into the graph it draws and exports (`web/config.js`, `watermark()`), under
 /// a mark of its own.
-const WATERMARK_TEXT: &str = env!("CRINGRAPH_APP_NAME");
+const WATERMARK_TEXT: &str = squiglab_core::product::APP_NAME;
 
 const MAX_ACTIVE_CURVES: usize = 8;
 const MAX_SMOOTH_LEVEL: usize = 12;

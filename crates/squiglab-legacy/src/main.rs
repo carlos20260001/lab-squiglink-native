@@ -23,8 +23,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     let options = eframe::NativeOptions {
         viewport: eframe::egui::ViewportBuilder::default()
-            .with_title(env!("CRINGRAPH_APP_NAME"))
-            .with_app_id(env!("CRINGRAPH_APP_ID"))
+            .with_title(squiglab_core::product::APP_NAME)
+            .with_app_id(squiglab_core::product::APP_ID)
             .with_icon(window_icon())
             .with_inner_size([1440.0, 900.0])
             // Wide enough for the compact layout the reference tool falls back
@@ -34,7 +34,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ..Default::default()
     };
     eframe::run_native(
-        env!("CRINGRAPH_APP_NAME"),
+        squiglab_core::product::APP_NAME,
         options,
         Box::new(move |creation_context| {
             // Fonts must be registered before the first frame: `set_fonts` is
@@ -52,7 +52,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn window_icon() -> eframe::egui::IconData {
-    let image = image::load_from_memory(include_bytes!(env!("CRINGRAPH_WINDOW_ICON_PNG")))
+    let image = image::load_from_memory(squiglab_core::product::WINDOW_ICON_PNG)
         .expect("generated application icon is a valid PNG")
         .into_rgba8();
     let (width, height) = image.dimensions();
@@ -133,7 +133,7 @@ fn set_windows_app_user_model_id() -> Result<(), Box<dyn std::error::Error>> {
         fn SetCurrentProcessExplicitAppUserModelID(app_id: *const u16) -> i32;
     }
 
-    let app_id = std::ffi::OsStr::new(env!("CRINGRAPH_APP_ID"))
+    let app_id = std::ffi::OsStr::new(squiglab_core::product::APP_ID)
         .encode_wide()
         .chain(std::iter::once(0))
         .collect::<Vec<_>>();

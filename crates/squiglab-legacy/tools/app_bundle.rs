@@ -1,8 +1,4 @@
-#[allow(dead_code)]
-#[path = "../src/branding.rs"]
-mod branding;
-
-use branding::{IconSet, Manifest, Result};
+use squiglab_core::branding::{self, IconSet, Manifest, Result};
 use std::{
     env, fs,
     path::{Path, PathBuf},
@@ -29,7 +25,7 @@ fn main() -> Result<()> {
     // The crate holds the manifest and the icons; the data, the example
     // configurations and the licence live at the repository's root.
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let manifest_path = root.join("packaging/app.toml");
+    let manifest_path = std::path::PathBuf::from(squiglab_core::product::MANIFEST_PATH);
     let manifest = branding::load_manifest(&manifest_path)?;
     let icon_path = branding::resolve_icon_path(&manifest_path, &manifest);
     let output = PathBuf::from(&args[3]);

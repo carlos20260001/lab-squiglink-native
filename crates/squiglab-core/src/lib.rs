@@ -6,11 +6,13 @@
 //! a widget is, so the interface can be rewritten without disturbing them.
 
 pub mod audio;
+pub mod branding;
 pub mod color;
 pub mod data;
 pub mod delta;
 pub mod equalizer;
 pub mod graph;
 pub mod processing;
+pub mod product;
 pub mod session;
 pub mod state;
