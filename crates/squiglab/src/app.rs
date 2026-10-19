@@ -276,11 +276,20 @@ impl App {
     }
 
     /// The column on the right: the tools, the graph, and what belongs to it.
+    ///
+    /// The reference's column scrolls: the graph stays where it is and the
+    /// targets and the active curves move under it. The same arrangement here
+    /// keeps the target strip from being pushed off the bottom of the window.
     fn right_column(&mut self, ui: &mut Ui) {
         crate::tools::show(ui, self);
         crate::graph::show(ui, self);
-        crate::curves::show(ui, self);
-        self.status_line(ui);
+        egui::ScrollArea::vertical()
+            .id_salt("right_column")
+            .auto_shrink([false, false])
+            .show(ui, |ui| {
+                crate::curves::show(ui, self);
+                self.status_line(ui);
+            });
     }
 
     /// What the program last said, at the foot of the window.

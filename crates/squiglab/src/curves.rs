@@ -24,28 +24,33 @@ pub fn show(ui: &mut Ui, app: &mut App) {
 /// them.
 fn targets(ui: &mut Ui, app: &mut App) {
     let palette = theme::current_palette();
-    let targets: Vec<usize> = app.session.active_targets.iter().copied().collect();
-    if targets.is_empty() {
-        return;
-    }
+
+    // The strip lists every target the library knows, grouped as the
+    // reference groups them, and the ones on the graph are picked out. The
+    // reference's list comes from its own configuration; here the groups are
+    // the ones the core builds from the measurement files.
     let mut first = true;
+    let mut heading = |ui: &mut Ui, label: &str, first: &mut bool| {
+        if !*first {
+            ui.label(
+                RichText::new("|")
+                    .font(TypeStep::Label.font())
+                    .color(palette.text_tertiary),
+            );
+        }
+        *first = false;
+        ui.label(
+            RichText::new(format!("{label}:"))
+                .font(TypeStep::Label.font())
+                .color(palette.text_tertiary),
+        );
+    };
+
     // The rig corrections are a group of their own, marked Δ, as the
     // reference marks them.
     if !app.session.delta_targets.is_empty() {
         ui.horizontal_wrapped(|ui| {
-            if !first {
-                ui.label(
-                    RichText::new("|")
-                        .font(TypeStep::Label.font())
-                        .color(palette.text_tertiary),
-                );
-            }
-            first = false;
-            ui.label(
-                RichText::new("Δ:")
-                    .font(TypeStep::Label.font())
-                    .color(palette.text_tertiary),
-            );
+            heading(ui, "Δ", &mut first);
             for index in 0..app.session.delta_targets.len() {
                 let name = app.session.delta_targets[index].name.clone();
                 let on = app.session.active_deltas.contains(&index);
@@ -89,37 +94,26 @@ fn targets(ui: &mut Ui, app: &mut App) {
         "Other targets",
     ];
     for category in order {
-        let in_category: Vec<usize> = targets
+        let targets: Vec<usize> = app
+            .session
+            .groups
             .iter()
-            .copied()
-            .filter(|&index| {
-                squiglab_core::session::target_category(&app.session.groups[index].name) == category
-            })
+            .enumerate()
+            .filter(|(_, group)| group.target && group.brand == category)
+            .map(|(index, _)| index)
             .collect();
-        if in_category.is_empty() {
+        if targets.is_empty() {
             continue;
         }
         ui.horizontal_wrapped(|ui| {
-            if !first {
-                ui.label(
-                    RichText::new("|")
-                        .font(TypeStep::Label.font())
-                        .color(palette.text_tertiary),
-                );
-            }
-            first = false;
-            ui.label(
-                RichText::new(format!("{category}:"))
-                    .font(TypeStep::Label.font())
-                    .color(palette.text_tertiary),
-            );
-            for index in in_category {
+            heading(ui, category, &mut first);
+            for index in targets {
                 let name = app.session.groups[index].name.clone();
                 let on = app.session.active_targets.contains(&index);
                 let response = ui
                     .selectable_label(
                         on,
-                        RichText::new(name)
+                        RichText::new(name.clone())
                             .font(TypeStep::Label.font())
                             .color(if on {
                                 palette.on_accent
