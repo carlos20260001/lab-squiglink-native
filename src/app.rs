@@ -1,14 +1,14 @@
 use egui::{Color32, Context, RichText, Ui};
 use serde::{Deserialize, Serialize};
-use squiglab::audio::Player;
-use squiglab::color::target_color;
-use squiglab::data::{self, CurveInfo, FRPoint, PhoneBook};
-use squiglab::delta::{self, DeltaTarget};
-use squiglab::equalizer;
 use squiglab::graph::{
     export_svg as render_svg, DeltaBar, GraphCanvas, PlotCurve, Provenance, Watermark, ZoomRegion,
 };
-use squiglab::processing::{self, NormParams, SmoothingParams};
+use squiglab_core::audio::Player;
+use squiglab_core::color::target_color;
+use squiglab_core::data::{self, CurveInfo, FRPoint, PhoneBook};
+use squiglab_core::delta::{self, DeltaTarget};
+use squiglab_core::equalizer;
+use squiglab_core::processing::{self, NormParams, SmoothingParams};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
@@ -58,6 +58,20 @@ const LIBRARY_SHEET_MIN_HEIGHT: f32 = 120.0;
 const LIBRARY_SHEET_MAX_HEIGHT: f32 = 520.0;
 /// Width of the hamburger navigation drawer's column.
 const MENU_DRAWER_WIDTH: f32 = 280.0;
+/// The width below which the reference stacks its panels instead of setting
+/// them side by side (`@media (max-width: 1000px)`).
+const NARROW_VIEWPORT_WIDTH: f32 = 1000.0;
+
+/// Whether the viewport is wide enough for the panels side by side.
+///
+/// The reference decides on width alone, so a window that is tall but wide
+/// keeps the wide layout; reading the height into the decision as well put a
+/// portrait window into the narrow layout it does not belong in.
+fn is_wide_layout(width: f32) -> bool {
+    width > NARROW_VIEWPORT_WIDTH
+}
+/// The width of the library column beside the graph.
+const LIBRARY_COLUMN_WIDTH: f32 = 250.0;
 
 /// Container inset for overlay backdrops and sheets, so they do not draw over
 /// the header/toolbar chrome at the top of the viewport. Multiples of 4pt.
@@ -632,13 +646,13 @@ pub struct CrinGraphApp {
     eq_export_error: Option<String>,
     /// The playing sound, if it is playing. Stopped and dropped by
     /// [`stop_sound`].
-    player: Option<squiglab::audio::Player>,
+    player: Option<squiglab_core::audio::Player>,
     /// Which of the Compare A | B settings the controls are editing.
     sound_slot: usize,
     /// The two settings Compare A | B switches between. They live with the
     /// session rather than in preferences: a sound setting is something the
     /// user is auditioning now, not a view to restore.
-    sound_settings: [squiglab::audio::Settings; 2],
+    sound_settings: [squiglab_core::audio::Settings; 2],
     /// A message from the sound player, shown in the panel.
     sound_message: Option<String>,
     /// The measurement grid uploads are resampled onto, captured at load so an
@@ -728,7 +742,7 @@ impl Default for CrinGraphApp {
             eq_phone: None,
             eq_target: None,
             eq_max_filters: DEFAULT_EQ_MAX_FILTERS,
-            eq_range: squiglab::equalizer::AUTO_EQ_RANGE,
+            eq_range: squiglab_core::equalizer::AUTO_EQ_RANGE,
             tone_range: (20.0, 20_000.0),
             eq_import_open: false,
             eq_import_path: String::new(),
@@ -737,7 +751,7 @@ impl Default for CrinGraphApp {
             eq_export_error: None,
             player: None,
             sound_slot: 0,
-            sound_settings: [squiglab::audio::Settings::default(); 2],
+            sound_settings: [squiglab_core::audio::Settings::default(); 2],
             sound_message: None,
             upload_grid: Vec::new(),
             uploaded_names: BTreeSet::new(),
@@ -1271,17 +1285,17 @@ impl CrinGraphApp {
     fn curve_color(&self, index: usize) -> Color32 {
         let group = &self.groups[index];
         if group.target {
-            target_color()
+            squiglab::theme::color(target_color())
         } else {
             let personal_offset = self
                 .curve_color_offsets
                 .get(&group_key(group))
                 .copied()
                 .unwrap_or_default();
-            squiglab::color::get_curve_color_with_offset(
+            squiglab::theme::color(squiglab_core::color::get_curve_color_with_offset(
                 index,
                 self.color_offset.wrapping_add(personal_offset),
-            )
+            ))
         }
     }
 
@@ -1300,10 +1314,12 @@ impl CrinGraphApp {
     fn display_curve_color(&self, curve: &DisplayCurve) -> Color32 {
         match curve.source {
             CurveSource::Measurement => self.curve_color(curve.group_index),
-            CurveSource::Equalizer => squiglab::color::get_curve_color_with_offset(
-                curve.group_index + EQ_CURVE_COLOR_SPREAD,
-                self.color_offset,
-            ),
+            CurveSource::Equalizer => {
+                squiglab::theme::color(squiglab_core::color::get_curve_color_with_offset(
+                    curve.group_index + EQ_CURVE_COLOR_SPREAD,
+                    self.color_offset,
+                ))
+            }
         }
     }
 
@@ -2551,8 +2567,8 @@ impl CrinGraphApp {
     /// The player is created on the first play and dropped on stop, so nothing
     /// is held open while the sound is not wanted.
     fn sound_tools(&mut self, ui: &mut Ui) {
-        use squiglab::audio::Source;
         use squiglab::ui as cgui;
+        use squiglab_core::audio::Source;
         let palette = squiglab::theme::Palette::resolve(ui.visuals().dark_mode);
         ui.add_space(cgui::Spacing::RELAXED);
         cgui::section_header(ui, "Sound Tools", None);
@@ -4161,13 +4177,49 @@ impl CrinGraphApp {
     /// manager rows + reference-target pills, sized to its content so no dead
     /// space is left under the target strip. The library lives beside the graph
     /// as a left column on desktop and in the library bottom sheet on mobile.
-    fn lower_strip(&mut self, ui: &mut Ui) {
+    /// The height the manager strip takes when it is first shown.
+    ///
+    /// The space the graph does not use goes to the manager, as in the
+    /// reference, where the manager follows the graph down the column. The
+    /// graph keeps the reference's proportions, so a window taller than the
+    /// graph leaves room; leaving that room empty would put a band between
+    /// the graph and the manager.
+    fn lower_strip_height(&self, ui: &Ui, desktop: bool) -> f32 {
         let curve_count = self.active.len() + self.active_targets.len() + self.active_deltas.len();
-        let (default_height, min_height) = manager_heights(ui.available_width(), curve_count);
+        let (content_height, min_height) = manager_heights(ui.available_width(), curve_count);
+        // The library sits beside the graph in the wide layout and below it in
+        // the narrow one, so it only takes width in the first.
+        let library_width = if desktop && self.show_measurements {
+            LIBRARY_COLUMN_WIDTH
+        } else {
+            0.0
+        };
+        // The graph's own size, by the rule it is drawn with, so the two
+        // cannot drift apart.
+        let (_, graph_height) = squiglab::graph::GraphCanvas::plot_size(
+            egui::vec2(
+                (ui.available_width() - library_width).max(0.0),
+                ui.available_height(),
+            ),
+            ui.ctx().viewport_rect().height(),
+        );
+        let leftover = (ui.available_height() - graph_height).max(min_height);
+        // The strip may take the space the graph leaves, so a tall window has
+        // no band between the two, as the reference has none between its graph
+        // and its manager.
+        let maximum = leftover.max(MANAGER_MAX_HEIGHT);
+        leftover.clamp(content_height.min(maximum), maximum)
+    }
+
+    fn lower_strip(&mut self, ui: &mut Ui, desktop: bool) {
+        let curve_count = self.active.len() + self.active_targets.len() + self.active_deltas.len();
+        let (_, min_height) = manager_heights(ui.available_width(), curve_count);
+        let default_height = self.lower_strip_height(ui, desktop);
+        let maximum = default_height.max(MANAGER_MAX_HEIGHT);
         egui::Panel::bottom("lower_strip")
             .resizable(true)
             .default_size(default_height)
-            .size_range(min_height..=MANAGER_MAX_HEIGHT)
+            .size_range(min_height..=maximum)
             .show(ui, |ui| {
                 self.manager_content(ui);
                 ui.separator();
@@ -4305,7 +4357,11 @@ impl eframe::App for CrinGraphApp {
             self.rebuild_display_curves();
         }
         let screen_rect = ui.available_rect_before_wrap();
-        let desktop = screen_rect.width() >= 1024.0 && screen_rect.width() > screen_rect.height();
+        // The reference switches on width alone: its one narrow breakpoint is
+        // 1000px, and a window that is tall but wide keeps the wide layout.
+        // Reading the height into the decision as well put a portrait window
+        // into the narrow layout it does not belong in.
+        let desktop = is_wide_layout(screen_rect.width());
         self.header_panel(ui, desktop);
         self.toolbar(ui);
         self.delta_window(&ctx);
@@ -4325,7 +4381,7 @@ impl eframe::App for CrinGraphApp {
             self.selector_panel(ui, true);
             self.status_panel(ui);
         }
-        self.lower_strip(ui);
+        self.lower_strip(ui, desktop);
         self.central_panel(ui);
         // The navigation drawer and the library sheet are overlays on top of
         // everything else; only one can be open at a time.
@@ -5030,8 +5086,8 @@ mod tests {
         CurveSource, DisplayCurve, MeasurementGroup, MeasurementVariant, Preferences, SavedGroup,
         MAX_EQ_ROWS, MAX_SHARE_URI_LENGTH, MAX_SMOOTH_LEVEL, TUTORIAL_SEGMENTS,
     };
-    use squiglab::data::{CurveInfo, FRPoint};
-    use squiglab::delta::DeltaTarget;
+    use squiglab_core::data::{CurveInfo, FRPoint};
+    use squiglab_core::delta::DeltaTarget;
     use std::collections::BTreeMap;
     use std::path::PathBuf;
 
@@ -5256,8 +5312,8 @@ smoothing_octaves = 3
         app.eq_filters.insert(
             0,
             vec![super::EqRow {
-                filter: squiglab::equalizer::Filter::new(
-                    squiglab::equalizer::FilterType::Peaking,
+                filter: squiglab_core::equalizer::Filter::new(
+                    squiglab_core::equalizer::FilterType::Peaking,
                     500.0,
                     1.2,
                     -3.5,
@@ -5354,8 +5410,8 @@ smoothing_octaves = 3
             ..CrinGraphApp::default()
         };
         let row = |enabled: bool, gain: f64| super::EqRow {
-            filter: squiglab::equalizer::Filter::new(
-                squiglab::equalizer::FilterType::Peaking,
+            filter: squiglab_core::equalizer::Filter::new(
+                squiglab_core::equalizer::FilterType::Peaking,
                 500.0,
                 1.2,
                 gain,
@@ -5384,8 +5440,8 @@ smoothing_octaves = 3
             app.load_measurements().unwrap();
             let key = super::group_key(&app.groups[app.active.iter().next().copied().unwrap()]);
             let rows = vec![super::EqRow {
-                filter: squiglab::equalizer::Filter::new(
-                    squiglab::equalizer::FilterType::LowShelf,
+                filter: squiglab_core::equalizer::Filter::new(
+                    squiglab_core::equalizer::FilterType::LowShelf,
                     105.0,
                     0.7,
                     6.0,
@@ -5430,8 +5486,8 @@ smoothing_octaves = 3
         };
         let key = super::group_key(&app.groups[0]);
         let row = |freq: f64| super::EqRow {
-            filter: squiglab::equalizer::Filter::new(
-                squiglab::equalizer::FilterType::Peaking,
+            filter: squiglab_core::equalizer::Filter::new(
+                squiglab_core::equalizer::FilterType::Peaking,
                 freq,
                 1.0,
                 -3.0,
@@ -5606,7 +5662,7 @@ smoothing_octaves = 3
 
             // Both exports describe the same enabled filters: importing the
             // parametric text back gives the same set the panel holds.
-            let imported = squiglab::equalizer::import_parametric(&parametric).unwrap();
+            let imported = squiglab_core::equalizer::import_parametric(&parametric).unwrap();
             let enabled: Vec<_> = imported
                 .filters
                 .iter()
@@ -5643,8 +5699,8 @@ smoothing_octaves = 3
             assert_eq!(rows.len(), 1);
             assert_eq!(
                 rows[0].filter,
-                squiglab::equalizer::Filter::new(
-                    squiglab::equalizer::FilterType::Peaking,
+                squiglab_core::equalizer::Filter::new(
+                    squiglab_core::equalizer::FilterType::Peaking,
                     500.0,
                     1.2,
                     -3.5
@@ -5717,8 +5773,8 @@ smoothing_octaves = 3
         // Both Compare slots start identical, on a mid tone at a low volume.
         assert_eq!(
             app.sound_settings[0],
-            squiglab::audio::Settings {
-                source: squiglab::audio::Source::Tone { freq: 1000.0 },
+            squiglab_core::audio::Settings {
+                source: squiglab_core::audio::Source::Tone { freq: 1000.0 },
                 volume: 0.2
             }
         );
@@ -6003,6 +6059,18 @@ smoothing_octaves = 3
     }
 
     #[test]
+    fn the_layout_switches_on_width_alone() {
+        // The reference's one narrow breakpoint is 1000px, and nothing in its
+        // stylesheet switches the layout because the window is tall. A
+        // portrait window that is wide enough therefore keeps the panels side
+        // by side, as the reference does.
+        assert!(super::is_wide_layout(1400.0));
+        assert!(super::is_wide_layout(1000.5));
+        assert!(!super::is_wide_layout(1000.0));
+        assert!(!super::is_wide_layout(800.0));
+    }
+
+    #[test]
     fn the_manager_is_tall_enough_to_show_every_selected_curve() {
         // A manager shorter than its own rows pushes the last ones out of sight
         // and makes the user scroll a sliver, which reads as "my selection is
@@ -6147,7 +6215,7 @@ smoothing_octaves = 3
 
     #[test]
     fn target_groups_and_model_variants_follow_the_phone_book() {
-        let book = squiglab::data::load_phone_book(Path::new("data/phone_book.json")).unwrap();
+        let book = squiglab_core::data::load_phone_book(Path::new("data/phone_book.json")).unwrap();
         let curves = vec![
             test_curve("HTH67", "L", 50.0),
             test_curve("HTH67", "R", 51.0),
@@ -6390,15 +6458,15 @@ smoothing_octaves = 3
             },
         ];
         assert_eq!(
-            squiglab::processing::interpolate_db(&points, 10.0),
+            squiglab_core::processing::interpolate_db(&points, 10.0),
             Some(10.0)
         );
         assert_eq!(
-            squiglab::processing::interpolate_db(&points, 10000.0),
+            squiglab_core::processing::interpolate_db(&points, 10000.0),
             Some(20.0)
         );
         assert!(
-            (squiglab::processing::interpolate_db(&points, 316.22778).unwrap() - 15.0).abs()
+            (squiglab_core::processing::interpolate_db(&points, 316.22778).unwrap() - 15.0).abs()
                 < 0.001
         );
     }
@@ -6448,7 +6516,7 @@ smoothing_octaves = 3
         };
         assert_eq!(
             app.curve_color(0),
-            squiglab::color::get_curve_color_with_offset(0, 5)
+            squiglab::theme::color(squiglab_core::color::get_curve_color_with_offset(0, 5))
         );
     }
 
@@ -6726,7 +6794,7 @@ smoothing_octaves = 3
         let text = super::curve_text(&points);
         let reparsed: Vec<FRPoint> = text
             .lines()
-            .filter_map(squiglab::data::parse_point)
+            .filter_map(squiglab_core::data::parse_point)
             .collect();
         assert_eq!(reparsed.len(), points.len());
         for (written, read) in points.iter().zip(&reparsed) {

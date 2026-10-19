@@ -1,7 +1,7 @@
-use crate::data::FRPoint;
 use crate::theme::{self, Palette, TypeStep};
 use egui::{Align2, Color32, Id, Pos2, Rect, Sense, Stroke, Ui, Vec2};
 use serde::{Deserialize, Serialize};
+use squiglab_core::data::FRPoint;
 use std::collections::BTreeMap;
 
 const X_TICKS: [f32; 22] = [
@@ -568,14 +568,16 @@ fn escape_xml(value: &str) -> String {
 
 impl GraphCanvas<'_> {
     pub fn show(&self, ui: &mut Ui, curves: &[PlotCurve<'_>]) -> GraphInteraction {
-        // The graph claims the whole panel. Leaving the widget at the
-        // reference proportion's height left a dead band between the graph and
-        // the manager on any viewport taller than the plot, which reads as
-        // wasted space. The plot inside stretches to everything the margins
-        // leave, so the band is always part of the graph.
+        // The graph keeps the reference's framing instead of stretching to
+        // fill the panel: the same dB range drawn over twice the space reads
+        // as twice as dramatic, and a tall window is exactly that case. The
+        // widget still claims the whole panel, so the graph is the surface the
+        // user interacts with; the plot inside it is sized by the reference's
+        // rule and centred.
         let panel = ui.available_size();
         let (rect, response) = ui.allocate_exact_size(panel, Sense::hover());
-        let (plot_width, plot_height) = Self::plot_size(panel);
+        let window_height = ui.ctx().viewport_rect().height();
+        let (plot_width, plot_height) = Self::plot_size(panel, window_height);
         let visuals = ui.visuals();
         let palette = Palette::resolve(visuals.dark_mode);
         // The graph is the darkest surface in the application so saturated
@@ -587,12 +589,18 @@ impl GraphCanvas<'_> {
         let accent = palette.accent;
         let axis_font = || theme::font(TypeStep::Caption);
         let label_font = || theme::font_bold(TypeStep::Body);
+        // The reference centres the graph in its column (`margin: 16px auto 0
+        // auto`), so a graph narrower than the column sits in the middle of
+        // it rather than against the edge, and keeps it at the top of the
+        // column, with the manager following underneath.
+        let space_width = (rect.width() - Self::INSET_LEFT - Self::INSET_RIGHT).max(0.0);
+        let plot_left = rect.left() + Self::INSET_LEFT + (space_width - plot_width) / 2.0;
         let plot_rect = Rect::from_min_max(
             // Left room for the dB scale, top for the rig note, and enough
             // underneath for the frequency ticks plus the named bands below them.
-            Pos2::new(rect.left() + Self::INSET_LEFT, rect.top() + Self::INSET_TOP),
+            Pos2::new(plot_left, rect.top() + Self::INSET_TOP),
             Pos2::new(
-                rect.left() + Self::INSET_LEFT + plot_width,
+                plot_left + plot_width,
                 rect.top() + Self::INSET_TOP + plot_height,
             ),
         );
@@ -991,10 +999,39 @@ impl GraphCanvas<'_> {
     /// The widget claims the whole panel and the plot stretches to fill it, so
     /// a viewport taller than the reference proportion grows the plot instead
     /// of leaving a dead band between the graph and the manager below it.
-    fn plot_size(panel: egui::Vec2) -> (f32, f32) {
-        (
+    /// The size of the plot in the space it has.
+    ///
+    /// The reference scales its graph with the window rather than with the
+    /// space it is given: the graph's width is capped against the window's
+    /// height (`max-width: calc((100vh - 300px) * 2.2)`, and the smaller of
+    /// that and `calc(50vh * 2.2)`), and the graph keeps its own
+    /// proportions instead of stretching. A tall window therefore draws a
+    /// wide, short graph with room below it, as the reference does, rather
+    /// than the same dB range stretched over the whole viewport.
+    ///
+    /// When there is not enough room for the graph's proportions, it shrinks
+    /// to fit rather than being squashed.
+    pub fn plot_size(panel: egui::Vec2, window_height: f32) -> (f32, f32) {
+        let space = (
             (panel.x - Self::INSET_LEFT - Self::INSET_RIGHT).max(Self::MIN_PLOT_WIDTH),
             (panel.y - Self::INSET_TOP - Self::INSET_BOTTOM).max(Self::MIN_PLOT_HEIGHT),
+        );
+        // The reference's cap on the graph's width: `max-width: calc((100vh -
+        // 300px) * 2.2)`. It writes that after `calc(50vh * 2.2)`, so the
+        // later one is the cap that applies.
+        let cap = 2.2 * (window_height - 300.0);
+        let mut width = space.0;
+        if cap > 0.0 {
+            width = width.min(cap);
+        }
+        let mut height = width / Self::PLOT_ASPECT_RATIO;
+        if height > space.1 {
+            height = space.1;
+            width = height * Self::PLOT_ASPECT_RATIO;
+        }
+        (
+            width.max(Self::MIN_PLOT_WIDTH),
+            height.max(Self::MIN_PLOT_HEIGHT),
         )
     }
 
@@ -1454,8 +1491,8 @@ mod tests {
         curve_control_points, export_svg, format_axis_frequency, GraphCanvas, PlotCurve,
         Provenance, Transform, Watermark, ZoomRegion,
     };
-    use crate::data::FRPoint;
     use egui::{pos2, Color32, Rect};
+    use squiglab_core::data::FRPoint;
     use std::collections::BTreeMap;
 
     #[test]
@@ -1582,21 +1619,45 @@ mod tests {
     }
 
     #[test]
-    fn the_plot_stretches_to_fill_a_tall_panel() {
-        // The widget claims the whole panel and the plot takes everything the
-        // margins leave. Capping the plot to the reference proportion instead
-        // left a dead band between the graph and the manager on tall viewports.
-        let (width, height) = super::GraphCanvas::plot_size(egui::vec2(400.0, 600.0));
+    fn the_plot_keeps_the_reference_proportions_on_a_tall_viewport() {
+        // A tall viewport used to stretch the plot over the whole panel, so
+        // the same dB range was drawn over far more space than the reference
+        // draws it over and every slope read as more dramatic. The graph now
+        // keeps the reference's proportions, and its width is capped against
+        // the window's height as the reference caps it.
+        let panel = egui::vec2(1150.0, 1650.0);
+        let (width, height) = super::GraphCanvas::plot_size(panel, 2000.0);
+        let aspect = width / height;
+        assert!(
+            (3.0..=3.8).contains(&aspect),
+            "aspect ratio {aspect} does not match the reference tool's framing"
+        );
+        // The width cap is the reference's: the graph never grows past 2.2
+        // units across for every unit of window height, less the 300 units
+        // the reference keeps for its chrome.
+        let (width, _) = super::GraphCanvas::plot_size(egui::vec2(4000.0, 1650.0), 1000.0);
+        assert!(
+            width <= 2.2 * 700.0,
+            "the graph is {width} wide in a 1000-unit-tall window"
+        );
+        // A tall window leaves the cap wide open, so the graph fills its
+        // column as the reference's does.
+        let (width, _) = super::GraphCanvas::plot_size(egui::vec2(1650.0, 1650.0), 1200.0);
         assert_eq!(
             width,
-            400.0 - super::GraphCanvas::INSET_LEFT - super::GraphCanvas::INSET_RIGHT
+            1650.0 - super::GraphCanvas::INSET_LEFT - super::GraphCanvas::INSET_RIGHT
         );
-        assert_eq!(
-            height,
-            600.0 - super::GraphCanvas::INSET_TOP - super::GraphCanvas::INSET_BOTTOM
-        );
+    }
+
+    #[test]
+    fn the_plot_shrinks_rather_than_being_squashed() {
+        // When there is not enough room for the graph's proportions, it
+        // shrinks to fit instead of being squashed into the space.
+        let (width, height) = super::GraphCanvas::plot_size(egui::vec2(400.0, 100.0), 600.0);
+        assert_eq!(height, super::GraphCanvas::MIN_PLOT_HEIGHT);
+        assert!(width <= 400.0);
         // Tiny viewports stop at the floor rather than collapsing the axes.
-        let (_, height) = super::GraphCanvas::plot_size(egui::vec2(200.0, 80.0));
+        let (_, height) = super::GraphCanvas::plot_size(egui::vec2(200.0, 80.0), 600.0);
         assert_eq!(height, super::GraphCanvas::MIN_PLOT_HEIGHT);
     }
 

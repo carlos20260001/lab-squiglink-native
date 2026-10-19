@@ -1,23 +1,43 @@
 //! Color palette and algorithm for CrinGraph curve coloring.
+//!
+//! The palette is named in the core's own terms — [`Rgb`] — rather than in
+//! the interface toolkit's, because the core does not know how anything is
+//! drawn. The interface turns an [`Rgb`] into whatever its toolkit paints
+//! with.
 
-use egui::Color32;
+/// An opaque colour.
+///
+/// The core's own colour type: the interface layer converts it to whatever
+/// its toolkit draws with.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Rgb {
+    pub r: u8,
+    pub g: u8,
+    pub b: u8,
+}
+
+impl Rgb {
+    pub const fn new(r: u8, g: u8, b: u8) -> Self {
+        Self { r, g, b }
+    }
+}
 
 const LD_P1: f64 = 1.1673039782614187;
 const LD_P2: f64 = LD_P1 * LD_P1;
 const LD_P3: f64 = LD_P2 * LD_P1;
 
 /// Return the original CrinGraph golden-angle palette color for a curve.
-pub fn get_curve_color(id: usize) -> Color32 {
+pub fn get_curve_color(id: usize) -> Rgb {
     get_curve_color_with_offset(id, 0)
 }
 
 /// Return a palette color shifted by a stable sequence offset.
-pub fn get_curve_color_with_offset(id: usize, palette_shift: usize) -> Color32 {
+pub fn get_curve_color_with_offset(id: usize, palette_shift: usize) -> Rgb {
     get_curve_color_at(id.wrapping_add(palette_shift), 0.0)
 }
 
 /// Match `getCurveColor(id, offset)` from the original graph, including channel offsets.
-pub fn get_curve_color_at(id: usize, offset: f64) -> Color32 {
+pub fn get_curve_color_at(id: usize, offset: f64) -> Rgb {
     let id = id as f64;
     let t = offset / 32.0;
     let i = id / LD_P3 + 0.76;
@@ -33,14 +53,14 @@ pub fn get_curve_color_at(id: usize, offset: f64) -> Color32 {
 }
 
 /// Targets use CrinGraph's dedicated low-chroma HCL branch.
-pub fn target_color() -> Color32 {
+pub fn target_color() -> Rgb {
     let id = -1.0_f64;
     let i = id / LD_P3 + 0.76;
     let hue = 360.0 * (1.0 - (-i % 1.0));
     hcl_to_rgb(hue, 5.0, 66.0)
 }
 
-fn hcl_to_rgb(hue: f64, chroma: f64, lightness: f64) -> Color32 {
+fn hcl_to_rgb(hue: f64, chroma: f64, lightness: f64) -> Rgb {
     const XN: f64 = 0.96422;
     const YN: f64 = 1.0;
     const ZN: f64 = 0.82521;
@@ -76,7 +96,7 @@ fn hcl_to_rgb(hue: f64, chroma: f64, lightness: f64) -> Color32 {
         linear_to_srgb(-0.9787684 * x + 1.9161415 * y + 0.0334540 * z),
         linear_to_srgb(0.0719453 * x - 0.2289914 * y + 1.4052427 * z),
     ];
-    Color32::from_rgb(
+    Rgb::new(
         clamp_channel(channels[0]),
         clamp_channel(channels[1]),
         clamp_channel(channels[2]),
@@ -89,13 +109,16 @@ fn clamp_channel(channel: f64) -> u8 {
 
 #[cfg(test)]
 mod tests {
-    use super::{get_curve_color, get_curve_color_at, get_curve_color_with_offset, target_color};
+    use super::{
+        get_curve_color, get_curve_color_at, get_curve_color_with_offset, target_color, Rgb,
+    };
 
     #[test]
-    fn palette_colors_are_stable_and_opaque() {
+    fn palette_colors_are_stable() {
         let first = get_curve_color(0);
         assert_eq!(first, get_curve_color(0));
-        assert_eq!(first.a(), 255);
+        // The core's colours are opaque by construction: they carry no alpha,
+        // and how the interface paints them is the interface's business.
         assert_ne!(first, get_curve_color(1));
     }
 
@@ -111,13 +134,13 @@ mod tests {
 
     #[test]
     fn curve_colors_match_original_d3_hcl_palette_samples() {
-        assert_eq!(get_curve_color(0), egui::Color32::from_rgb(0, 58, 157));
-        assert_eq!(get_curve_color(1), egui::Color32::from_rgb(0, 172, 0));
+        assert_eq!(get_curve_color(0), Rgb::new(0, 58, 157));
+        assert_eq!(get_curve_color(1), Rgb::new(0, 172, 0));
         assert_ne!(get_curve_color_at(0, -1.0), get_curve_color_at(0, 1.0));
     }
 
     #[test]
     fn target_color_uses_low_chroma_hcl_conversion() {
-        assert_eq!(target_color(), egui::Color32::from_rgb(169, 158, 154));
+        assert_eq!(target_color(), Rgb::new(169, 158, 154));
     }
 }

@@ -1,3 +1,6 @@
+[workspace]
+members = ["crates/squiglab-core"]
+
 [package]
 name = "squiglab"
 version = "0.1.0"
@@ -5,6 +8,10 @@ edition = "2021"
 default-run = "squiglab"
 
 [dependencies]
+# The program core: the measurements, the filter maths, the audio, and the
+# rules that turn one into another. It does not know about the interface, so
+# the interface can be rewritten without touching it.
+squiglab-core = { path = "crates/squiglab-core" }
 eframe = "0.36"
 egui = "0.36"
 egui_extras = "0.36"
@@ -19,18 +26,6 @@ dirs = "7"
 toml = "0.8"
 png = "0.18"
 resvg = "0.48"
-
-# Audio output. Linux speaks to the PipeWire daemon directly, so building on
-# Linux needs the PipeWire development files (libpipewire-0.3-dev and
-# libspa-0.2-dev, or equivalent) and libclang, because the bindings are
-# generated from PipeWire's headers at build time. macOS and Windows use cpal,
-# which needs neither.
-[target.'cfg(target_os = "linux")'.dependencies]
-pipewire = { version = "0.10", features = ["v0_3_65"] }
-libspa-sys = "0.10"
-
-[target.'cfg(any(target_os = "macos", target_os = "windows"))'.dependencies]
-cpal = "0.15"
 
 [[bin]]
 name = "app-bundle"

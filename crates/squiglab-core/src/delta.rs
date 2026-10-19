@@ -433,7 +433,12 @@ mod tests {
         // It asks git rather than looking at the directory, because the
         // calibrations are legitimately still present on disk — an installed
         // copy uses them — and ignoring them is what the working tree is for.
-        let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+        // The core crate sits one level below the repository root, which is
+        // where the data directories live.
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(Path::parent)
+            .expect("the core crate sits inside the repository");
         let dir = root.join("data_deltas");
         let _ = &dir;
         let Ok(output) = std::process::Command::new("git")

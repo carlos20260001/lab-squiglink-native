@@ -347,6 +347,11 @@ fn style_for(dark: bool) -> Style {
     }
 }
 
+/// The core names colours in its own terms; the interface paints them.
+pub fn color(color: squiglab_core::color::Rgb) -> egui::Color32 {
+    egui::Color32::from_rgb(color.r, color.g, color.b)
+}
+
 /// egui's [`egui::Margin`] stores whole points, so spacing steps round to it.
 fn margin(horizontal: f32, vertical: f32) -> egui::Margin {
     egui::Margin {

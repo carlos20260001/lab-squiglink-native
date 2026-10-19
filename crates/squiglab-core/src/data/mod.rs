@@ -459,10 +459,16 @@ mod tests {
 
     #[test]
     fn project_phone_books_load_against_their_measurement_files() {
-        let book = super::load_phone_book(Path::new("data/phone_book.json")).unwrap();
+        // The core crate sits one level below the repository root, which is
+        // where the measurement directories live.
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(Path::parent)
+            .expect("the core crate sits inside the repository");
+        let book = super::load_phone_book(&root.join("data/phone_book.json")).unwrap();
         assert!(book.brands.iter().any(|brand| brand.name == "GZR"));
         assert!(book.brands[0].models[0].variants.len() == 4);
-        let headphone_book = super::load_phone_book(Path::new("data_hp/phone_book.json")).unwrap();
+        let headphone_book = super::load_phone_book(&root.join("data_hp/phone_book.json")).unwrap();
         assert!(headphone_book
             .brands
             .iter()

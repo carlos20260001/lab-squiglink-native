@@ -14,7 +14,7 @@
 
 #![cfg(target_os = "linux")]
 
-use squiglab::audio::{Player, Settings, Source, SAMPLE_RATE};
+use squiglab_core::audio::{Player, Settings, Source, SAMPLE_RATE};
 use std::time::{Duration, Instant};
 
 /// Whether a missing daemon should fail the test rather than pass.

@@ -3560,23 +3560,37 @@ name = "squiglab"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "cpal",
  "dirs",
  "eframe",
  "egui",
  "egui_extras",
  "image",
- "libspa-sys",
  "once_cell",
- "pipewire",
  "png",
  "resvg",
  "rgb",
  "serde",
  "serde_json",
+ "squiglab-core",
  "toml 0.8.23",
  "walkdir",
  "winresource",
+]
+
+[[package]]
+name = "squiglab-core"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "cpal",
+ "dirs",
+ "libspa-sys",
+ "once_cell",
+ "pipewire",
+ "serde",
+ "serde_json",
+ "toml 0.8.23",
+ "walkdir",
 ]
 
 [[package]]

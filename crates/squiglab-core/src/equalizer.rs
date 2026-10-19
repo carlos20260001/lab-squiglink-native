@@ -1127,7 +1127,7 @@ mod tests {
     /// The Equalizer APO configuration captured from the live site, the only
     /// authority on the export format.
     const CAPTURED_APO_SAMPLE: &str =
-        include_str!("../docs/design-reference/export-apo-sample.txt");
+        include_str!("../../../docs/design-reference/export-apo-sample.txt");
 
     #[test]
     fn captured_sample_imports_and_exports_back_identically() {
