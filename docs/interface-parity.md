@@ -17,7 +17,7 @@ branch of the site repository, and the native is written against it.
 | Header: wordmark, a review dropdown, the site navigation, a `+Create` link | Header: the mark, the wordmark, the number of curves, the theme picker. A window has no site to navigate. |
 | Left column with three tabs: **Brands / Models / Equalizer** | The same three tabs ✓ |
 | Graph toolbar: Copy URL, Screenshot, `NORMALIZE: [dB 60] [Hz 500]`, `SMOOTH: 5`, `ZOOM: Bass Mids Treble`, a help button | The same controls, in a row that scrolls sideways when it overflows ✓ — but no help button ✗ |
-| Graph: the dB scale and its drag handle, the frequency axis, the band names, the target label, the curve labels, the watermark | The same, except the dB scale cannot be dragged ✗ |
+| Graph: the dB scale and its drag handle, the frequency axis, the band names, the target label, the curve labels, the watermark | The same ✓ — the scale's mark moves the range, the two circles change how far it reaches, and a double-click puts it back ✓ |
 | Under the graph: the **DELTA** chips, the rig corrections, `REFERENCE TARGETS` / `LEGACY TARGETS` | The target chips, grouped as the reference groups them, with the rig corrections in a group of their own marked Δ ✓, and the active curves below them ✓ |
 | Manager rows: the curve, `L ONLY / R ONLY`, a dB offset, and the row buttons | The same ✓ |
 
@@ -51,7 +51,7 @@ reference's own controls and their help text:
 
 | Reference | Native |
 |---|---|
-| `Compare A / B`, a settings gear | **Absent** ✗ — the sources are played on their own, not through the equalizer |
+| `Compare A / B`, a settings gear | The same ✓ — with the switch on (B) the source is played through the equalizer, and with it off (A) it is played on its own. No gear ✗ |
 | **Music** — a list of tracks, `+ Add Music`, `Search Apple` | Absent (the music is the reference's own) |
 | **Pink Noise** — a play button | ✓ (a source) |
 | **Tone Generator** — a play button, a slider, the frequency, `+ Add Filter` | ✓ (a frequency and a volume) |
@@ -70,40 +70,19 @@ reference's own controls and their help text:
 
 The targets, in the order they are worth doing.
 
-### 1. The sources played through the equalizer, with a Compare switch
-
-The reference's `Compare` toggle is an A/B: with it on (B) the live playback
-runs the parametric equalizer, and with it off (A) it runs the reference path.
-So the pink noise and the tone are heard *through* the bands, and the switch
-says whether they are.
-
-The native plays the sources on their own. Hearing the bands work needs a
-live biquad chain: the core has the coefficients and the filter maths, but
-the generator produces a mono signal and the banks are per channel, so the
-audio path has to become stereo and run the filters sample by sample.
-**The core work; the interface work is one toggle and a switch in the sound
-tools.**
-
-### 2. The dB scale that can be dragged
-
-The reference's scale is dragged: the handle moves the range and the circle
-scales it, and a double-click resets it. The native's scale is set from the
-curves and cannot be dragged. **Small to medium: the transform is the core's,
-so this is a drag on the graph and a change of its y range.**
-
-### 3. The help button
+### 1. The help button
 
 The reference's equalizer has a `?` that opens its guidance. The native has
 no such button. **Small: it is a window with the instructions in it.**
 
-### 4. The music list
+### 2. The music list
 
 The reference plays music files and searches the Apple Music catalogue. The
 catalogue is the reference's own and does not travel; a local file list
 would. **Not worth doing: the tone generator and the pink noise already
 cover hearing the equalizer.**
 
-### 5. The settings gears
+### 3. The settings gears
 
 The reference hides the sound tools' settings and the equalizer's behind a
 gear. The native shows the volume and the reset in the open. **Not worth

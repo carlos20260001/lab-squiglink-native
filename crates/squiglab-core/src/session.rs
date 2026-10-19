@@ -150,6 +150,9 @@ pub struct Preferences {
     pub label_layout: crate::graph::LabelLayout,
     pub tutorial_segment: Option<usize>,
     pub y_scale: f32,
+    /// The range the graph shows, in decibels, when the user has set it by
+    /// dragging the scale.
+    pub graph_range: Option<(f32, f32)>,
     pub curve_color_offsets: BTreeMap<String, usize>,
     /// Every curve's equalizer, keyed by group key. An equalizer belongs to
     /// the curve, so it survives the curve being switched off and comes back
@@ -182,6 +185,7 @@ impl Default for Preferences {
             label_layout: crate::graph::LabelLayout::default(),
             tutorial_segment: None,
             y_scale: 1.0,
+            graph_range: None,
             curve_color_offsets: BTreeMap::new(),
             eq_filters: BTreeMap::new(),
             active_deltas: Vec::new(),
@@ -291,6 +295,9 @@ pub struct Session {
     pub tutorial_segment: Option<usize>,
     /// The vertical scale of the graph.
     pub y_scale: f32,
+    /// The range the graph shows, in decibels, when the user has set it by
+    /// dragging the scale. `None` means the range follows the curves.
+    pub graph_range: Option<(f32, f32)>,
     /// The colour each curve is drawn in, when it differs from the palette's.
     pub curve_color_offsets: BTreeMap<String, usize>,
     /// Every curve's equalizer, keyed by group index. An equalizer belongs to
@@ -364,6 +371,7 @@ impl Default for Session {
             label_layout: LabelLayout::default(),
             tutorial_segment: None,
             y_scale: 1.0,
+            graph_range: None,
             curve_color_offsets: BTreeMap::new(),
             eq_filters: BTreeMap::new(),
             eq_phone: None,
@@ -933,6 +941,7 @@ impl Session {
             label_layout: self.label_layout,
             tutorial_segment: self.tutorial_segment,
             y_scale: self.y_scale,
+            graph_range: self.graph_range,
             curve_color_offsets: self.curve_color_offsets.clone(),
             eq_filters: self
                 .eq_filters
@@ -1005,6 +1014,7 @@ impl Session {
         self.label_layout = preferences.label_layout;
         self.tutorial_segment = preferences.tutorial_segment;
         self.y_scale = preferences.y_scale;
+        self.graph_range = preferences.graph_range;
         self.curve_color_offsets = preferences.curve_color_offsets.clone();
         self.eq_filters.clear();
         for (index, group) in self.groups.iter().enumerate() {

@@ -59,6 +59,9 @@ pub struct App {
     pub sound_message: Option<String>,
     /// Whether the sound is played through the equalizer.
     pub compare: bool,
+    /// Where the pointer took hold of the graph's scale, so the drag can tell
+    /// the mark from the circles.
+    pub scale_grab: Option<egui::Pos2>,
     /// Whether a picture of the window was asked for.
     pub screenshot_requested: bool,
     /// Whether the constraints panel is open.
@@ -136,6 +139,7 @@ impl App {
             frequency: 1000.0,
             sound_message: None,
             compare: false,
+            scale_grab: None,
             screenshot_requested: false,
             constraints_open: false,
             upload_path: String::new(),

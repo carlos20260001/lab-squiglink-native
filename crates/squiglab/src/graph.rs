@@ -46,7 +46,94 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
         let rect = response.rect;
         painter.rect_filled(rect, 0.0, palette.graph);
         draw(app, &painter, rect, response.hover_pos());
+        scale(app, &painter, rect, &response);
     });
+}
+
+/// The scale down the left of the graph, and the handles that move it.
+///
+/// The reference's scale is dragged: the handle in the middle moves the
+/// range up and down, and the two circles change how far it reaches. A
+/// double-click puts it back where the curves say it should be.
+fn scale(app: &mut App, painter: &egui::Painter, rect: Rect, response: &egui::Response) {
+    let palette = theme::current_palette();
+    let plot = Rect::from_min_max(
+        Pos2::new(rect.left() + 44.0, rect.top() + 10.0),
+        Pos2::new(rect.right() - 10.0, rect.bottom() - 46.0),
+    );
+    if plot.width() <= 0.0 || plot.height() <= 0.0 {
+        return;
+    }
+    let (minimum, maximum) = match app.session.graph_range {
+        Some(range) => range,
+        None => {
+            let curves = plot_curves(app);
+            let (minimum, maximum) = y_range(&curves);
+            scaled_y_range((minimum, maximum), app.session.y_scale)
+        }
+    };
+    let centre = (minimum + maximum) / 2.0;
+    let half = (maximum - minimum) / 2.0;
+    let middle_y = plot.center().y;
+    let half_y = half / (maximum - minimum) * plot.height();
+    let x = plot.left() - 6.0;
+
+    // The scale's line, and the mark in the middle.
+    painter.line_segment(
+        [
+            Pos2::new(x, middle_y - half_y),
+            Pos2::new(x, middle_y + half_y),
+        ],
+        egui::Stroke::new(1.0, palette.border),
+    );
+    painter.line_segment(
+        [Pos2::new(x - 5.0, middle_y), Pos2::new(x + 5.0, middle_y)],
+        egui::Stroke::new(1.0, palette.text_tertiary),
+    );
+
+    // The two circles, which change how far the scale reaches.
+    for sign in [-1.0_f32, 1.0] {
+        painter.circle_stroke(
+            Pos2::new(x, middle_y + half_y * sign),
+            7.0,
+            egui::Stroke::new(1.5, palette.text_secondary),
+        );
+    }
+
+    // Dragging the middle mark moves the range; dragging a circle widens it.
+    if response.drag_started() {
+        // Where the pointer took hold, which is what tells the mark from the
+        // circles once the pointer has moved.
+        app.scale_grab = response.hover_pos();
+    }
+    if response.dragged() {
+        let delta = response.drag_delta().y;
+        if delta != 0.0 {
+            let per_pixel = (maximum - minimum) / plot.height();
+            let mut range = (minimum, maximum);
+            // The circle the pointer took hold of: the one above the middle
+            // or the one below it, which reach in opposite directions.
+            let circle = app
+                .scale_grab
+                .filter(|grab| (grab.y - middle_y).abs() > half_y * 0.6);
+            if let Some(grab) = circle {
+                // The pointer is on a circle: the scale reaches further or less.
+                let sign = if grab.y < middle_y { -1.0 } else { 1.0 };
+                let new_half = (half + sign * delta * per_pixel).abs().max(1.0);
+                range = (centre - new_half, centre + new_half);
+            } else {
+                // The pointer is on the mark: the whole range moves.
+                let shift = -delta * per_pixel;
+                range = (minimum + shift, maximum + shift);
+            }
+            app.session.graph_range = Some(range);
+            app.session.dirty = true;
+        }
+    }
+    if response.double_clicked() {
+        app.session.graph_range = None;
+        app.session.dirty = true;
+    }
 }
 
 /// Draw the graph into a rectangle, with the pointer where it is.
@@ -63,8 +150,14 @@ fn draw(app: &App, painter: &egui::Painter, rect: Rect, pointer: Option<Pos2>) {
         return;
     }
 
-    let (minimum, maximum) = y_range(&curves);
-    let (minimum, maximum) = scaled_y_range((minimum, maximum), app.session.y_scale);
+    // The range is the curves' own, unless the user has dragged the scale.
+    let (minimum, maximum) = match app.session.graph_range {
+        Some(range) => range,
+        None => {
+            let (minimum, maximum) = y_range(&curves);
+            scaled_y_range((minimum, maximum), app.session.y_scale)
+        }
+    };
     let zoom = app.session.zoom;
     let transform = Transform::new(plot, zoom.x_range(), (minimum, maximum));
 
