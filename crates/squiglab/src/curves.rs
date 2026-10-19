@@ -213,7 +213,11 @@ fn manager(ui: &mut Ui, app: &mut App) {
 fn row(ui: &mut Ui, app: &mut App, index: usize) {
     let palette = theme::current_palette();
     let group = &app.session.groups[index];
-    let name = group.name.clone();
+    // The reference writes the brand and the model together, as one name.
+    let name = match group.brand.trim() {
+        "" => group.name.clone(),
+        brand => format!("{brand} {}", group.name),
+    };
     let color = theme::color(crate::graph::curve_color(app, index));
     let target = group.target;
 
@@ -232,16 +236,25 @@ fn row(ui: &mut Ui, app: &mut App, index: usize) {
         ui.painter().circle_filled(rect.center(), 7.0, color);
 
         // The name. A target is a reference, and is written in the quieter
-        // grey; the measurement is the subject.
-        ui.label(
-            RichText::new(name.clone())
-                .font(egui::FontId::new(14.0, egui::FontFamily::Proportional))
-                .strong()
-                .color(if target {
-                    palette.text_tertiary
-                } else {
-                    palette.text_primary
-                }),
+        // grey; the measurement is the subject. The reference's name cell
+        // takes the room that is left, so the key and the buttons sit at the
+        // right of the row.
+        let room = ui.available_width() - (108.0 + 86.0 + 5.0 * 42.0);
+        let (rect, _) =
+            ui.allocate_exact_size(egui::vec2(room.max(60.0), 24.0), egui::Sense::hover());
+        ui.painter().text(
+            rect.left_center(),
+            egui::Align2::LEFT_CENTER,
+            name.clone(),
+            egui::FontId::new(
+                14.0,
+                egui::FontFamily::Name(crate::theme::BOLD_FAMILY.into()),
+            ),
+            if target {
+                palette.text_tertiary
+            } else {
+                palette.text_primary
+            },
         );
 
         // The key: the reading of the curve, and the control that chooses the
@@ -253,7 +266,7 @@ fn row(ui: &mut Ui, app: &mut App, index: usize) {
             .copied()
             .unwrap_or(ChannelMode::Both);
         let (key_rect, key_response) =
-            ui.allocate_exact_size(egui::vec2(65.0, 24.0), egui::Sense::click());
+            ui.allocate_exact_size(egui::vec2(108.0, 40.0), egui::Sense::click());
         draw_key(ui, key_rect, color, mode, target);
         if key_response.clicked() {
             let pointer = key_response
@@ -283,7 +296,9 @@ fn row(ui: &mut Ui, app: &mut App, index: usize) {
                 [70.0, 36.0],
                 egui::TextEdit::singleline(&mut text)
                     .desired_width(70.0)
-                    .font(egui::FontId::new(12.0, egui::FontFamily::Proportional)),
+                    .font(egui::FontId::new(11.0, egui::FontFamily::Monospace))
+                    .text_color(palette.text_secondary)
+                    .horizontal_align(egui::Align::Center),
             )
             .on_hover_text("Move this curve up or down, in decibels")
             .changed()
@@ -296,15 +311,26 @@ fn row(ui: &mut Ui, app: &mut App, index: usize) {
         }
 
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+            // The reference's marks: the last three sit in a box with a
+            // hairline border, and the first two sit on the page.
+            let quiet = palette.text_tertiary;
+            let strong = palette.text_primary;
             // Remove.
-            if crate::icons::button(ui, crate::icons::Icon::Remove, "Remove graph", false).clicked()
+            if crate::icons::cell(ui, crate::icons::Icon::Remove, "Remove graph", true, quiet)
+                .clicked()
             {
                 app.session.toggle_curve(index);
                 app.session.rebuild_display_curves();
             }
             // Export.
-            if crate::icons::button(ui, crate::icons::Icon::Download, "Export graph", false)
-                .clicked()
+            if crate::icons::cell(
+                ui,
+                crate::icons::Icon::Download,
+                "Export graph",
+                true,
+                quiet,
+            )
+            .clicked()
             {
                 match app.session.export_curve_text(index) {
                     Ok(text) => app.say(format!("The curve is ready to save: {text}")),
@@ -313,7 +339,7 @@ fn row(ui: &mut Ui, app: &mut App, index: usize) {
             }
             // Pin.
             let pinned = app.session.pinned.contains(&index);
-            if crate::icons::button(ui, crate::icons::Icon::Pin, "Pin graph", pinned).clicked() {
+            if crate::icons::cell(ui, crate::icons::Icon::Pin, "Pin graph", true, quiet).clicked() {
                 if pinned {
                     app.session.pinned.remove(&index);
                 } else {
@@ -321,22 +347,9 @@ fn row(ui: &mut Ui, app: &mut App, index: usize) {
                 }
                 app.session.dirty = true;
             }
-            // The baseline: the curve the others are read against.
-            let baseline = app.session.baseline == Some(index);
-            if crate::icons::button(
-                ui,
-                crate::icons::Icon::Baseline,
-                "Set as baseline",
-                baseline,
-            )
-            .clicked()
-            {
-                app.session.baseline = if baseline { None } else { Some(index) };
-                app.session.rebuild_display_curves();
-            }
             // Hide.
             let hidden = app.session.hidden.contains(&index);
-            if crate::icons::button(
+            if crate::icons::cell(
                 ui,
                 if hidden {
                     crate::icons::Icon::EyeCrossed
@@ -344,7 +357,8 @@ fn row(ui: &mut Ui, app: &mut App, index: usize) {
                     crate::icons::Icon::Eye
                 },
                 "Hide graph",
-                hidden,
+                false,
+                strong,
             )
             .clicked()
             {
@@ -353,6 +367,18 @@ fn row(ui: &mut Ui, app: &mut App, index: usize) {
                 } else {
                     app.session.hidden.insert(index);
                 }
+                app.session.rebuild_display_curves();
+            }
+            // The baseline: the curve the others are read against. The
+            // reference draws a wave for it, and a line when it is the one.
+            let baseline = app.session.baseline == Some(index);
+            let mark = if baseline {
+                crate::icons::Icon::BaselineLine
+            } else {
+                crate::icons::Icon::Squiggle
+            };
+            if crate::icons::cell(ui, mark, "Set as baseline", false, strong).clicked() {
+                app.session.baseline = if baseline { None } else { Some(index) };
                 app.session.rebuild_display_curves();
             }
         });
@@ -381,111 +407,178 @@ fn chip(ui: &mut Ui, label: &str, on: bool) -> egui::Response {
     )
 }
 
-/// The key: the reading of the curve, and the control that chooses the channel.
+/// The key: the reading of the curve, and the control that chooses the
+/// channel.
 ///
-/// The reference draws it as a pair of tapered strokes meeting in a point on
-/// the left and opening to the right, one per channel, in the curve's colour.
-/// A single channel is a straight line, and a target's is a straight line with
-/// the word "Target" beside it.
+/// The reference draws it as a filled fan: two curved arms meeting at a point
+/// on the left and opening to the right, with the channel letters beside it.
+/// Its own drawing is sixty-five by twenty-four, and it is shown at forty
+/// points tall, so everything in it is a little larger than it looks.
 fn draw_key(ui: &Ui, rect: egui::Rect, color: egui::Color32, mode: ChannelMode, target: bool) {
     let painter = ui.painter();
-    // The reference's box is 65 by 24, with its origin 19 to the left of the
-    // point the strokes meet at.
-    let origin = rect.left() + 19.0;
+    // The reference's box is sixty-five by twenty-four, shown at forty tall.
+    let scale = 40.0 / 24.0;
+    let origin = rect.left() + 19.0 * scale;
     let middle = rect.center().y;
-    let stroke = egui::Stroke::new(2.0, color);
-    let stroke_to = |x: f32, y: f32| egui::Pos2::new(origin + x, middle + y);
+    let at = |x: f32, y: f32| egui::Pos2::new(origin + x * scale, middle + y * scale);
+    // The letters are the reference's quiet grey, not the curve's colour.
+    let quiet = theme::current_palette().text_tertiary;
 
-    match mode {
-        ChannelMode::Left => {
-            painter.add(egui::Shape::line(
-                vec![
-                    stroke_to(15.0, -6.0),
-                    stroke_to(9.0, -6.0),
-                    stroke_to(-9.0, 0.0),
-                    stroke_to(-17.0, 0.0),
-                ],
-                stroke,
-            ));
-        }
-        ChannelMode::Right => {
-            painter.add(egui::Shape::line(
-                vec![
-                    stroke_to(-17.0, 0.0),
-                    stroke_to(-9.0, 0.0),
-                    stroke_to(9.0, 6.0),
-                    stroke_to(15.0, 6.0),
-                ],
-                stroke,
-            ));
-        }
-        _ => {
-            painter.add(egui::Shape::line(
-                vec![
-                    stroke_to(15.0, -6.0),
-                    stroke_to(9.0, -6.0),
-                    stroke_to(-9.0, 0.0),
-                    stroke_to(-17.0, 0.0),
-                ],
-                stroke,
-            ));
-            painter.add(egui::Shape::line(
-                vec![
-                    stroke_to(-17.0, 0.0),
-                    stroke_to(-9.0, 0.0),
-                    stroke_to(9.0, 6.0),
-                    stroke_to(15.0, 6.0),
-                ],
-                stroke,
-            ));
-        }
-    }
-
-    // The channel labels, and the word under the one that is alone.
-    let font = egui::FontId::new(10.5, egui::FontFamily::Proportional);
-    let small = || egui::FontId::new(7.5, egui::FontFamily::Proportional);
     if target {
         painter.text(
-            egui::Pos2::new(rect.left() + 26.0, middle),
+            egui::Pos2::new(origin + 17.0 * scale, middle),
             egui::Align2::LEFT_CENTER,
             "Target",
-            egui::FontId::new(8.0, egui::FontFamily::Proportional),
+            egui::FontId::new(8.0 * scale, egui::FontFamily::Proportional),
             color,
         );
         return;
     }
+
+    // The fan: the two arms and the point between them. The reference's mask
+    // has the part near the point whole and the part at the right faint, so
+    // the fan is drawn in two.
+    let upper = arm(at(9.0, -6.0), at(0.0, -6.0), at(0.0, 0.0), at(-9.0, 0.0));
+    let lower = arm(at(-9.0, 0.0), at(0.0, 0.0), at(0.0, 6.0), at(9.0, 6.0));
+    // The point where the reference's mask turns from whole to faint.
+    let edge = at(-3.0, 0.0).x;
+    let upper_edge = upper
+        .iter()
+        .find(|point| point.x <= edge)
+        .copied()
+        .unwrap_or(at(-9.0, 0.0));
+    let lower_edge = lower
+        .iter()
+        .find(|point| point.x <= edge)
+        .copied()
+        .unwrap_or(at(-9.0, 0.0));
+
+    // The arms are curved, so the points of the curve are kept.
+    let upper_arm: Vec<egui::Pos2> = upper
+        .iter()
+        .take_while(|point| point.x > edge)
+        .copied()
+        .collect();
+    // The lower arm runs the other way, so it is read backwards.
+    let lower_arm: Vec<egui::Pos2> = lower
+        .iter()
+        .rev()
+        .take_while(|point| point.x > edge)
+        .copied()
+        .collect();
+    let mut whole = vec![at(9.0, -6.0)];
+    whole.extend(upper_arm.iter().copied());
+    whole.push(upper_edge);
+    whole.push(at(-17.0, 0.0));
+    whole.push(lower_edge);
+    whole.extend(lower_arm.iter().rev().copied());
+    whole.push(at(9.0, 6.0));
+    let mut faint = vec![at(15.0, -6.0), at(9.0, -6.0)];
+    faint.extend(upper_arm.iter().copied());
+    faint.push(upper_edge);
+    faint.push(lower_edge);
+    faint.extend(lower_arm.iter().rev().copied());
+    faint.push(at(9.0, 6.0));
+    faint.push(at(15.0, 6.0));
+    let page = theme::current_palette().page;
+    let whole_colour = match mode {
+        ChannelMode::Right => tint(color, page, 0.25),
+        _ => color.gamma_multiply(0.8),
+    };
+    let faint_colour = match mode {
+        ChannelMode::Right => color.gamma_multiply(0.8),
+        _ => tint(color, page, 0.25),
+    };
+    painter.add(egui::Shape::convex_polygon(
+        whole,
+        whole_colour,
+        egui::Stroke::NONE,
+    ));
+    painter.add(egui::Shape::convex_polygon(
+        faint,
+        faint_colour,
+        egui::Stroke::NONE,
+    ));
+
+    // The channel letters, and the word under the one that is alone.
+    let font = egui::FontId::new(10.5 * scale, egui::FontFamily::Proportional);
+    let small = egui::FontId::new(7.5 * scale, egui::FontFamily::Proportional);
     painter.text(
-        egui::Pos2::new(origin + 17.0, middle - 6.0),
+        egui::Pos2::new(origin + 17.0 * scale, middle - 6.0 * scale),
         egui::Align2::LEFT_CENTER,
         "L",
         font.clone(),
-        color,
+        quiet,
     );
     painter.text(
-        egui::Pos2::new(origin + 17.0, middle + 6.0),
+        egui::Pos2::new(origin + 17.0 * scale, middle + 6.0 * scale),
         egui::Align2::LEFT_CENTER,
         "R",
         font,
-        color,
+        quiet,
     );
     if mode == ChannelMode::Left {
         painter.text(
-            egui::Pos2::new(origin + 17.0, middle - 6.0),
+            egui::Pos2::new(origin + 25.0 * scale, middle - 6.0 * scale),
             egui::Align2::LEFT_CENTER,
-            "only",
-            small(),
-            color,
+            "ONLY",
+            small.clone(),
+            quiet,
         );
     }
     if mode == ChannelMode::Right {
         painter.text(
-            egui::Pos2::new(origin + 17.0, middle + 6.0),
+            egui::Pos2::new(origin + 25.0 * scale, middle + 6.0 * scale),
             egui::Align2::LEFT_CENTER,
-            "only",
-            small(),
-            color,
+            "ONLY",
+            small,
+            quiet,
         );
     }
+}
+
+/// A colour laid over the page, the way the reference's mask lays its
+/// faded part over it.
+fn tint(color: egui::Color32, page: egui::Color32, amount: f32) -> egui::Color32 {
+    let mix = |one: u8, other: u8| {
+        (f32::from(one) * amount + f32::from(other) * (1.0 - amount)).round() as u8
+    };
+    egui::Color32::from_rgb(
+        mix(color.r(), page.r()),
+        mix(color.g(), page.g()),
+        mix(color.b(), page.b()),
+    )
+}
+
+/// The points of one curved arm of the fan.
+fn arm(from: egui::Pos2, first: egui::Pos2, second: egui::Pos2, to: egui::Pos2) -> Vec<egui::Pos2> {
+    let mut points = Vec::new();
+    for step in 1..=16 {
+        let t = step as f32 / 16.0;
+        points.push(cubic(from, first, second, to, t));
+    }
+    points
+}
+
+/// A point on a cubic curve.
+fn cubic(
+    from: egui::Pos2,
+    first: egui::Pos2,
+    second: egui::Pos2,
+    to: egui::Pos2,
+    t: f32,
+) -> egui::Pos2 {
+    let one = 1.0 - t;
+    egui::Pos2::new(
+        one * one * one * from.x
+            + 3.0 * one * one * t * first.x
+            + 3.0 * one * t * t * second.x
+            + t * t * t * to.x,
+        one * one * one * from.y
+            + 3.0 * one * one * t * first.y
+            + 3.0 * one * t * t * second.y
+            + t * t * t * to.y,
+    )
 }
 
 /// The bank a row belongs to, for the panels that ask.

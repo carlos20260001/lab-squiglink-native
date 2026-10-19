@@ -19,7 +19,7 @@ branch of the site repository, and the native is written against it.
 | Graph toolbar: Copy URL, Screenshot, `NORMALIZE: [dB 60] [Hz 500]`, `SMOOTH: 5`, `ZOOM: Bass Mids Treble`, a help button | The same controls, in a row that scrolls sideways when it overflows ✓ — but no help button ✗ |
 | Graph: the dB scale and its drag handle, the frequency axis, the band names, the target label, the curve labels, the watermark | The same ✓ — the scale's mark moves the range, the two circles change how far it reaches, and a double-click puts it back ✓ |
 | Under the graph: the **DELTA** chips, the rig corrections, `REFERENCE TARGETS` / `LEGACY TARGETS` | The target chips, grouped as the reference groups them, with the rig corrections in a group of their own marked Δ ✓, and the active curves below them ✓ |
-| Manager rows: the curve, `L ONLY / R ONLY`, a dB offset, and the row buttons | The same ✓ — the key graphic is the reference's own drawing, and the buttons carry the reference's marks |
+| Manager rows: the curve, `L ONLY / R ONLY`, a dB offset, and the row buttons | The same ✓ — the name is the brand and the model, as the reference writes it; the key is the reference's own fan, at its own size, with the channel letters in its quiet grey; the offset is a field of the reference's size with the figure in the middle; and the buttons are the reference's marks, the last three of them in boxes with a hairline border, and the baseline a wave rather than a word |
 | **IEM GRAPH DATABASES** — the other graphs' tools, as links | The same ✓ — the same eleven links, and they open in the browser the user has ✓ |
 
 ## The equalizer panel

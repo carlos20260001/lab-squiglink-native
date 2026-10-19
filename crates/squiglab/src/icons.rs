@@ -30,6 +30,10 @@ pub enum Icon {
     Reset,
     /// A speaker: the volume.
     Volume,
+    /// A wave: the curve the others are read against.
+    Squiggle,
+    /// A line: the curve that is the baseline.
+    BaselineLine,
 }
 
 /// The size a mark is drawn at, in points.
@@ -88,6 +92,12 @@ fn paths_for(icon: Icon) -> Vec<&'static str> {
         ],
         // The arrow that bends back, from the stylesheet's mask.
         Icon::Reset => vec!["M9 14l-4-4l4-4", "M5 10h11a4 4 0 0 1 4 4v1"],
+        // The wave the reference draws for the baseline, from its stylesheet.
+        Icon::Squiggle => vec![
+            "M21 12h-2c-.894 0 -1.662 -.857 -1.761 -2c-.296 -3.45 -.749 -6 -2.749 -6s-2.5 3.582 -2.5 8s-.5 8 -2.5 8s-2.452 -2.547 -2.749 -6c-.1 -1.147 -.867 -2 -1.763 -2h-2",
+        ],
+        // The line the reference draws for the chosen baseline.
+        Icon::BaselineLine => vec!["M4 12h16"],
         // The speaker, from the reference's own markup.
         Icon::Volume => vec![
             "M15 8a5 5 0 0 1 0 8",
@@ -167,6 +177,35 @@ pub fn button(ui: &mut egui::Ui, icon: Icon, tooltip: &str, selected: bool) -> e
         palette.text_secondary
     };
     draw(ui.painter(), rect, icon, color);
+    response.on_hover_text(tooltip)
+}
+
+/// A mark in a cell, as the reference's row of buttons draws them.
+///
+/// The cell is thirty-six points across, and the mark sixteen. Some of the
+/// reference's marks sit in a box with a hairline border, and some sit on
+/// the page; which is which is the caller's business.
+pub fn cell(
+    ui: &mut egui::Ui,
+    icon: Icon,
+    tooltip: &str,
+    boxed: bool,
+    color: egui::Color32,
+) -> egui::Response {
+    let palette = crate::theme::current_palette();
+    let (rect, response) = ui.allocate_exact_size(Vec2::splat(36.0), egui::Sense::click());
+    if boxed {
+        ui.painter()
+            .rect_filled(rect, egui::CornerRadius::same(6), palette.page);
+        ui.painter().rect_stroke(
+            rect,
+            egui::CornerRadius::same(6),
+            egui::Stroke::new(1.0, palette.divider),
+            egui::StrokeKind::Inside,
+        );
+    }
+    let mark = egui::Rect::from_center_size(rect.center(), Vec2::splat(16.0));
+    draw(ui.painter(), mark, icon, color);
     response.on_hover_text(tooltip)
 }
 
