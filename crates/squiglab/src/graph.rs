@@ -110,7 +110,7 @@ fn scale(app: &mut App, painter: &egui::Painter, rect: Rect, response: &egui::Re
         let delta = response.drag_delta().y;
         if delta != 0.0 {
             let per_pixel = (maximum - minimum) / plot.height();
-            let mut range = (minimum, maximum);
+            let range;
             // The circle the pointer took hold of: the one above the middle
             // or the one below it, which reach in opposite directions.
             let circle = app
