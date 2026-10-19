@@ -30,9 +30,12 @@ The same measurement-comparison logic as the web reference at squig.link, rebuil
 - Curve comparison with selectable measurements and reference targets.
 - Processing controls: normalization, smoothing, zoom, channels.
 - Dense native layout with measurement palette as the hero visual.
-- Design authority: DESIGN.md (existing, fully tokenized). No redesign requested.
+- Design authority: the web reference at squig.link, extracted into `docs/design-system.md`.
+  The interface matches its chrome, layout, scaling, spacing and themes.
 - Fonts: Open Sans (Regular/Bold) vendored at `assets/fonts/`; Hack for monospace data.
-- Theme: dark default, light available; tokens tested at ≥4.5:1 contrast.
+- Theme: the reference's three — light, dark and high contrast. The dark theme keeps the
+  native's blue accent rather than the reference's yellow, because the curves are the
+  native's own coloured palette.
 - Technical constraint: egui 0.36/0.37 + eframe; immediate-mode UI rebuilt per frame.
 - No accessibility mandate stated; AccessKit enabled by default on eframe.
 
@@ -40,12 +43,13 @@ The same measurement-comparison logic as the web reference at squig.link, rebuil
 
 - Product name: CrinGraph.
 - Reference identity: squig.link (same measurement product, web reference).
-- Visual authority preserved from DESIGN.md and assets/fonts/.
+- Visual authority: squig.link, extracted into `docs/design-system.md`.
 - Voice: precise, technical, measurement-focused; no marketing or emotional copy.
 
 ## Evidence on Hand
 
-- DESIGN.md: complete design system (tokens, type scale, spacing, states, themes).
+- `docs/design-system.md`: the reference's tokens, type scale, spacing, metrics and themes,
+  read from the reference's own stylesheet.
 - Assets: `assets/fonts/` (Open Sans, Hack, OFL license), measurement data samples.
 - Source: `src/` (Rust/egui app), `Cargo.toml` (egui 0.36/0.37 + eframe).
 - No testimonials, case studies, or external press recorded.
@@ -55,7 +59,8 @@ The same measurement-comparison logic as the web reference at squig.link, rebuil
 1. The graph is the product. Chrome frames without competing.
 2. Density is earned: tight rows with rhythmic spacing multiples, not arbitrary compression.
 3. Numbers are measurements: monospace, tabular, aligned; no decorative typography.
-4. Preserve the incumbent design authority (DESIGN.md) for any future refinement or extension.
+4. The design authority is the web reference (extracted in `docs/design-system.md`), not an
+   incumbent house style.
 
 ## Accessibility & Inclusion
 

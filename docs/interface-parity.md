@@ -1,7 +1,6 @@
 # Interface parity: the reference and the native
 
-What the web reference puts in front of the user, read from the live site with
-REA (`analyze-web-bundle` over `https://squig.link/`, plus the rendered DOM),
+What the web reference puts in front of the user, read from the live site , plus the rendered DOM),
 and where the native application stands against it.
 
 The reference is the older CrinGraph interface, extended: the ids the native
