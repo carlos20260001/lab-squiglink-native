@@ -991,17 +991,21 @@ fn number(
         }
     };
     // The unit sits inside the field, at its right, as the reference writes
-    // it, and the figure is in the accent.
+    // it, and the figure is in the accent. The unit is laid out once and
+    // used both to measure it and to draw it: there are thirty fields in
+    // the table, and the text would otherwise be shaped sixty times a frame.
     let unit_font = TypeStep::Label.font();
-    let unit_font_for_width = unit_font.clone();
-    let unit_width = if unit.is_empty() {
-        0.0
+    let unit_galley = if unit.is_empty() {
+        None
     } else {
-        ui.painter()
-            .layout_no_wrap(unit.to_owned(), unit_font_for_width, palette.text_tertiary)
-            .size()
-            .x
-            + 6.0
+        Some(
+            ui.painter()
+                .layout_no_wrap(unit.to_owned(), unit_font, palette.text_tertiary),
+        )
+    };
+    let unit_width = match &unit_galley {
+        Some(galley) => galley.size().x + 6.0,
+        None => 0.0,
     };
     let response = ui.add_sized(
         [width, 26.0],
@@ -1009,13 +1013,11 @@ fn number(
             .desired_width(width - unit_width)
             .text_color(palette.text_input),
     );
-    if !unit.is_empty() {
-        let galley = ui
-            .painter()
-            .layout_no_wrap(unit.to_owned(), unit_font, palette.text_tertiary);
+    if let Some(galley) = &unit_galley {
         let at = response.rect.right_center()
             + egui::vec2(-galley.size().x - 4.0, -galley.size().y * 0.5);
-        ui.painter().galley(at, galley, palette.text_tertiary);
+        ui.painter()
+            .galley(at, galley.clone(), palette.text_tertiary);
     }
     if !response.changed() {
         return false;

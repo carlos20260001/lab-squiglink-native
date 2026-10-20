@@ -272,6 +272,13 @@ pub struct Session {
     pub target_hz: f32,
     /// Fractional-octave smoothing, in octaves.
     pub smooth_level: usize,
+    /// The smoothing matrix, kept so that it need not be made again.
+    ///
+    /// The matrix is a property of the frequency grid and the level and of
+    /// nothing else, and nearly every measurement is on the same grid, so
+    /// making it once and keeping it saves the work of making it for every
+    /// curve every time the graph is rebuilt.
+    pub smoothing: SmoothingCache,
     /// Whether the curves carry labels.
     pub show_labels: bool,
     /// Whether the inspector follows the pointer.
@@ -361,6 +368,7 @@ impl Default for Session {
             target_phon: 60.0,
             target_hz: 500.0,
             smooth_level: 5,
+            smoothing: SmoothingCache::default(),
             show_labels: false,
             inspect_mode: false,
             theme: crate::theme::Theme::default(),
@@ -568,11 +576,12 @@ impl Session {
                 .get(&group_index)
                 .copied()
                 .unwrap_or_default();
-            let channels = match prepare_channels(
+            let channels = match prepare_channels_with(
                 &self.curves,
                 &variant.curve_indices,
                 channel_mode,
                 self.smooth_level,
+                &mut self.smoothing,
             ) {
                 Ok(channels) => channels,
                 Err(error) => {
@@ -806,7 +815,7 @@ impl Session {
     }
 
     pub fn normalized_average_points(
-        &self,
+        &mut self,
         group_index: usize,
     ) -> Result<Vec<FRPoint>, processing::ProcessingError> {
         let group = &self.groups[group_index];
@@ -817,11 +826,12 @@ impl Session {
             .unwrap_or(0)
             .min(group.variants.len().saturating_sub(1));
         let variant = &group.variants[variant_index];
-        let channels = prepare_channels(
+        let channels = prepare_channels_with(
             &self.curves,
             &variant.curve_indices,
             ChannelMode::Both,
             self.smooth_level,
+            &mut self.smoothing,
         )?;
         let channel_points: Vec<&[FRPoint]> = channels
             .iter()
@@ -895,7 +905,7 @@ impl Session {
         Ok(message)
     }
 
-    pub fn parametric_export(&self) -> Option<(String, String)> {
+    pub fn parametric_export(&mut self) -> Option<(String, String)> {
         let phone = self.eq_phone()?;
         let source = self
             .normalized_average_points(phone)
@@ -1324,13 +1334,34 @@ pub fn prepare_channels(
     mode: ChannelMode,
     smooth_level: usize,
 ) -> Result<Vec<(String, Vec<FRPoint>)>, processing::ProcessingError> {
+    prepare_channels_with(
+        curves,
+        indices,
+        mode,
+        smooth_level,
+        &mut SmoothingCache::default(),
+    )
+}
+
+/// The channels of a measurement, smoothed with a matrix that is kept.
+///
+/// The matrix is made once for the grid and kept, so that the curves on the
+/// same grid — which is nearly all of them — are smoothed by it rather than
+/// by a matrix made afresh for each.
+pub fn prepare_channels_with(
+    curves: &[CurveInfo],
+    indices: &[usize],
+    mode: ChannelMode,
+    smooth_level: usize,
+    smoothing: &mut SmoothingCache,
+) -> Result<Vec<(String, Vec<FRPoint>)>, processing::ProcessingError> {
     let mut left = Vec::new();
     let mut right = Vec::new();
     let mut average = Vec::new();
     let mut other = Vec::new();
     for &index in indices {
         let curve = &curves[index];
-        let prepared = prepare_curve(&curve.points, smooth_level)?;
+        let prepared = prepare_curve_with(&curve.points, smooth_level, smoothing)?;
         let variant = curve.variant.as_str();
         if variant.starts_with('L') {
             left.push(prepared);
@@ -1540,6 +1571,42 @@ pub fn curve_text(points: &[FRPoint]) -> String {
         .collect()
 }
 
+/// The smoothing matrix, kept so that it need not be made again.
+///
+/// The matrix is a property of the frequency grid and the level and of
+/// nothing else. Nearly every measurement is on the same grid, so making
+/// the matrix once and keeping it saves making it again for every curve
+/// every time the graph is rebuilt.
+///
+/// The matrix that is kept is the one made for the grid it was made for,
+/// and the grid is compared before the matrix is used, so a curve on a
+/// different grid is never smoothed with another's matrix.
+#[derive(Clone, Debug, Default)]
+pub struct SmoothingCache {
+    grid: Vec<f32>,
+    level: usize,
+    params: Option<SmoothingParams>,
+}
+
+impl SmoothingCache {
+    /// The matrix for a grid at a level, made if it is not already held.
+    ///
+    /// The grid is compared to the one the kept matrix was made for, and
+    /// the matrix is made afresh if they differ.
+    pub fn params(
+        &mut self,
+        frequencies: &[f32],
+        level: usize,
+    ) -> Result<SmoothingParams, processing::ProcessingError> {
+        if self.level != level || self.grid != frequencies {
+            self.params = Some(SmoothingParams::new(frequencies, level)?);
+            self.grid = frequencies.to_vec();
+            self.level = level;
+        }
+        Ok(self.params.clone().expect("the matrix was just made"))
+    }
+}
+
 pub fn prepare_curve(
     curve: &[FRPoint],
     smooth_level: usize,
@@ -1549,6 +1616,23 @@ pub fn prepare_curve(
     }
     let frequencies: Vec<f32> = curve.iter().map(|point| point.hz).collect();
     let params = SmoothingParams::new(&frequencies, smooth_level)?;
+    processing::smooth(curve, &params)
+}
+
+/// A curve smoothed with a matrix that is kept.
+///
+/// The matrix is the one kept for this curve's grid and the level, and it
+/// is made afresh if the grid or the level is not the one it was made for.
+pub fn prepare_curve_with(
+    curve: &[FRPoint],
+    smooth_level: usize,
+    smoothing: &mut SmoothingCache,
+) -> Result<Vec<FRPoint>, processing::ProcessingError> {
+    if smooth_level == 0 {
+        return Ok(curve.to_vec());
+    }
+    let frequencies: Vec<f32> = curve.iter().map(|point| point.hz).collect();
+    let params = smoothing.params(&frequencies, smooth_level)?;
     processing::smooth(curve, &params)
 }
 
