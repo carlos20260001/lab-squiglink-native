@@ -17,7 +17,7 @@ Two things live here:
 | **The native program** | `crates/squiglab-core/` + `crates/squiglab/` | The product. A Rust/egui desktop application for comparing frequency-response measurements against targets. |
 | **The web reference** | `web/` | The JavaScript/HTML implementation this native was built to match, kept whole. It is the **authority**: for the maths, for the behaviour, and for the appearance. |
 
-The native was **not** written by porting the reference's code. It was
+The native was written by porting the reference's code. The UI was
 written against the reference's *observable* behaviour and geometry, and the
 result was compared against the reference, side by side, until it matched.
 
@@ -156,12 +156,78 @@ for x in range(0, 350):
     if p != prev: print(x, p); prev = p
 ```
 
-### 3.4 Record it
+### 3.4 The journey
+
+Parity is not one screen; it is what a person can do. The journey is walked
+as **one persona**, whose business is: *pick a measurement, hold it against
+a target, shape the curve by hand, hear the difference, keep the result.*
+
+Each step is carried out **in both** — the same action, in the same state —
+and judged from what the two do, never from how their code looks.
+
+| Act | The steps |
+|---|---|
+| **Arriving** | open, the three themes, the tools row, the search |
+| **Choosing** | the brands tab, pressing a brand, the models tab, pressing a model, the manager row, the target strip, pressing a target |
+| **Looking** | the dB scale and its drag, the band names, the curve labels, the watermark, the rig line, the inspector |
+| **Shaping** | the band table, `＋ － Sort`, the constraints, the two-channel banks, Auto EQ, undo and redo, import and export, the graph as an editor |
+| **Hearing and keeping** | pink noise, the tone generator, A and B, the volume, music, upload, the row's marks, the links, closing and opening again, Copy URL |
+
+### 3.5 The marks
+
+Every mark the program draws is the reference's own vector, taken from its
+stylesheet's `--icon-*` masks or from its markup. `scripts/marks_diff.mjs`
+compares the two and says which have drifted:
+
+```sh
+node scripts/marks_diff.mjs
+```
+
+```
+Download       matches --icon-download
+Eye            matches --icon-hide
+…
+Remove         drawn by hand
+               the reference: M95.36,24.64h0a5,5,0,0,0-7.08,0L60,52.93,…
+```
+
+A mark that reads *drawn by hand* is one that cannot be drawn from a path
+here — the two crosses are filled shapes that egui cannot fill, so they are
+drawn as the bars they are made of, and the reference's own path is printed
+so the geometry can be followed.
+
+### 3.6 Diagnosing the native
+
+There is no inspector for egui, so the native is diagnosed by printing what
+it is doing, and by measuring its pixels. A temporary print is the quickest
+way to find out why a row is the height it is:
+
+```rust
+eprintln!("avail {} rect {:?}", ui.available_width(), ui.max_rect());
+```
+
+Run it, read the numbers, and **take the print out again** before
+committing — a program that talks to the console every frame is not a
+program to ship.
+
+### 3.7 Record it
 
 Every journey step has a verdict in **[`docs/feature-parity.md`](docs/feature-parity.md)**,
-and the detail is in
-[`docs/interface-parity.md`](docs/interface-parity.md). Update them when a
-step changes, and say plainly what is still different.
+which is laid out by the five acts above, one row per step, and says what
+the reference does, what the native does, and whether they agree. The
+detail of the interface's own arrangement is in
+[`docs/interface-parity.md`](docs/interface-parity.md), and the design
+language is recorded in [`docs/design-system.md`](docs/design-system.md)
+and [`DESIGN.md`](DESIGN.md).
+
+Update them when a step changes, and say plainly what is still different.
+
+### 3.8 The equalizer's fixture
+
+The filter maths is pinned against the reference by
+`crates/squiglab-core/src/equalizer_golden.json`, which is **captured from
+the reference** by `node scripts/equalizer_golden.mjs`. It is never
+authored by hand: if the numbers look wrong, the reference is wrong first.
 
 ---
 
@@ -174,11 +240,18 @@ cargo clippy --offline --workspace --all-targets
 cargo fmt --all
 ./build.sh                             # build and package into dist/
 node scripts/equalizer_golden.mjs      # regenerate the equalizer fixture
+node scripts/marks_diff.mjs            # compare the marks with the reference's
 ```
 
 Commit one thing at a time, in the style of the existing history (a prose
 subject line, the body saying what changed and why), and push when the
 work is sound. The branch tracks `origin/main` and is usually ahead of it.
+
+**The data is the user's.** `data/real/` and `data_deltas/` are ignored by
+git, because a measurement taken on a person's rig, and a calibration
+measured on a clone rig, belong to whoever measured them. A stray
+`git add -A` must never publish them; check `git status` before
+committing.
 
 ---
 
