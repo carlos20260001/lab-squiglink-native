@@ -341,6 +341,9 @@ parts of it that are the native's own is written down:
 
 - [`docs/design-system.md`](docs/design-system.md) — the reference's
   extracted tokens: colours, type, spacing, the themes.
+- [`docs/performance.md`](docs/performance.md) — what the program costs,
+  how it was measured, and the traps that make a measurement under Xvfb
+  point at the wrong thing.
 - [`DESIGN.md`](DESIGN.md) and `.impeccable/design.json` — the description
   of the native's own arrangement, kept as a pair so the sidecar matches
   the prose.
