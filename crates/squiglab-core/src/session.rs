@@ -585,24 +585,40 @@ impl Session {
             if channels.is_empty() {
                 continue;
             }
-            let normalization_channels = match prepare_channels(
-                &self.curves,
-                &variant.curve_indices,
-                ChannelMode::Both,
-                self.smooth_level,
-            ) {
-                Ok(channels) => channels,
-                Err(error) => {
-                    self.display_curves.clear();
-                    self.dirty = false;
+            // The curves the normalisation is measured from. When every
+            // channel is shown they are the curves that are drawn, so
+            // smoothing them again would give the same answer for twice
+            // the work.
+            let normalization_channels = if channel_mode == ChannelMode::Both {
+                None
+            } else {
+                Some(
+                    match prepare_channels(
+                        &self.curves,
+                        &variant.curve_indices,
+                        ChannelMode::Both,
+                        self.smooth_level,
+                    ) {
+                        Ok(channels) => channels,
+                        Err(error) => {
+                            self.display_curves.clear();
+                            self.dirty = false;
 
-                    return Some(format!("{}: {error}", group.name));
-                }
+                            return Some(format!("{}: {error}", group.name));
+                        }
+                    },
+                )
             };
-            let channel_points: Vec<&[FRPoint]> = normalization_channels
-                .iter()
-                .map(|(_, points)| points.as_slice())
-                .collect();
+            let channel_points: Vec<&[FRPoint]> = match &normalization_channels {
+                Some(channels) => channels
+                    .iter()
+                    .map(|(_, points)| points.as_slice())
+                    .collect(),
+                None => channels
+                    .iter()
+                    .map(|(_, points)| points.as_slice())
+                    .collect(),
+            };
             let normalization_offset = if self.phon_normalization {
                 processing::average_curves(&channel_points).and_then(|average| {
                     let params = NormParams::for_curve(&average)?;

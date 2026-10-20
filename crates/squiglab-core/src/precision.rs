@@ -35,6 +35,25 @@ mod tests {
             .collect()
     }
 
+    /// A digest of a curve's bits, so that every one of them is held to account
+    /// without the file carrying four thousand numbers.
+    ///
+    /// This is FNV-1a, over the bits and not over the numbers: two curves that
+    /// differ in the last place of one point have different digests, and two
+    /// that do not differ have the same one.
+    fn digest(bits: &CurveBits) -> u64 {
+        const OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
+        const PRIME: u64 = 0x0000_0100_0000_01b3;
+        let mut hash = OFFSET;
+        for (hz, db) in bits {
+            for byte in hz.to_le_bytes().iter().chain(db.to_le_bytes().iter()) {
+                hash ^= u64::from(*byte);
+                hash = hash.wrapping_mul(PRIME);
+            }
+        }
+        hash
+    }
+
     /// A frequency grid like the one the measurements use: a tenth of an octave
     /// from twenty hertz to twenty kilohertz.
     fn grid(count: usize) -> Vec<f32> {
@@ -286,5 +305,25 @@ mod tests {
             "the display curves have changed; the optimisation must not change them"
         );
         assert_eq!(drawn.len(), 4, "the number of drawn curves has changed");
+
+        // And every point of every curve, to its exact bit. The three
+        // points above are for the eye; this is the check. The digest is
+        // taken over the bits themselves, so a change to any one of them
+        // changes it.
+        let digests: Vec<u64> = session
+            .display_curves
+            .iter()
+            .map(|curve| digest(&bits(&curve.points)))
+            .collect();
+        assert_eq!(
+            digests,
+            vec![
+                4_780_704_968_488_885_110,
+                4_344_029_678_929_859_288,
+                15_130_162_126_814_105_159,
+                5_354_860_558_369_409_449,
+            ],
+            "a point of a drawn curve has changed; the optimisation must not change it"
+        );
     }
 }
