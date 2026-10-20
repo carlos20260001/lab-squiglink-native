@@ -15,8 +15,8 @@ pub fn show(ui: &mut Ui, app: &mut App) {
     let palette = theme::current_palette();
     ui.label(
         RichText::new("Upload Data")
-            .font(TypeStep::Title.font_bold())
-            .color(palette.text_primary),
+            .font(TypeStep::Heading.font_heading())
+            .color(palette.text_tertiary),
     );
     ui.add_space(metrics::GAP);
     ui.add(
@@ -38,7 +38,8 @@ pub fn show(ui: &mut Ui, app: &mut App) {
                 .font(TypeStep::Label.font())
                 .color(palette.text_tertiary),
         );
-        ui.add(
+        ui.add_sized(
+            [ui.available_width() - 150.0, 36.0],
             egui::TextEdit::singleline(&mut app.upload_path)
                 .hint_text("A measurement file")
                 .desired_width(ui.available_width() - 150.0),

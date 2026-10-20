@@ -137,7 +137,8 @@ pub fn show(ui: &mut Ui, app: &mut App) {
                 if ui.button("Play").on_hover_text("Play this file").clicked() {
                     play_file(app);
                 }
-                ui.add(
+                ui.add_sized(
+                    [ui.available_width() - 110.0, 36.0],
                     egui::TextEdit::singleline(&mut app.music.path)
                         .hint_text("A music file")
                         .desired_width(ui.available_width() - 110.0),

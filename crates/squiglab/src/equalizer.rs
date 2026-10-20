@@ -58,6 +58,17 @@ impl History {
     }
 }
 
+/// The width of the column that holds the kind of filter.
+const TYPE_COLUMN: f32 = 53.0;
+/// The width of the column that holds the mark.
+const MARK_COLUMN: f32 = 15.0;
+/// The width of the reference's fields.
+const FIELD_WIDTH: f32 = 76.0;
+/// The gap between the kind of filter and the first field.
+const TYPE_GAP: f32 = 12.0;
+/// The gap between the fields.
+const FIELD_GAP: f32 = 5.0;
+
 /// The equalizer of the selected measurement.
 pub fn show(ui: &mut Ui, app: &mut App) {
     let palette = theme::current_palette();
@@ -65,8 +76,8 @@ pub fn show(ui: &mut Ui, app: &mut App) {
     ui.horizontal(|ui| {
         ui.label(
             RichText::new("Parametric Equalizer")
-                .font(TypeStep::Title.font_bold())
-                .color(palette.text_primary),
+                .font(TypeStep::Heading.font_heading())
+                .color(palette.text_tertiary),
         );
         // The reference's head: the word "Reset", the arrow that bends back,
         // and the cog.
@@ -121,30 +132,34 @@ pub fn show(ui: &mut Ui, app: &mut App) {
         .map(|&index| app.session.groups[index].name.clone())
         .collect();
     let targets: Vec<usize> = app.session.active_targets.iter().copied().collect();
+    // The reference's arrangement: the measurement on a row of its own, and
+    // the target and the fit beside each other below it.
+    let mut selected = Some(phone);
+    egui::ComboBox::from_id_salt("eq_phone")
+        .width(ui.available_width())
+        .selected_text(
+            measurements
+                .iter()
+                .position(|&index| Some(index) == selected)
+                .map(|position| names[position].as_str())
+                .unwrap_or("Measurement"),
+        )
+        .show_ui(ui, |ui| {
+            for (index, name) in measurements.iter().zip(&names) {
+                ui.selectable_value(&mut selected, Some(*index), name);
+            }
+        });
+    if selected != Some(phone) {
+        app.session.eq_phone = selected;
+    }
+    ui.add_space(metrics::GAP);
     ui.horizontal(|ui| {
-        let mut selected = Some(phone);
-        egui::ComboBox::from_id_salt("eq_phone")
-            .selected_text(
-                measurements
-                    .iter()
-                    .position(|&index| Some(index) == selected)
-                    .map(|position| names[position].as_str())
-                    .unwrap_or("Measurement"),
-            )
-            .show_ui(ui, |ui| {
-                for (index, name) in measurements.iter().zip(&names) {
-                    ui.selectable_value(&mut selected, Some(*index), name);
-                }
-            });
-        if selected != Some(phone) {
-            app.session.eq_phone = selected;
-        }
-
         let mut target = app.session.eq_target;
         let target_label = target
             .map(|index| app.session.groups[index].name.clone())
-            .unwrap_or_else(|| "None".to_owned());
+            .unwrap_or_else(|| "Choose EQ target".to_owned());
         egui::ComboBox::from_id_salt("eq_target")
+            .width(ui.available_width() - 86.0)
             .selected_text(target_label.as_str())
             .show_ui(ui, |ui| {
                 for index in &targets {
@@ -160,7 +175,7 @@ pub fn show(ui: &mut Ui, app: &mut App) {
         }
 
         if ui
-            .button("Auto EQ")
+            .add_sized([76.0, 36.0], egui::Button::new("Auto EQ"))
             .on_hover_text("Fit bands to the target")
             .clicked()
         {
@@ -229,90 +244,120 @@ pub fn show(ui: &mut Ui, app: &mut App) {
         });
     }
     let mut changed = false;
+    // The reference's rows are thirty points apart: twenty-six for the
+    // field, and four between one row and the next.
+    ui.spacing_mut().item_spacing.y = 4.0;
 
+    // The reference's table: a mark, the kind of filter, and three fields of
+    // seventy-six points, with the headings over the fields they belong to.
+    // The headings sit at the left of the column they belong to, as the
+    // reference's do.
     ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = 0.0;
         for (heading, width) in [
-            ("", 22.0),
-            ("Type", 52.0),
-            ("Frequency", 62.0),
-            ("Gain", 58.0),
-            ("Q", 46.0),
+            ("Type", MARK_COLUMN + TYPE_COLUMN),
+            ("Frequency", FIELD_WIDTH),
+            ("Gain", FIELD_WIDTH),
+            ("Q", FIELD_WIDTH),
         ] {
-            ui.add_sized(
-                [width, 18.0],
-                egui::Label::new(
-                    RichText::new(heading)
-                        .font(TypeStep::Label.font())
-                        .color(palette.text_tertiary),
-                ),
+            let (rect, _) = ui.allocate_exact_size(egui::vec2(width, 18.0), egui::Sense::hover());
+            ui.painter().text(
+                rect.left_center(),
+                egui::Align2::LEFT_CENTER,
+                heading,
+                TypeStep::Label.font(),
+                palette.text_tertiary,
             );
         }
     });
-    for row in rows.iter_mut() {
-        ui.horizontal(|ui| {
-            // The reference's fields are short: twenty points, not the
-            // thirty-six the rest of the program's controls are.
-            ui.spacing_mut().interact_size.y = 20.0;
-            let mut enabled = row.enabled;
-            if ui
-                .add_sized([22.0, 20.0], egui::Checkbox::new(&mut enabled, ""))
-                .on_hover_text("Include this band in the response and the exports")
-                .changed()
-            {
-                row.enabled = enabled;
-                changed = true;
-            }
-            // A menu rather than a select: the reference writes the kind of
-            // filter in plain words with a caret beside it.
-            let (rect, response) =
-                ui.allocate_exact_size(egui::vec2(52.0, 20.0), egui::Sense::click());
-            let font = TypeStep::Body.font();
-            ui.painter().text(
-                rect.left_center() + egui::vec2(2.0, 0.0),
-                egui::Align2::LEFT_CENTER,
-                row.filter.filter_type.short_name(),
-                font,
-                palette.accent_text,
-            );
-            // The caret.
-            let caret = egui::Rect::from_center_size(
-                rect.left_center() + egui::vec2(38.0, 0.0),
-                egui::vec2(8.0, 5.0),
-            );
-            ui.painter().add(egui::Shape::convex_polygon(
-                vec![
-                    egui::pos2(caret.left(), caret.top()),
-                    egui::pos2(caret.right(), caret.top()),
-                    egui::pos2(caret.center().x, caret.bottom()),
-                ],
-                palette.text_tertiary,
-                egui::Stroke::NONE,
-            ));
-            response
-                .on_hover_text("The kind of filter this band is")
-                .context_menu(|ui| {
-                    for filter_type in [
-                        FilterType::Peaking,
-                        FilterType::LowShelf,
-                        FilterType::HighShelf,
-                    ] {
-                        ui.selectable_value(
-                            &mut row.filter.filter_type,
-                            filter_type,
-                            filter_type.short_name(),
-                        );
-                    }
-                });
-            if number(ui, &mut row.filter.freq, 0.0, 20_000.0, 0, 56.0, "Hz") {
-                changed = true;
-            }
-            if number(ui, &mut row.filter.gain, -40.0, 40.0, 1, 50.0, "dB") {
-                changed = true;
-            }
-            if number(ui, &mut row.filter.q, 0.0, 20.0, 2, 36.0, "") {
-                changed = true;
-            }
-        });
+    ui.add_space(TYPE_GAP);
+    // The reference's fields are twenty points tall, and the rows they sit
+    // in no taller. The rest of the panel's controls keep the height they
+    // have always had.
+    // A row of the table is twenty points tall, as the reference's rows are.
+    // The style is set for the length of the table, because a row is laid out
+    // with the style's own measures.
+    {
+        for row in rows.iter_mut() {
+            ui.horizontal(|ui| {
+                // The reference's fields are short: twenty points, not the
+                // thirty-six the rest of the program's controls are, and the
+                // fields are all the same width.
+                ui.spacing_mut().interact_size.y = 26.0;
+                ui.spacing_mut().item_spacing.x = 0.0;
+                let mut enabled = row.enabled;
+                let check =
+                    ui.add_sized([MARK_COLUMN, 26.0], egui::Checkbox::new(&mut enabled, ""));
+                if check
+                    .on_hover_text("Include this band in the response and the exports")
+                    .changed()
+                {
+                    row.enabled = enabled;
+                    changed = true;
+                }
+                // A menu rather than a select: the reference writes the kind of
+                // filter in plain words with a caret beside it.
+                let (rect, response) =
+                    ui.allocate_exact_size(egui::vec2(TYPE_COLUMN, 26.0), egui::Sense::click());
+                let font = TypeStep::Body.font();
+                ui.painter().text(
+                    rect.left_center() + egui::vec2(2.0, 0.0),
+                    egui::Align2::LEFT_CENTER,
+                    row.filter.filter_type.short_name(),
+                    font,
+                    palette.text_primary,
+                );
+                // The caret, at the right of the column, as the reference puts it.
+                let caret = egui::Rect::from_center_size(
+                    rect.right_center() - egui::vec2(8.0, 0.0),
+                    egui::vec2(8.0, 5.0),
+                );
+                ui.painter().add(egui::Shape::convex_polygon(
+                    vec![
+                        egui::pos2(caret.left(), caret.top()),
+                        egui::pos2(caret.right(), caret.top()),
+                        egui::pos2(caret.center().x, caret.bottom()),
+                    ],
+                    palette.text_tertiary,
+                    egui::Stroke::NONE,
+                ));
+                response
+                    .on_hover_text("The kind of filter this band is")
+                    .context_menu(|ui| {
+                        for filter_type in [
+                            FilterType::Peaking,
+                            FilterType::LowShelf,
+                            FilterType::HighShelf,
+                        ] {
+                            ui.selectable_value(
+                                &mut row.filter.filter_type,
+                                filter_type,
+                                filter_type.short_name(),
+                            );
+                        }
+                    });
+                let _ = ui.allocate_exact_size(egui::vec2(TYPE_GAP, 0.0), egui::Sense::hover());
+                if number(
+                    ui,
+                    &mut row.filter.freq,
+                    0.0,
+                    20_000.0,
+                    0,
+                    FIELD_WIDTH,
+                    "Hz",
+                ) {
+                    changed = true;
+                }
+                let _ = ui.allocate_exact_size(egui::vec2(FIELD_GAP, 0.0), egui::Sense::hover());
+                if number(ui, &mut row.filter.gain, -40.0, 40.0, 1, FIELD_WIDTH, "dB") {
+                    changed = true;
+                }
+                let _ = ui.allocate_exact_size(egui::vec2(FIELD_GAP, 0.0), egui::Sense::hover());
+                if number(ui, &mut row.filter.q, 0.0, 20.0, 2, FIELD_WIDTH, "") {
+                    changed = true;
+                }
+            });
+        }
     }
     if changed {
         // The empty bands the reference shows are not kept: only the ones
@@ -332,7 +377,7 @@ pub fn show(ui: &mut Ui, app: &mut App) {
     let third = (ui.available_width() - metrics::GAP * 2.0) / 3.0;
     ui.horizontal(|ui| {
         if ui
-            .add_sized([third, 28.0], egui::Button::new("+"))
+            .add_sized([third, 36.0], egui::Button::new("+"))
             .on_hover_text("Add a band")
             .clicked()
         {
@@ -357,7 +402,7 @@ pub fn show(ui: &mut Ui, app: &mut App) {
             }
         }
         if ui
-            .add_sized([third, 28.0], egui::Button::new("−"))
+            .add_sized([third, 36.0], egui::Button::new("−"))
             .on_hover_text("Remove the last band")
             .clicked()
         {
@@ -379,7 +424,7 @@ pub fn show(ui: &mut Ui, app: &mut App) {
             }
         }
         if ui
-            .add_sized([third, 28.0], egui::Button::new("Sort"))
+            .add_sized([third, 36.0], egui::Button::new("Sort"))
             .on_hover_text("Order the bands by frequency")
             .clicked()
         {
@@ -434,13 +479,13 @@ pub fn show(ui: &mut Ui, app: &mut App) {
     let half = (ui.available_width() - metrics::GAP) / 2.0;
     ui.horizontal(|ui| {
         if ui
-            .add_sized([half, 28.0], egui::Button::new("Import"))
+            .add_sized([half, 36.0], egui::Button::new("Import"))
             .on_hover_text("Load an Equalizer APO file")
             .clicked()
         {
             import(app, phone);
         }
-        let export = ui.add_sized([half, 28.0], egui::Button::new("Export"));
+        let export = ui.add_sized([half, 36.0], egui::Button::new("Export"));
         // The reference puts the download mark at the right of the button.
         let icon = egui::Rect::from_center_size(
             export.rect.right_center() - egui::vec2(14.0, 0.0),
@@ -653,9 +698,9 @@ fn constraints(ui: &mut Ui, app: &mut App) {
 fn history(ui: &mut Ui, app: &mut App) {
     let palette = theme::current_palette();
     ui.label(
-        RichText::new("CHANGE HISTORY")
-            .font(TypeStep::Label.font())
-            .color(palette.text_tertiary),
+        RichText::new("Change History")
+            .font(TypeStep::Title.font_bold())
+            .color(palette.text_tertiary.gamma_multiply(0.8)),
     );
     ui.horizontal(|ui| {
         if ui
@@ -897,7 +942,16 @@ fn number(
     let palette = theme::current_palette();
     let mut text = match places {
         0 => format!("{value:.0}"),
-        1 => format!("{value:.1}"),
+        1 => {
+            // The reference writes the figure without the zero it does not
+            // need: "6", not "6.0".
+            let mut text = format!("{value:.1}");
+            if text.ends_with(".0") {
+                text.pop();
+                text.pop();
+            }
+            text
+        }
         _ => {
             // The reference does not write the zeros it does not need.
             let mut text = format!("{value:.2}");
@@ -926,10 +980,10 @@ fn number(
             + 6.0
     };
     let response = ui.add_sized(
-        [width, 20.0],
+        [width, 26.0],
         egui::TextEdit::singleline(&mut text)
             .desired_width(width - unit_width)
-            .text_color(palette.accent_text),
+            .text_color(palette.text_input),
     );
     if !unit.is_empty() {
         let galley = ui

@@ -119,6 +119,8 @@ pub enum TypeStep {
     Label,
     /// The body.
     Body,
+    /// A panel's heading.
+    Heading,
 }
 
 impl TypeStep {
@@ -130,6 +132,7 @@ impl TypeStep {
             TypeStep::Control => 12.0,
             TypeStep::Label => 11.0,
             TypeStep::Body => 12.0,
+            TypeStep::Heading => 13.0,
         }
     }
 
@@ -140,6 +143,12 @@ impl TypeStep {
 
     /// The bold font for this step.
     pub fn font_bold(self) -> FontId {
+        FontId::new(self.size(), FontFamily::Name(BOLD_FAMILY.into()))
+    }
+
+    /// The bold font for a panel's heading, which the reference writes in a
+    /// quiet grey rather than in the text colour.
+    pub fn font_heading(self) -> FontId {
         FontId::new(self.size(), FontFamily::Name(BOLD_FAMILY.into()))
     }
 
@@ -182,6 +191,9 @@ pub struct Palette {
     pub text_secondary: Color32,
     pub text_tertiary: Color32,
     pub text_disabled: Color32,
+    /// The colour of a figure typed into a field, which the reference
+    /// keeps quieter than the text around it.
+    pub text_input: Color32,
 
     // Accent: reserved for primary actions, current selection, and focus.
     pub accent: Color32,
@@ -233,6 +245,8 @@ impl Palette {
             text_secondary: hsl(0, 0, 40),
             text_tertiary: hsl(0, 0, 65),
             text_disabled: hsl(0, 0, 70),
+            // The reference's own colour for a typed figure.
+            text_input: hsl(0, 0, 50),
 
             // The reference's accent is hsl(210, 70%, 40%), which carries
             // white text at 5.9:1.
@@ -270,6 +284,7 @@ impl Palette {
             text_secondary: hsl(215, 14, 60),
             text_tertiary: hsl(215, 14, 45),
             text_disabled: hsl(215, 14, 30),
+            text_input: hsl(215, 14, 55),
 
             accent: Color32::from_rgb(0x38, 0x70, 0xA6),
             accent_text: Color32::from_rgb(0x6B, 0x9F, 0xD2),
@@ -304,6 +319,7 @@ impl Palette {
             text_secondary: Color32::BLACK,
             text_tertiary: Color32::BLACK,
             text_disabled: Color32::from_rgb(0x60, 0x60, 0x60),
+            text_input: Color32::from_rgb(0x40, 0x40, 0x40),
 
             accent: Color32::BLACK,
             accent_text: Color32::BLACK,

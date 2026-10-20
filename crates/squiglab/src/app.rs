@@ -252,6 +252,9 @@ impl App {
             .show(ui, |ui| {
                 self.header(ui);
                 self.left_column(ui);
+                // The rest of the window's controls keep their own height.
+                ui.ctx()
+                    .all_styles_mut(|style| style.spacing.interact_size.y = 36.0);
                 self.right_column(ui);
             });
 
@@ -309,6 +312,12 @@ impl App {
                     .inner_margin(egui::Margin::symmetric(metrics::COLUMN_PADDING as i8, 0)),
             )
             .show(ui, |ui| {
+                // The reference's band fields are twenty-six points tall, and
+                // the rest of the program's controls are thirty-six. The
+                // style is what a control takes its measures from, so it is
+                // changed for the length of the column.
+                ui.ctx()
+                    .all_styles_mut(|style| style.spacing.interact_size.y = 26.0);
                 // The tabs stay put and the panel beneath them scrolls, which
                 // is how the reference's equalizer behaves: the extra panel
                 // has its own scroll and the tabs above it do not move.

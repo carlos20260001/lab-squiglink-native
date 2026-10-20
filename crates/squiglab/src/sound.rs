@@ -17,8 +17,8 @@ pub fn show(ui: &mut Ui, app: &mut App) {
     ui.horizontal(|ui| {
         ui.label(
             RichText::new("Sound Tools")
-                .font(TypeStep::Title.font_bold())
-                .color(palette.text_primary),
+                .font(TypeStep::Heading.font_heading())
+                .color(palette.text_tertiary),
         );
         // The reference's Compare switch sits at the right of the heading:
         // the word, the switch, and the gear.
