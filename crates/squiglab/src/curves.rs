@@ -196,6 +196,11 @@ fn targets(ui: &mut Ui, app: &mut App) {
 }
 
 /// The rows of the curves that are on the graph.
+///
+/// Only the rows that are on the screen are laid out. A row is a whole row
+/// of controls — a colour, a name, the key, an editable field and five
+/// marks — so a graph with many curves on it would otherwise cost a great
+/// deal for rows nobody can see.
 fn manager(ui: &mut Ui, app: &mut App) {
     let palette = theme::current_palette();
     let active: Vec<usize> = app.session.active.iter().copied().collect();
@@ -207,10 +212,45 @@ fn manager(ui: &mut Ui, app: &mut App) {
         );
         return;
     }
-    for index in active {
-        row(ui, app, index);
+    // The rows are of a fixed height, so the ones on the screen can be
+    // found without laying any of them out.
+    let height = row_height(ui);
+    let visible = ui.clip_rect();
+    let top = ui.cursor().min.y;
+    let mut y = top;
+    for &index in &active {
+        let rect = egui::Rect::from_min_size(
+            egui::pos2(ui.min_rect().left(), y),
+            egui::vec2(ui.available_width(), height),
+        );
+        if rect.intersects(visible) {
+            // The row is laid out in its own space, so that it takes its
+            // place exactly where it would have taken it.
+            ui.scope_builder(
+                egui::UiBuilder::new()
+                    .max_rect(rect)
+                    .layout(egui::Layout::top_down(egui::Align::Min)),
+                |ui| row(ui, app, index),
+            );
+        }
+        y += height;
     }
+    // The rows that were not laid out still take their room.
+    ui.allocate_exact_size(
+        egui::vec2(ui.available_width(), height * active.len() as f32),
+        egui::Sense::hover(),
+    );
 }
+
+/// The height of one row of the manager: the hairline above it, the room
+/// above the key, the key itself, and the room below it.
+fn row_height(ui: &Ui) -> f32 {
+    let spacing = ui.spacing().item_spacing.y;
+    1.0 + spacing + KEY_HEIGHT + spacing
+}
+
+/// The height of the key, which is the tallest thing in a row.
+const KEY_HEIGHT: f32 = 40.0;
 
 /// One row of the manager: who the curve is, and what can be done to it.
 fn row(ui: &mut Ui, app: &mut App, index: usize) {
