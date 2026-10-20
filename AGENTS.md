@@ -1,0 +1,272 @@
+# Working in this repository
+
+A guide for an AI agent (or a person) picking up SquigLab: what the project
+is, the rules it works under, the method used to bring the native to parity
+with the web reference, the exact commands, and the traps that cost hours.
+
+Read this before changing anything.
+
+---
+
+## 1. What this repository is
+
+Two things live here:
+
+| | Where | What it is |
+|---|---|---|
+| **The native program** | `crates/squiglab-core/` + `crates/squiglab/` | The product. A Rust/egui desktop application for comparing frequency-response measurements against targets. |
+| **The web reference** | `web/` | The JavaScript/HTML implementation this native was built to match, kept whole. It is the **authority**: for the maths, for the behaviour, and for the appearance. |
+
+The native was **not** written by porting the reference's code. It was
+written against the reference's *observable* behaviour and geometry, and the
+result was compared against the reference, side by side, until it matched.
+
+### The two rules that govern everything
+
+1. **`crates/squiglab-core` has no egui in it.** The rules, the state and
+   the data live there and know nothing about how anything is drawn. The
+   interface in `crates/squiglab/` is written against the core, never the
+   other way about. Check with:
+   ```sh
+   grep -rn "egui\|eframe" crates/squiglab-core/src/   # must print nothing
+   ```
+2. **The reference decides.** When the native and the reference disagree,
+   the reference is right until you have measured it and can say why not.
+   Never "improve" the reference's arrangement in the native without
+   measuring the reference first.
+
+---
+
+## 2. The coding practices the owner holds to
+
+These are not stylistic preferences; the owner has pushed back on each of
+them.
+
+- **Use established crates, or the platform's own libraries.** A crate with
+  no community, no review history and open stability issues does not go in,
+  however convenient it is. `robius-file-picker` (139 downloads, an open
+  `ndk_context`/`android-activity` conflict) was removed for exactly this
+  reason. `rfd` is the one for dialogs.
+- **Where a third-party crate is thin over the platform, write the platform
+  code instead.** The phone's document picker is written against `objc2`
+  (the crates the window already uses) rather than taken from a crate that
+  wraps them, and the other phone's file list is read through the JNI
+  against the system's own API.
+- **Do not add a dependency for a thing the platform already does.**
+- **A file is chosen with the system's own dialog.** There are no typed
+  paths anywhere: the upload, the equalizer's import and the music all take
+  their file from the picker, and show the name of the file that was chosen
+  beside the button.
+- **One concern per module.** The core is egui-free; the interface owns the
+  drawing.
+- **Comments explain why, and are written as prose.** The code in this
+  repository is read by people who did not write it.
+- **Device-specific data does not live in the source.** No preset named
+  after a particular rig, no calibration curve in the repository.
+
+---
+
+## 3. The parity method
+
+This is the method that has been used throughout, and the one to use.
+
+### 3.1 Bring both up side by side
+
+**The reference** — serve the repository root and drive it in a browser:
+
+```sh
+python3 -m http.server 8765 --bind 127.0.0.1
+# → http://127.0.0.1:8765/web/index.html
+```
+
+Drive it with the Playwright CLI (**not** the deprecated `playwright-cli`
+package):
+
+```sh
+PW="npx --yes @playwright/cli@0.1.22 -s=parity"
+$PW open  "http://127.0.0.1:8765/web/index.html"
+$PW resize 1280 900            # or 1440 900; keep it equal to the native's window
+$PW eval   "() => { ... }"     # run JavaScript in the page
+$PW click  "e146"              # a snapshot ref, or a CSS selector
+$PW screenshot --filename /tmp/opencode/ref.png
+```
+
+**The native** — run it under Xvfb and drive it with `xdotool`:
+
+```sh
+pgrep -x Xvfb >/dev/null || Xvfb :99 -screen 0 1440x900x24 &
+(env -u WAYLAND_DISPLAY DISPLAY=:99 SQUIGLAB_CONFIG_DIR=/tmp/opencode/sq-light \
+     setsid nohup ./target/release/squiglab > /tmp/opencode/nat.log 2>&1 &)
+DISPLAY=:99 xdotool mousemove 270 66 click 1     # the Equalizer tab
+DISPLAY=:99 ffmpeg -y -f x11grab -video_size 1440x900 -i :99 \
+     -frames:v 1 /tmp/opencode/nat.png
+```
+
+`SQUIGLAB_CONFIG_DIR` points at a scratch preferences file, so the native
+opens in a known state (and the user's own settings are never touched).
+
+### 3.2 Measure the reference; never guess
+
+Before changing the native, **read what the reference actually is**:
+
+```sh
+# the geometry of a thing
+$PW eval "() => { const r = document.querySelector('input[name=freq]')
+   .getBoundingClientRect(); return JSON.stringify({x:r.x,w:r.width,h:r.height}); }"
+
+# its colours and type
+$PW eval "() => { const cs = getComputedStyle(document.querySelector('h5'));
+   return JSON.stringify({size:cs.fontSize, weight:cs.fontWeight, color:cs.color}); }"
+
+# the CSS variables
+$PW eval "() => { const b = getComputedStyle(document.body);
+   return b.getPropertyValue('--accent-color'); }"
+```
+
+and read the reference's own sources, which are in the repository:
+
+- `web/style-alt.css` — every colour, size, border and layout rule, and
+  every `--icon-*` mask (the reference's own vectors)
+- `web/equalizer.js` — the filter maths
+- `web/graphtool.js` — the graph, the equalizer's editor, the sound tools
+- `web/config.js` — the data, the tutorial, the links
+
+### 3.3 Compare, and write down what differs
+
+Put the two captures side by side and read them:
+
+```python
+from PIL import Image
+a = Image.open("/tmp/opencode/ref.png").convert("RGB").crop((0, 48, 350, 900))
+b = Image.open("/tmp/opencode/nat.png").convert("RGB").crop((0, 48, 350, 900))
+out = Image.new("RGB", (720, 852), (255, 255, 255))
+out.paste(a, (0, 0)); out.paste(b, (370, 0))
+out.save("/tmp/opencode/compare.png")
+```
+
+Measure the native by scanning its pixels (there is no inspector for egui):
+
+```python
+im = Image.open("/tmp/opencode/nat.png").convert("RGB")
+print(im.getpixel((x, y)))          # one point
+# a row, to find the edges of a field:
+prev = None
+for x in range(0, 350):
+    p = im.getpixel((x, y))
+    if p != prev: print(x, p); prev = p
+```
+
+### 3.4 Record it
+
+Every journey step has a verdict in **[`docs/feature-parity.md`](docs/feature-parity.md)**,
+and the detail is in
+[`docs/interface-parity.md`](docs/interface-parity.md). Update them when a
+step changes, and say plainly what is still different.
+
+---
+
+## 4. The commands
+
+```sh
+cargo build --offline --release        # the program
+cargo test --offline --workspace       # 74 core + 9 interface tests
+cargo clippy --offline --workspace --all-targets
+cargo fmt --all
+./build.sh                             # build and package into dist/
+node scripts/equalizer_golden.mjs      # regenerate the equalizer fixture
+```
+
+Commit one thing at a time, in the style of the existing history (a prose
+subject line, the body saying what changed and why), and push when the
+work is sound. The branch tracks `origin/main` and is usually ahead of it.
+
+---
+
+## 5. The shape of the program
+
+```
+crates/squiglab-core/            the rules, the state, the data (no egui)
+  session.rs       Session: what is loaded, what is selected, what changed
+  equalizer.rs     Filter, Biquad, the filter maths (ported from web/equalizer.js)
+  constraints.rs   what a fit may produce
+  processing.rs    averaging, normalising, smoothing
+  graph.rs         Transform, the band names, label placement
+  audio/           the generator, the pink noise, the decoders, the devices
+  data/            the phone book and the measurement files
+  config.rs        the config file, the preferences, the share links
+  theme.rs         Theme: Light, Dark, Contrast (the core's own)
+
+crates/squiglab/                 the interface (egui)
+  app.rs           App: the state, the frame, the column, the file picker
+  header.rs        the mark, the wordmark, the curve count
+  selector.rs      the tabs, the brands, the models
+  equalizer.rs     the equalizer's panel: the table, the constraints, history
+  graph.rs         the graph, the scale, the equalizer's editor
+  curves.rs        the target strip, the manager rows, the database links
+  sound.rs         the sound tools: compare, volume, pink noise, the tone
+  music.rs         the music player and the Apple Music search
+  upload.rs        the upload panel
+  tools.rs         the tools row
+  icons.rs         every mark, from the reference's own vectors
+  filepick.rs      the file picker, per platform
+  theme.rs         the palette and the type scale
+```
+
+---
+
+## 6. Traps, learned the hard way
+
+**egui's `interact_size` decides the height of a row, and it is read from
+the *style*, not from the Ui's spacing.** A row that should be twenty-six
+points tall comes out thirty-six, and no amount of `ui.spacing_mut()` inside
+the row will change it: a child takes its measures from the style, and the
+style is captured when the parent window is made. Change it with
+`ctx.all_styles_mut(...)` **before** the window is made, and restore it
+after. `crates/squiglab/src/app.rs` does this for the left column.
+
+**A row that is wider than its column makes everything after it wider.**
+The scroll area's content grows to its widest item, so a table that is a few
+points too wide pushes the cards, the buttons and the file fields off the
+side. Work the column widths out from `ui.available_width()` rather than
+hard-coding them (see `field_width()` in `crates/squiglab/src/equalizer.rs`).
+
+**The font has no fullwidth signs.** `＋` and `－` render as `?`. Use `+`
+and `−`.
+
+**There is no keyboard focus under Xvfb.** No window manager means no
+focus, so `xdotool type` does nothing and a field cannot be tested by
+typing. Test the mouse paths; say so when a path cannot be checked.
+
+**The `⊗` in the reference is a character, not an icon.** The reference
+writes `⊗` as text in the list rows and uses the filled `--icon-remove` mask
+in the manager row. Match whichever the reference uses in that place.
+
+**A mark in the reference may be a CSS mask, not markup.** Every
+`--icon-*` in `web/style-alt.css` is an SVG path; the ones in the reference's
+markup are `<svg><use>` references. `crates/squiglab/src/icons.rs` holds
+the paths, flattened by a small SVG path reader in the same file.
+
+**egui cannot fill a concave shape.** The reference's two crosses (the ⊗ and
+the +) are filled outlines; they are drawn here as the two round-capped bars
+they are made of, with the reference's own geometry.
+
+**The reference's panel headings are 13pt semibold in `#a6a6a6`**, not
+near-black bold. They are `TypeStep::Heading` in the native.
+
+---
+
+## 7. Where the work stands
+
+- The shell, the tabs, the lists, the graph, the manager rows, the equalizer's
+  panel, the sound tools, the file picker and the marks are at parity.
+- The graph is an equalizer editor: a band is drawn out of the curve by
+  dragging on it, a band is moved by its mark, the wheel over a mark changes
+  its width, the right button turns a band's kind round, and away from the
+  curve a drag brushes a range for the tone generator.
+- The rows of the band table sit a little further apart than the
+  reference's. This is the one known difference in the equalizer's panel.
+- The phone's pickers (iOS and Android) are written but cannot be built or
+  run on a machine without Xcode or the NDK. The desktop and the browser
+  are verified here.
+
+`docs/feature-parity.md` is the ledger; keep it honest.
