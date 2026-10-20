@@ -69,7 +69,12 @@ pub mod metrics {
     /// The list's width, inside the left column.
     pub const LIST_WIDTH: f32 = COLUMN_WIDTH - COLUMN_PADDING * 2.0 - BRAND_COLUMN_WIDTH;
     /// A list row's height.
-    pub const ROW_HEIGHT: f32 = 36.0;
+    ///
+    /// The reference's rows are forty points tall: eleven of padding above
+    /// and below a line of twelve-point text, which is eighteen points high.
+    pub const ROW_HEIGHT: f32 = 40.0;
+    /// The gap between one list row and the next.
+    pub const ROW_GAP: f32 = 6.0;
     /// An input's height.
     pub const INPUT_HEIGHT: f32 = 36.0;
     /// The standard corner radius.
@@ -727,7 +732,8 @@ mod tests {
         assert_eq!(metrics::COLUMN_WIDTH, 350.0);
         assert_eq!(metrics::BRAND_COLUMN_WIDTH, 70.0);
         assert_eq!(metrics::LIST_WIDTH, 248.0);
-        assert_eq!(metrics::ROW_HEIGHT, 36.0);
+        assert_eq!(metrics::ROW_HEIGHT, 40.0);
+        assert_eq!(metrics::ROW_GAP, 6.0);
         assert_eq!(metrics::PLOT_ASPECT_RATIO, 800.0 / 360.0);
     }
 }

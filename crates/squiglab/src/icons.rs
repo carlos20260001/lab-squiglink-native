@@ -36,6 +36,10 @@ pub enum Icon {
     Squiggle,
     /// A line: the curve that is the baseline.
     BaselineLine,
+    /// A rectangle: the shape of the thing that is named.
+    LabelBox,
+    /// A rule with a hook: the mark before "inspect".
+    Inspect,
 }
 
 /// The size a mark is drawn at, in points.
@@ -162,6 +166,10 @@ fn paths_for(icon: Icon) -> Vec<&'static str> {
         ],
         // The line the reference draws for the chosen baseline.
         Icon::BaselineLine => vec!["M4 12h16"],
+        // The rectangle the reference writes before "label".
+        Icon::LabelBox => vec!["M4 6h16v12h-16z"],
+        // The mark the reference writes before "inspect".
+        Icon::Inspect => vec!["M6 4v16", "M6 8h9a3 3 0 0 1 0 6h-2"],
         // The speaker, from the reference's own markup.
         Icon::Volume => vec![
             "M15 8a5 5 0 0 1 0 8",

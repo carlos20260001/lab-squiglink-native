@@ -60,7 +60,7 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
 /// and for the frequency axis and the band names below.
 fn plot_rect(rect: Rect) -> Rect {
     Rect::from_min_max(
-        Pos2::new(rect.left() + 44.0, rect.top() + 10.0),
+        Pos2::new(rect.left() + 40.0, rect.top() + 10.0),
         Pos2::new(rect.right() - 10.0, rect.bottom() - 46.0),
     )
 }
@@ -87,7 +87,7 @@ fn transform_for(app: &App, plot: Rect) -> Transform {
 fn scale(app: &mut App, painter: &egui::Painter, rect: Rect, response: &egui::Response) {
     let palette = theme::current_palette();
     let plot = Rect::from_min_max(
-        Pos2::new(rect.left() + 44.0, rect.top() + 10.0),
+        Pos2::new(rect.left() + 40.0, rect.top() + 10.0),
         Pos2::new(rect.right() - 10.0, rect.bottom() - 46.0),
     );
     if plot.width() <= 0.0 || plot.height() <= 0.0 {
@@ -105,29 +105,11 @@ fn scale(app: &mut App, painter: &egui::Painter, rect: Rect, response: &egui::Re
     let half = (maximum - minimum) / 2.0;
     let middle_y = plot.center().y;
     let half_y = half / (maximum - minimum) * plot.height();
-    let x = plot.left() - 6.0;
+    let x = plot.left() + 2.0;
 
-    // The scale's line, and the mark in the middle.
-    painter.line_segment(
-        [
-            Pos2::new(x, middle_y - half_y),
-            Pos2::new(x, middle_y + half_y),
-        ],
-        egui::Stroke::new(1.0, palette.border),
-    );
-    painter.line_segment(
-        [Pos2::new(x - 5.0, middle_y), Pos2::new(x + 5.0, middle_y)],
-        egui::Stroke::new(1.0, palette.text_tertiary),
-    );
-
-    // The two circles, which change how far the scale reaches.
-    for sign in [-1.0_f32, 1.0] {
-        painter.circle_stroke(
-            Pos2::new(x, middle_y + half_y * sign),
-            7.0,
-            egui::Stroke::new(1.5, palette.text_secondary),
-        );
-    }
+    // The scale itself: the reference's own shape, which carries the line
+    // the figures stand beside.
+    scale_shape(painter, x, middle_y, half_y, &palette);
 
     // Dragging the middle mark moves the range; dragging a circle widens it.
     // The scale is only taken hold of at the scale itself: the rest of the
@@ -168,6 +150,89 @@ fn scale(app: &mut App, painter: &egui::Painter, rect: Rect, response: &egui::Re
         app.session.graph_range = None;
         app.session.dirty = true;
     }
+}
+
+/// The mark the reference draws at the middle of the dB scale.
+///
+/// The reference's scale is two shapes, one above the middle and one below
+/// it, each sixteen points wide and seventy-seven tall, with three short
+/// grips at the middle of them. Its own path is used here, at the size the
+/// reference draws it.
+fn scale_shape(
+    painter: &egui::Painter,
+    x: f32,
+    middle_y: f32,
+    half_y: f32,
+    palette: &theme::Palette,
+) {
+    // The reference's path is in its own units: each shape is fifty-five
+    // tall and eleven and a half wide, and it is drawn at seventy-seven
+    // points tall.
+    const HEIGHT: f32 = 77.0;
+    const WIDTH: f32 = 19.0;
+    // The path's own extent, from -1.8 to 9.9 units.
+    // The path's own extent: from -1.8 to 9.9 units across, and fifty-five
+    // down.
+    let unit = WIDTH / 11.7;
+    let tall = HEIGHT / 55.0;
+
+    // The upper shape, and the lower one, which is the same path turned the
+    // other way up. The spine of the shape is at its right-hand edge, which
+    // is where the scale's line stands.
+    let half = |up: bool| {
+        let sy = |v: f32| if up { v } else { -v };
+        let at = |ux: f32, uy: f32| Pos2::new(x + (ux - 9.9) * unit, middle_y + sy(uy) * tall);
+        let mut points = vec![
+            at(9.9, 1.0),
+            at(9.9, -54.77),
+            at(8.9, -54.77),
+            at(7.9, -53.27),
+            at(5.8, -55.27),
+            at(0.2, -55.27),
+            at(0.2, -53.77),
+        ];
+        // The reference's own curve back to the spine.
+        for step in 1..=10 {
+            let t = step as f32 / 10.0;
+            let u = 1.0 - t;
+            points.push(at(
+                u * u * 0.2 + 2.0 * u * t * 7.2 + t * t * 8.2,
+                u * u * -53.77 + 2.0 * u * t * -55.77 + t * t * -46.77,
+            ));
+        }
+        points.push(at(8.2, -29.0));
+        // And the bracket's curve, down to the foot.
+        for step in 1..=10 {
+            let t = step as f32 / 10.0;
+            let u = 1.0 - t;
+            points.push(at(
+                u * u * 8.2 + 2.0 * u * t * 9.2 + t * t * -1.8,
+                u * u * -29.0 + 2.0 * u * t * -13.0 + t * t * -15.0,
+            ));
+        }
+        points.push(at(-1.8, 1.0));
+        points
+    };
+
+    let colour = palette.border_strong;
+    for up in [true, false] {
+        painter.add(egui::Shape::Path(egui::epaint::PathShape {
+            points: half(up),
+            fill: colour,
+            stroke: egui::epaint::PathStroke::NONE,
+            closed: true,
+        }));
+    }
+
+    // The three grips at the middle, one point wide.
+    for (ux, height) in [(0.0, 27.0), (2.8, 19.0), (5.6, 35.0)] {
+        let top = Pos2::new(x + (ux + 0.5 - 9.9) * unit, middle_y - height / 2.0);
+        let bottom = Pos2::new(x + (ux + 0.5 - 9.9) * unit, middle_y + height / 2.0);
+        painter.line_segment([top, bottom], egui::Stroke::new(1.0, palette.page));
+    }
+    // The scale's own reach is the height it is drawn at, and the figures
+    // stand beside it.
+    let _ = half_y;
 }
 
 /// Draw the graph into a rectangle, with the pointer where it is.
@@ -627,8 +692,10 @@ fn near_the_trace(app: &App, transform: &Transform, pointer: Pos2) -> bool {
 fn grid(painter: &egui::Painter, plot: Rect, transform: &Transform, minimum: &f32, maximum: &f32) {
     let palette = theme::current_palette();
     let grid_color = palette.border.gamma_multiply(0.6);
-    let label_font = FontId::new(TypeStep::Label.size(), egui::FontFamily::Proportional);
-    let label_color = palette.text_tertiary;
+    // The reference writes its axis figures in the monospaced face, at ten
+    // points, in the primary colour: they are figures, and they line up.
+    let label_font = FontId::new(10.0, egui::FontFamily::Monospace);
+    let label_color = palette.text_primary;
 
     // The horizontal lines: every five decibels.
     let step = 5.0_f32;
@@ -640,9 +707,11 @@ fn grid(painter: &egui::Painter, plot: Rect, transform: &Transform, minimum: &f3
                 [Pos2::new(plot.left(), y), Pos2::new(plot.right(), y)],
                 Stroke::new(0.7, grid_color),
             );
+            // The reference writes the figures to the right of the scale,
+            // just inside the plot's own edge.
             painter.text(
-                Pos2::new(plot.left() - 6.0, y),
-                Align2::RIGHT_CENTER,
+                Pos2::new(plot.left() + 5.0, y),
+                Align2::LEFT_CENTER,
                 tick_db(db),
                 label_font.clone(),
                 label_color,
@@ -650,6 +719,16 @@ fn grid(painter: &egui::Painter, plot: Rect, transform: &Transform, minimum: &f3
         }
         db += step;
     }
+
+    // The "dB" the reference writes up the left of the scale, turned on its
+    // side so that it reads from the bottom.
+    rotated_label(
+        painter,
+        "dB",
+        Pos2::new(plot.left() - 2.0, plot.top() + 2.0),
+        label_font.clone(),
+        label_color,
+    );
 
     // The vertical lines: the marked frequencies.
     for frequency in X_TICKS {
@@ -669,6 +748,29 @@ fn grid(painter: &egui::Painter, plot: Rect, transform: &Transform, minimum: &f3
             label_color,
         );
     }
+}
+
+/// A word written on its side, the way the reference writes the unit of the
+/// scale up the left of the graph.
+///
+/// egui writes its text upright, so the word is laid out as usual and the
+/// shape that carries it is then turned a quarter turn about its own
+/// bottom-left corner: the word then climbs away from that corner, which is
+/// where its foot stands.
+fn rotated_label(
+    painter: &egui::Painter,
+    text: &str,
+    anchor: Pos2,
+    font: FontId,
+    color: egui::Color32,
+) {
+    let galley = painter
+        .ctx()
+        .fonts_mut(|fonts| fonts.layout_no_wrap(text.to_owned(), font, color));
+    // A quarter turn anticlockwise, so that the word reads from the bottom.
+    let shape = egui::epaint::TextShape::new(anchor, galley, color)
+        .with_angle_and_anchor(-std::f32::consts::FRAC_PI_2, egui::Align2::LEFT_BOTTOM);
+    painter.add(shape);
 }
 
 /// The names the reference gives the bands of the axis.

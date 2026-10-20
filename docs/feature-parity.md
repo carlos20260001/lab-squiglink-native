@@ -16,7 +16,7 @@ driven by `xdotool` — and the two were looked at side by side.
 |---|---|---|---|
 | Open | A page with a dark header, the wordmark, a review dropdown and the site's navigation | A window with the mark, the wordmark and the number of curves on the graph. A window has no site to navigate | ✓ |
 | The theme | One button that turns the page dark, contrast or default, and keeps the choice | The same button, with the same three themes, and the choice is kept | ✓ |
-| The tools row | Copy URL, Screenshot, `NORMALIZE: [dB 60] [Hz 500]`, `SMOOTH: 5`, `ZOOM: Bass Mids Treble`, Inspect, Label, Recolor | The same controls, in the same order, with the same words | ✓ |
+| The tools row | Copy URL, Screenshot, `NORMALIZE: [dB 60] [Hz 500]`, `SMOOTH: 5`, `ZOOM: Bass Mids Treble`, Inspect, Label, Recolor | The same controls, in the same order, with the same words. The unit stands before its figure, as a button of its own; the zoom has three regions and no `Full`; the toggles are buttons with a mark before the word | ✓ — the native's `Full` and its unit inside the figure are gone, and the toggles carry the reference's own marks |
 | Normalizing and smoothing | The curves change as the figures are dragged | The same, and the graph is redrawn as the figures are dragged | ✓ — the native used to leave the graph stale; it does not now |
 | Searching | A search box over the brands and the measurements | The same box, over the same things | ✓ |
 | The measurement's own page | A review score, a price and a shop link | The same card | ✓ |
@@ -27,17 +27,17 @@ driven by `xdotool` — and the two were looked at side by side.
 |---|---|---|---|
 | The brands tab | The list of brands, with the list of models sliding in from the right | The same, and the names alone | ✓ |
 | Pressing a brand | The models tab opens with that brand's measurements | The same | ✓ |
-| The models tab | The list of models slides over the list of brands, which are behind it in a quiet grey | The same | ✓ |
+| The models tab | The list of models slides over the list of brands, which are behind it in a quiet grey. The rows are forty points tall, with six between them | The same, and the brands behind are now veiled with the page's own colour, as the reference veils them | ✓ — the rows were thirty-six tall, and the brands behind were not veiled |
 | Pressing a model | The measurement goes on the graph, and its row appears in the manager | The same | ✓ |
-| The manager row | The name, the key, the offset field, and five marks | The same, with the reference's own marks | ✓ |
-| The target strip | One line of chips, in the reference's groups | The same, and the rig corrections in a group of their own marked Δ | ✓ |
+| The manager row | The name, the key, the offset field, and five marks. The key is a fan: the whole of it at the wide end, faded at the point, with the channel letters at eight points in the monospaced face | The same, with the reference's own marks, and the key's two halves the right way round | ✓ — the native's key had the faded and the whole parts the wrong way round |
+| The target strip | One line of chips, in the reference's groups. The groups are headed in capitals, in the monospaced face, in the faint grey | The same, and the rig corrections in a group of their own marked Δ | ✓ — the native's group headings were in sentence case, in the ordinary face |
 | Pressing a target | The target goes on the graph | The same | ✓ |
 
 ## 3. Looking
 
 | Step | The reference | The native | |
 |---|---|---|---|
-| The dB scale | Dragged: the mark moves the range, the two circles change how far it reaches, a double click puts it back | The same | ✓ |
+| The dB scale | Dragged: the mark moves the range, the two circles change how far it reaches, a double click puts it back. It is a shape of its own — a thin spine with a bracket in the middle and three grips within it — with the figures standing beside it and the unit `dB` written on its side at the top | The same, and the shape is now the reference's own path, with the figures plain numbers (`85`, not `+85`) in the monospaced face | ✓ — the native's scale used to be a plain line with two circles, and drew the figures with a sign; it does not now |
 | The graph's proportions | The plot is 800 by 360, and the width is two and a bit units for every unit of the window's height | The same | ✓ |
 | The band names | Sub bass, Mid bass, … Air, under the axis | The same | ✓ |
 | The curve labels | A swatch and a name, stacked so they do not overlap | The same | ✓ |

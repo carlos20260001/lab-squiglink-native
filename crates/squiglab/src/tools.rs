@@ -61,10 +61,13 @@ fn label(ui: &mut Ui, text: &str) {
 }
 
 /// The zoom: which part of the frequency axis the graph shows.
+///
+/// The reference's three buttons are Bass, Mids and Treble; there is no
+/// "Full", because the whole axis is what the graph shows until one of the
+/// three is pressed.
 fn zoom(ui: &mut Ui, app: &mut App) {
     label(ui, "Zoom");
     for (region, name) in [
-        (squiglab_core::graph::ZoomRegion::Full, "Full"),
         (squiglab_core::graph::ZoomRegion::Bass, "Bass"),
         (squiglab_core::graph::ZoomRegion::Mids, "Mids"),
         (squiglab_core::graph::ZoomRegion::Treble, "Treble"),
@@ -81,50 +84,122 @@ fn zoom(ui: &mut Ui, app: &mut App) {
 }
 
 /// The normalization: the level the curves are read at.
+///
+/// The reference writes the unit as a button beside the figure it belongs
+/// to, and the two together are one control: pressing the unit says which
+/// of the two the figure is read as.
 fn normalize(ui: &mut Ui, app: &mut App) {
     label(ui, "Normalize");
+    let palette = theme::current_palette();
     let mut by_phon = app.session.phon_normalization;
+
+    // The dB figure and its unit. The reference writes the unit first, and
+    // the two are one control.
+    ui.horizontal(|ui| {
+        unit_button(ui, "dB", by_phon, &mut by_phon, &palette);
+        let mut phon = app.session.target_phon;
+        if ui
+            .add(
+                egui::DragValue::new(&mut phon)
+                    .range(0.0..=100.0)
+                    .speed(1.0),
+            )
+            .changed()
+        {
+            app.session.target_phon = phon;
+        }
+    });
+    // The Hz figure and its unit.
+    ui.horizontal(|ui| {
+        unit_button(ui, "Hz", !by_phon, &mut by_phon, &palette);
+        let mut hertz = app.session.target_hz;
+        if ui
+            .add(
+                egui::DragValue::new(&mut hertz)
+                    .range(20.0..=20_000.0)
+                    .speed(10.0),
+            )
+            .changed()
+        {
+            app.session.target_hz = hertz;
+        }
+    });
+    app.session.phon_normalization = by_phon;
+}
+
+/// The unit of a figure, pressed to say which of the two the figure is
+/// read as.
+fn unit_button(
+    ui: &mut Ui,
+    text: &str,
+    chosen: bool,
+    by_phon: &mut bool,
+    palette: &theme::Palette,
+) {
+    let button = egui::Button::new(RichText::new(text).font(TypeStep::Body.font()).color(
+        if chosen {
+            palette.on_accent
+        } else {
+            palette.accent_text
+        },
+    ))
+    .fill(if chosen { palette.accent } else { palette.page })
+    .stroke(egui::Stroke::new(1.0, palette.border))
+    .corner_radius(metrics::RADIUS);
     if ui
-        .selectable_label(by_phon, "dB")
-        .on_hover_text("Read the curves at a loudness level")
+        .add_sized([44.0, metrics::INPUT_HEIGHT], button)
+        .on_hover_text("Read the curves at this, rather than at the other")
         .clicked()
     {
-        app.session.phon_normalization = true;
-        by_phon = true;
+        *by_phon = text == "dB";
     }
-    if ui
-        .selectable_label(!by_phon, "Hz")
-        .on_hover_text("Read the curves at a frequency")
-        .clicked()
-    {
-        app.session.phon_normalization = false;
-        by_phon = false;
-    }
-    let _ = by_phon;
-    let mut phon = app.session.target_phon;
-    if ui
-        .add(
-            egui::DragValue::new(&mut phon)
-                .range(0.0..=100.0)
-                .speed(1.0)
-                .suffix(" dB"),
-        )
-        .changed()
-    {
-        app.session.target_phon = phon;
-    }
-    let mut hertz = app.session.target_hz;
-    if ui
-        .add(
-            egui::DragValue::new(&mut hertz)
-                .range(20.0..=20_000.0)
-                .speed(10.0)
-                .suffix(" Hz"),
-        )
-        .changed()
-    {
-        app.session.target_hz = hertz;
-    }
+}
+
+/// A button that reads as a word, and that is pressed in when the thing it
+/// turns on is on.
+fn toggle_button<'a>(text: &str, on: bool, palette: &theme::Palette) -> egui::Button<'a> {
+    let colour = if on {
+        palette.on_accent
+    } else {
+        palette.text_secondary
+    };
+    // The reference writes a mark before the word. The native's font does
+    // not carry the reference's characters, so the word is given room for
+    // the mark and the mark is painted over it.
+    egui::Button::new(
+        RichText::new(format!("   {text}"))
+            .font(TypeStep::Control.font())
+            .color(colour),
+    )
+    .fill(if on { palette.accent } else { palette.page })
+    .stroke(egui::Stroke::new(1.0, palette.border))
+    .corner_radius(metrics::RADIUS)
+}
+
+/// Paint the mark that goes before a button's word.
+///
+/// The reference writes the mark as a character and the word after it, so
+/// the mark is put where the character would stand: just to the left of the
+/// word, and a little above its middle.
+fn mark(
+    ui: &Ui,
+    response: &egui::Response,
+    icon: crate::icons::Icon,
+    word: &str,
+    colour: egui::Color32,
+) {
+    let rect = response.rect;
+    // The word's own place, so that the mark is set against it.
+    let galley = ui
+        .painter()
+        .layout_no_wrap(word.to_owned(), TypeStep::Control.font(), colour);
+    let text_width = galley.size().x;
+    let word_left = rect.right() - 8.0 - text_width;
+    let mark = egui::Rect::from_min_size(
+        egui::pos2(word_left - 15.0, rect.center().y - 5.0),
+        egui::vec2(11.0, 11.0),
+    );
+    crate::icons::draw(ui.painter(), mark, icon, colour);
 }
 
 /// The smoothing: how much of the curve's roughness is taken off.
@@ -150,22 +225,45 @@ fn smooth(ui: &mut Ui, app: &mut App) {
 fn toggles(ui: &mut Ui, app: &mut App) {
     let palette = theme::current_palette();
     // The labels and the inspector are the session's, so they are kept with
-    // the rest of the view.
+    // the rest of the view. The reference writes them as ordinary buttons
+    // with a mark before the word, not as boxes to be ticked.
     let mut labels = app.session.show_labels;
-    if ui
-        .checkbox(&mut labels, "label")
-        .on_hover_text("Name each curve at its end")
-        .changed()
-    {
+    let response = ui
+        .add(toggle_button("label", labels, &palette))
+        .on_hover_text("Name each curve at its end");
+    mark(
+        ui,
+        &response,
+        crate::icons::Icon::LabelBox,
+        "label",
+        if labels {
+            palette.on_accent
+        } else {
+            palette.text_secondary
+        },
+    );
+    if response.clicked() {
+        labels = !labels;
         app.session.show_labels = labels;
         app.session.dirty = true;
     }
     let mut inspect = app.session.inspect_mode;
-    if ui
-        .checkbox(&mut inspect, "inspect")
-        .on_hover_text("Read the curve under the pointer")
-        .changed()
-    {
+    let response = ui
+        .add(toggle_button("inspect", inspect, &palette))
+        .on_hover_text("Read the curve under the pointer");
+    mark(
+        ui,
+        &response,
+        crate::icons::Icon::Inspect,
+        "inspect",
+        if inspect {
+            palette.on_accent
+        } else {
+            palette.text_secondary
+        },
+    );
+    if response.clicked() {
+        inspect = !inspect;
         app.session.inspect_mode = inspect;
         app.session.dirty = true;
     }

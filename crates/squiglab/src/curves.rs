@@ -103,14 +103,17 @@ fn targets(ui: &mut Ui, app: &mut App) {
                     if !*first {
                         ui.label(
                             RichText::new("|")
-                                .font(TypeStep::Label.font())
+                                .font(TypeStep::Label.font_mono())
                                 .color(palette.text_tertiary),
                         );
                     }
                     *first = false;
+                    // The reference writes these in capitals, in the
+                    // monospaced face, in the faint grey: they are the
+                    // headings of the groups.
                     ui.label(
-                        RichText::new(format!("{label}:"))
-                            .font(TypeStep::Label.font())
+                        RichText::new(format!("{label}:").to_uppercase())
+                            .font(TypeStep::Label.font_mono())
                             .color(palette.text_tertiary),
                     );
                 };
@@ -436,12 +439,12 @@ fn draw_key(ui: &Ui, rect: egui::Rect, color: egui::Color32, mode: ChannelMode, 
     }
 
     // The fan: the two arms and the point between them. The reference's mask
-    // has the part near the point whole and the part at the right faint, so
-    // the fan is drawn in two.
+    // makes the part at the wide end whole and the part at the point faint,
+    // so the fan is drawn in two.
     let upper = arm(at(9.0, -6.0), at(0.0, -6.0), at(0.0, 0.0), at(-9.0, 0.0));
     let lower = arm(at(-9.0, 0.0), at(0.0, 0.0), at(0.0, 6.0), at(9.0, 6.0));
     // The point where the reference's mask turns from whole to faint.
-    let edge = at(-3.0, 0.0).x;
+    let edge = at(1.0, 0.0).x;
     let upper_edge = upper
         .iter()
         .find(|point| point.x <= edge)
@@ -466,21 +469,24 @@ fn draw_key(ui: &Ui, rect: egui::Rect, color: egui::Color32, mode: ChannelMode, 
         .take_while(|point| point.x > edge)
         .copied()
         .collect();
-    let mut whole = vec![at(9.0, -6.0)];
-    whole.extend(upper_arm.iter().copied());
-    whole.push(upper_edge);
-    whole.push(at(-17.0, 0.0));
-    whole.push(lower_edge);
-    whole.extend(lower_arm.iter().rev().copied());
-    whole.push(at(9.0, 6.0));
-    let mut faint = vec![at(15.0, -6.0), at(9.0, -6.0)];
-    faint.extend(upper_arm.iter().copied());
-    faint.push(upper_edge);
-    faint.push(lower_edge);
-    faint.extend(lower_arm.iter().rev().copied());
-    faint.push(at(9.0, 6.0));
-    faint.push(at(15.0, 6.0));
+    // The point: the fan is thin here, and the reference fades it.
+    let mut point = vec![at(9.0, -6.0)];
+    point.extend(upper_arm.iter().copied());
+    point.push(upper_edge);
+    point.push(at(-17.0, 0.0));
+    point.push(lower_edge);
+    point.extend(lower_arm.iter().rev().copied());
+    point.push(at(9.0, 6.0));
+    // The wide end: the reference keeps this whole.
+    let mut body = vec![at(15.0, -6.0), at(9.0, -6.0)];
+    body.extend(upper_arm.iter().copied());
+    body.push(upper_edge);
+    body.push(lower_edge);
+    body.extend(lower_arm.iter().rev().copied());
+    body.push(at(9.0, 6.0));
+    body.push(at(15.0, 6.0));
     let page = theme::current_palette().page;
+    // The wide end is the whole of the fan, and the point is the faded part.
     let whole_colour = match mode {
         ChannelMode::Right => tint(color, page, 0.25),
         _ => color.gamma_multiply(0.8),
@@ -489,20 +495,22 @@ fn draw_key(ui: &Ui, rect: egui::Rect, color: egui::Color32, mode: ChannelMode, 
         ChannelMode::Right => color.gamma_multiply(0.8),
         _ => tint(color, page, 0.25),
     };
+    // The faded point is laid down first, and the whole body over it.
     painter.add(egui::Shape::convex_polygon(
-        whole,
-        whole_colour,
-        egui::Stroke::NONE,
-    ));
-    painter.add(egui::Shape::convex_polygon(
-        faint,
+        point,
         faint_colour,
         egui::Stroke::NONE,
     ));
+    painter.add(egui::Shape::convex_polygon(
+        body,
+        whole_colour,
+        egui::Stroke::NONE,
+    ));
 
-    // The channel letters, and the word under the one that is alone.
-    let font = egui::FontId::new(10.5 * scale, egui::FontFamily::Proportional);
-    let small = egui::FontId::new(7.5 * scale, egui::FontFamily::Proportional);
+    // The channel letters, and the word under the one that is alone. The
+    // reference writes them in the monospaced face, in the quiet grey.
+    let font = egui::FontId::new(10.5 * scale, egui::FontFamily::Monospace);
+    let small = egui::FontId::new(8.0 * scale, egui::FontFamily::Monospace);
     painter.text(
         egui::Pos2::new(origin + 17.0 * scale, middle - 6.0 * scale),
         egui::Align2::LEFT_CENTER,

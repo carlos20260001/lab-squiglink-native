@@ -316,13 +316,16 @@ pub fn nice_limit(peak: f32) -> f32 {
     (peak / 50.0).ceil() * 50.0
 }
 
+/// The figure the reference writes against a tick of the decibel scale.
+///
+/// The reference writes the plain number — `85`, `80`, `75` — and never a
+/// sign, and it never writes a decimal: the scale is marked every five
+/// decibels, so every figure on it is a whole one.
 pub fn tick_db(db: f32) -> String {
-    let magnitude = db.abs();
-    let sign = if db < 0.0 { "\u{2212}" } else { "+" };
-    if magnitude >= 10.0 {
-        format!("{sign}{magnitude:.0}")
+    if db.fract().abs() < f32::EPSILON {
+        format!("{db:.0}")
     } else {
-        format!("{sign}{magnitude:.1}")
+        format!("{db:.1}")
     }
 }
 

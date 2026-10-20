@@ -211,6 +211,18 @@ fn models(ui: &mut Ui, app: &mut App) {
             0.0,
             palette.page,
         );
+        // What is left of the brands behind is quiet: the reference veils
+        // them with the page's own colour, so the names behind fade.
+        ui.painter().rect_filled(
+            egui::Rect::from_min_size(origin, egui::vec2(MODELS_LIST_OFFSET, height)),
+            0.0,
+            egui::Color32::from_rgba_unmultiplied(
+                palette.page.r(),
+                palette.page.g(),
+                palette.page.b(),
+                204,
+            ),
+        );
         ui.scope_builder(
             egui::UiBuilder::new()
                 .max_rect(egui::Rect::from_min_size(
@@ -250,7 +262,7 @@ fn brand_column(ui: &mut Ui, app: &mut App) {
                 }
                 // The reference's rows are forty tall with six points
                 // between them.
-                ui.add_space(2.0);
+                ui.add_space(metrics::ROW_GAP);
                 let selected = app.brand.as_deref() == Some(brand.as_str());
                 // The reference clips the brand names rather than wrapping
                 // them, so the column stays a fixed width.
@@ -345,7 +357,7 @@ fn model_list(ui: &mut Ui, app: &mut App) {
                 let on = app.session.active.contains(&index);
                 // The reference's rows are forty tall with six points
                 // between them.
-                ui.add_space(2.0);
+                ui.add_space(metrics::ROW_GAP);
                 if on {
                     // The reference's row for a measurement that is on the
                     // graph: a black pill, and the cross at its right.
