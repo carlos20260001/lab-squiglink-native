@@ -153,6 +153,10 @@ impl NormParams {
     }
 }
 
+/// The parts of a smoothing matrix, as they are stored, so that two
+/// matrices can be compared to the bit.
+pub type SmoothingMatrixBits = (Vec<f32>, usize, Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>);
+
 /// Precomputed fractional-octave smoothing matrix for a frequency grid and level.
 #[derive(Clone, Debug)]
 pub struct SmoothingParams {
@@ -199,6 +203,23 @@ pub fn average_curves(curves: &[&[FRPoint]]) -> Result<Vec<FRPoint>, ProcessingE
 }
 
 impl SmoothingParams {
+    /// The matrix itself, for the precision guard.
+    ///
+    /// The guard checks that two matrices built from the same grid are the
+    /// same to the bit, which is the property the caching relies on. It is
+    /// here rather than in the guard so that the matrix's own fields stay
+    /// private.
+    pub fn matrix_bits(&self) -> SmoothingMatrixBits {
+        (
+            self.frequencies.clone(),
+            self.level,
+            self.diagonal.clone(),
+            self.lower[0].clone(),
+            self.lower[1].clone(),
+            self.d_squared.clone(),
+        )
+    }
+
     pub fn new(frequencies: &[f32], level: usize) -> Result<Self, ProcessingError> {
         validate_frequencies(frequencies)?;
         if level > 12 {

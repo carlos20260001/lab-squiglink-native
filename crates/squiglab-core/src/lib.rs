@@ -14,6 +14,7 @@ pub mod data;
 pub mod delta;
 pub mod equalizer;
 pub mod graph;
+pub mod precision;
 pub mod processing;
 pub mod product;
 pub mod session;
