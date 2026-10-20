@@ -56,7 +56,7 @@ driven by `xdotool` — and the two were looked at side by side.
 | Auto EQ | Fits bands to the target, within the constraints | The same, and the fit is checked against the reference's own | ✓ |
 | **The graph as an editor** | A band is drawn out of the curve by dragging on it; a band is moved by dragging its mark; the wheel over a mark changes the band's width; the right button on a mark turns its kind round | **The same** ✓ — the axis locks to the way the pointer moved, as the reference's does, and the width of a band changes by the reference's own step | ✓ |
 | **The range brush** | Away from the curve, a drag brushes a range of frequencies for the tone generator | **The same** ✓ | ✓ |
-| Undo and redo | The state before a change is kept, so undo undoes it, and `Ctrl+Z` and `Shift+Ctrl+Z` (or `Ctrl+Y`) do it from the keyboard | The same — the native used to keep the state after, so undo did nothing. The shortcuts are wired and left alone while a field is being written in, as the reference leaves them; they cannot be exercised under Xvfb, which has no keyboard focus | ✓ |
+| Undo and redo | The state before a change is kept, so undo undoes it, and `Ctrl+Z` and `Shift+Ctrl+Z` (or `Ctrl+Y`) do it from the keyboard | The same — the native used to keep the state after, so undo did nothing. The shortcuts are wired and left alone while a field is being written in, as the reference leaves them; they cannot be exercised under Xvfb: the window can be given the focus, and the keys arrive, but the server does not carry the modifier | ✓ |
 | Import and export | An Equalizer APO file in, an APO file and a Wavelet file out | The same, and the file is chosen with the system's own dialog where there is one | ✓ |
 
 ## 5. Hearing, and keeping

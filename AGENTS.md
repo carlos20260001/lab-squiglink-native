@@ -370,10 +370,20 @@ hard-coding them (see `field_width()` in `crates/squiglab/src/equalizer.rs`).
 **The font has no fullwidth signs.** `＋` and `－` render as `?`. Use `+`
 and `−`.
 
-**There is no keyboard focus under Xvfb.** No window manager means no
-focus, so `xdotool type` does nothing, a field cannot be tested by typing,
-and the keyboard shortcuts (the equalizer's undo and redo) cannot be
-exercised. Test the mouse paths; say so when a path cannot be checked.
+**Under Xvfb the keyboard needs the focus given to it by hand.** There is
+no window manager, so nothing has the focus and no key reaches the
+program — until the window is given it:
+
+```sh
+W=$(DISPLAY=:99 xdotool search --class squiglab | head -1)
+DISPLAY=:99 xdotool windowfocus $W     # now the keys arrive
+DISPLAY=:99 xdotool type --delay 150 "1234"    # and they land in a field
+```
+
+**But the modifier keys do not survive.** `Ctrl+Z` reaches the program as
+a plain `Z`: the server's modifier state is not carried by the synthetic
+key, so the equalizer's undo shortcut cannot be exercised here. Test the
+mouse paths, and say so when a path cannot be checked.
 
 **The `⊗` in the reference is a character, not an icon.** The reference
 writes `⊗` as text in the list rows and uses the filled `--icon-remove` mask
