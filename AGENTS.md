@@ -35,6 +35,21 @@ result was compared against the reference, side by side, until it matched.
    Never "improve" the reference's arrangement in the native without
    measuring the reference first.
 
+### Where the reference comes from
+
+`web/` is the `pink-eq` branch of the site repository
+(`github.com/squiglink/lab`), kept whole so that it can be read, diffed and
+served. Two things to know about it:
+
+- **The live site is ahead of the branch.** squig.link now serves a newer
+  theme ("Super") than the branch's own ("Primary", the `theme-default`
+  class). The native follows the **live site's** colours for the theme and
+  the **branch** for the behaviour and the layout. When the two disagree,
+  that is why.
+- **To take a newer reference**, fetch that branch into `web/` and read the
+  diff before changing anything in the native. The reference is the
+  authority, so a change in the reference is a change in the native.
+
 ---
 
 ## 2. The coding practices the owner holds to
@@ -285,9 +300,43 @@ crates/squiglab/                 the interface (egui)
   theme.rs         the palette and the type scale
 ```
 
+### What the native has that the reference does not
+
+These are the native's own, and they are not to be "corrected" towards the
+reference — the reference has no counterpart for them:
+
+- **The file picker** (the reference types paths; the native asks the
+  system).
+- **The music player** (the reference lists the music it holds; the native
+  plays a file from this computer or a preview from the Apple Music
+  catalogue).
+- **The two-channel filter banks** (the reference's constraints carry the
+  setting; the native has the banks themselves).
+- **The rig corrections as their own data** (`data_deltas/`, loaded as
+  first-class targets and marked Δ).
+- **The row of links to the other graphs' tools**, which open in the user's
+  browser.
+
 ---
 
-## 6. Traps, learned the hard way
+## 6. The design language
+
+The interface's appearance is the reference's, and the reasoning behind the
+parts of it that are the native's own is written down:
+
+- [`docs/design-system.md`](docs/design-system.md) — the reference's
+  extracted tokens: colours, type, spacing, the themes.
+- [`DESIGN.md`](DESIGN.md) and `.impeccable/design.json` — the description
+  of the native's own arrangement, kept as a pair so the sidecar matches
+  the prose.
+
+When the design of a panel is in question, work from the reference's own
+measurements (§3.2) rather than from taste, and record what was decided
+and why.
+
+---
+
+## 7. Traps, learned the hard way
 
 **egui's `interact_size` decides the height of a row, and it is read from
 the *style*, not from the Ui's spacing.** A row that should be twenty-six
@@ -328,7 +377,7 @@ near-black bold. They are `TypeStep::Heading` in the native.
 
 ---
 
-## 7. Where the work stands
+## 8. Where the work stands
 
 - The shell, the tabs, the lists, the graph, the manager rows, the equalizer's
   panel, the sound tools, the file picker and the marks are at parity.
@@ -343,3 +392,14 @@ near-black bold. They are `TypeStep::Heading` in the native.
   are verified here.
 
 `docs/feature-parity.md` is the ledger; keep it honest.
+
+---
+
+## 9. Before you commit
+
+- `cargo fmt --all`, `cargo clippy --offline --workspace --all-targets` and
+  `cargo test --offline --workspace` all pass.
+- No temporary print is left in the code.
+- The ledger and the notes say what changed and what is still different.
+- `git status` shows no data of the user's.
+
