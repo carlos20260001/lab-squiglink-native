@@ -339,8 +339,6 @@ pub struct Session {
     /// The preferences as they were last written, so a change that writes the
     /// same thing again is not written again.
     pub last_saved_preferences: Option<Preferences>,
-    /// Whether the curves the graph draws are out of date.
-    pub dirty: bool,
     /// The rig the measurements were taken on, as the configuration names it.
     /// The graph labels every curve with it.
     pub rig_description: Option<String>,
@@ -394,7 +392,6 @@ impl Default for Session {
             sound_settings: [crate::audio::Settings::default(); 2],
             player: None,
             last_saved_preferences: None,
-            dirty: false,
             rig_description: None,
         }
     }
@@ -552,7 +549,6 @@ impl Session {
             }
         }
         self.curves = curves;
-        self.dirty = true;
         self.last_saved_preferences = Some(self.preferences());
         Ok(loaded)
     }
@@ -586,7 +582,6 @@ impl Session {
                 Ok(channels) => channels,
                 Err(error) => {
                     self.display_curves.clear();
-                    self.dirty = false;
 
                     return Some(format!("{}: {error}", group.name));
                 }
@@ -611,7 +606,6 @@ impl Session {
                         Ok(channels) => channels,
                         Err(error) => {
                             self.display_curves.clear();
-                            self.dirty = false;
 
                             return Some(format!("{}: {error}", group.name));
                         }
@@ -703,7 +697,6 @@ impl Session {
                 }
                 Err(error) => {
                     self.display_curves.clear();
-                    self.dirty = false;
 
                     return Some(format!("{}: {error}", group.name));
                 }
@@ -726,13 +719,11 @@ impl Session {
         if let Some(baseline) = self.baseline {
             if let Err(error) = apply_baseline(&mut output, baseline) {
                 self.display_curves.clear();
-                self.dirty = false;
                 return Some(format!("Baseline: {error}"));
             }
         }
         output.retain(|curve| !self.hidden.contains(&curve.group_index));
         self.display_curves = output;
-        self.dirty = false;
         None
     }
 
@@ -769,7 +760,6 @@ impl Session {
             self.variant_choices.entry(index).or_insert(0);
             self.channel_modes.entry(index).or_default();
         }
-        self.dirty = true;
     }
 
     pub fn eq_phone(&self) -> Option<usize> {
@@ -901,7 +891,6 @@ impl Session {
                 })
                 .collect(),
         );
-        self.dirty = true;
         Ok(message)
     }
 
@@ -1105,7 +1094,6 @@ impl Session {
         } else {
             self.active_deltas.insert(index);
         }
-        self.dirty = true;
     }
 
     pub fn is_uploaded(&self, index: usize) -> bool {
@@ -1192,7 +1180,6 @@ impl Session {
                 })
                 .collect(),
         );
-        self.dirty = true;
         Ok(count)
     }
 
@@ -1265,7 +1252,6 @@ impl Session {
         }
         self.uploaded_names.insert(file_name.clone());
         self.rebuild_uploaded_group(&file_name, as_target, &indices);
-        self.dirty = true;
         Ok(if as_target {
             format!("Added {file_name} as a target.")
         } else {

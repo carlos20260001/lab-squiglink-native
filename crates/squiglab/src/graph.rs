@@ -143,12 +143,10 @@ fn scale(app: &mut App, painter: &egui::Painter, rect: Rect, response: &egui::Re
                 range = (minimum + shift, maximum + shift);
             }
             app.session.graph_range = Some(range);
-            app.session.dirty = true;
         }
     }
     if response.double_clicked() {
         app.session.graph_range = None;
-        app.session.dirty = true;
     }
 }
 

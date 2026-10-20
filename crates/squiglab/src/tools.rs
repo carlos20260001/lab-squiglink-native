@@ -245,7 +245,6 @@ fn toggles(ui: &mut Ui, app: &mut App) {
     if response.clicked() {
         labels = !labels;
         app.session.show_labels = labels;
-        app.session.dirty = true;
     }
     let mut inspect = app.session.inspect_mode;
     let response = ui
@@ -265,7 +264,6 @@ fn toggles(ui: &mut Ui, app: &mut App) {
     if response.clicked() {
         inspect = !inspect;
         app.session.inspect_mode = inspect;
-        app.session.dirty = true;
     }
     if ui
         .button("recolor")

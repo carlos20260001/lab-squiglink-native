@@ -145,11 +145,7 @@ fn targets(ui: &mut Ui, app: &mut App) {
                                 }
                             ));
                         if response.clicked() {
-                            if on {
-                                app.session.active_deltas.remove(&index);
-                            } else {
-                                app.session.active_deltas.insert(index);
-                            }
+                            app.session.toggle_delta(index);
                             app.session.rebuild_display_curves();
                         }
                     }
@@ -388,7 +384,6 @@ fn row(ui: &mut Ui, app: &mut App, index: usize) {
                 } else {
                     app.session.pinned.insert(index);
                 }
-                app.session.dirty = true;
             }
             // Hide.
             let hidden = app.session.hidden.contains(&index);
