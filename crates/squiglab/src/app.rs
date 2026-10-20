@@ -253,8 +253,9 @@ impl App {
                 self.header(ui);
                 self.left_column(ui);
                 // The rest of the window's controls keep their own height.
-                ui.ctx()
-                    .all_styles_mut(|style| style.spacing.interact_size.y = 36.0);
+                ui.ctx().all_styles_mut(|style| {
+                    style.spacing.interact_size = egui::vec2(80.0, 36.0);
+                });
                 self.right_column(ui);
             });
 
@@ -316,8 +317,9 @@ impl App {
                 // the rest of the program's controls are thirty-six. The
                 // style is what a control takes its measures from, so it is
                 // changed for the length of the column.
-                ui.ctx()
-                    .all_styles_mut(|style| style.spacing.interact_size.y = 26.0);
+                ui.ctx().all_styles_mut(|style| {
+                    style.spacing.interact_size = egui::vec2(40.0, 26.0);
+                });
                 // The tabs stay put and the panel beneath them scrolls, which
                 // is how the reference's equalizer behaves: the extra panel
                 // has its own scroll and the tabs above it do not move.

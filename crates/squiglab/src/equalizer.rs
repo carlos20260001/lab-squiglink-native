@@ -62,12 +62,22 @@ impl History {
 const TYPE_COLUMN: f32 = 53.0;
 /// The width of the column that holds the mark.
 const MARK_COLUMN: f32 = 15.0;
-/// The width of the reference's fields.
-const FIELD_WIDTH: f32 = 76.0;
 /// The gap between the kind of filter and the first field.
 const TYPE_GAP: f32 = 12.0;
 /// The gap between the fields.
 const FIELD_GAP: f32 = 5.0;
+/// What a field takes off its own width for its frame.
+const FIELD_FRAME: f32 = 6.0;
+
+/// The width of a field, worked out from the width the column has.
+///
+/// The reference's fields are seventy-six points wide. A field here is a
+/// little narrower, because the frame around it takes a little of the room,
+/// and the table has to fit the column it is in.
+fn field_width(available: f32) -> f32 {
+    let used = MARK_COLUMN + TYPE_COLUMN + TYPE_GAP + FIELD_GAP * 2.0;
+    ((available - used) / 3.0 - FIELD_FRAME).max(40.0)
+}
 
 /// The equalizer of the selected measurement.
 pub fn show(ui: &mut Ui, app: &mut App) {
@@ -252,13 +262,14 @@ pub fn show(ui: &mut Ui, app: &mut App) {
     // seventy-six points, with the headings over the fields they belong to.
     // The headings sit at the left of the column they belong to, as the
     // reference's do.
+    let field = field_width(ui.available_width());
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 0.0;
         for (heading, width) in [
             ("Type", MARK_COLUMN + TYPE_COLUMN),
-            ("Frequency", FIELD_WIDTH),
-            ("Gain", FIELD_WIDTH),
-            ("Q", FIELD_WIDTH),
+            ("Frequency", field + FIELD_FRAME),
+            ("Gain", field + FIELD_FRAME),
+            ("Q", field + FIELD_FRAME),
         ] {
             let (rect, _) = ui.allocate_exact_size(egui::vec2(width, 18.0), egui::Sense::hover());
             ui.painter().text(
@@ -337,23 +348,15 @@ pub fn show(ui: &mut Ui, app: &mut App) {
                         }
                     });
                 let _ = ui.allocate_exact_size(egui::vec2(TYPE_GAP, 0.0), egui::Sense::hover());
-                if number(
-                    ui,
-                    &mut row.filter.freq,
-                    0.0,
-                    20_000.0,
-                    0,
-                    FIELD_WIDTH,
-                    "Hz",
-                ) {
+                if number(ui, &mut row.filter.freq, 0.0, 20_000.0, 0, field, "Hz") {
                     changed = true;
                 }
                 let _ = ui.allocate_exact_size(egui::vec2(FIELD_GAP, 0.0), egui::Sense::hover());
-                if number(ui, &mut row.filter.gain, -40.0, 40.0, 1, FIELD_WIDTH, "dB") {
+                if number(ui, &mut row.filter.gain, -40.0, 40.0, 1, field, "dB") {
                     changed = true;
                 }
                 let _ = ui.allocate_exact_size(egui::vec2(FIELD_GAP, 0.0), egui::Sense::hover());
-                if number(ui, &mut row.filter.q, 0.0, 20.0, 2, FIELD_WIDTH, "") {
+                if number(ui, &mut row.filter.q, 0.0, 20.0, 2, field, "") {
                     changed = true;
                 }
             });
@@ -373,8 +376,10 @@ pub fn show(ui: &mut Ui, app: &mut App) {
     let _ = empty;
 
     // --- the row controls ---
-    // The buttons share the width between them, as the reference's do.
-    let third = (ui.available_width() - metrics::GAP * 2.0) / 3.0;
+    // The reference gives half the row to the sort, and the rest to the two
+    // buttons that add and take a band away.
+    let half = (ui.available_width() - metrics::GAP) / 2.0;
+    let third = (ui.available_width() - half - metrics::GAP * 2.0) / 2.0;
     ui.horizontal(|ui| {
         if ui
             .add_sized([third, 36.0], egui::Button::new("+"))
@@ -424,7 +429,7 @@ pub fn show(ui: &mut Ui, app: &mut App) {
             }
         }
         if ui
-            .add_sized([third, 36.0], egui::Button::new("Sort"))
+            .add_sized([half, 36.0], egui::Button::new("Sort"))
             .on_hover_text("Order the bands by frequency")
             .clicked()
         {
