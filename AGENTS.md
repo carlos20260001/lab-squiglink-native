@@ -146,6 +146,13 @@ and read the reference's own sources, which are in the repository:
 - `web/graphtool.js` — the graph, the equalizer's editor, the sound tools
 - `web/config.js` — the data, the tutorial, the links
 
+To find how the reference *behaves*, grep its JavaScript for the class
+or the function that draws the thing, and read the numbers there: the
+equalizer's editor is in `graphtool.js` under `eqGraphPointerDown`,
+`eqGraphDragMove` and `eqGraphPlotWheel` (the axis lock, the hit radius,
+the width's step), and the sound tools are under `liveSound*`. The
+reference's own numbers are the ones to copy.
+
 ### 3.3 Compare, and write down what differs
 
 Put the two captures side by side and read them:
@@ -248,6 +255,9 @@ authored by hand: if the numbers look wrong, the reference is wrong first.
 
 ## 4. The commands
 
+The window is 1440 by 900, and the reference's viewport is to be set to the
+same size before the two are compared.
+
 ```sh
 cargo build --offline --release        # the program
 cargo test --offline --workspace       # 74 core + 9 interface tests
@@ -261,6 +271,11 @@ node scripts/marks_diff.mjs            # compare the marks with the reference's
 Commit one thing at a time, in the style of the existing history (a prose
 subject line, the body saying what changed and why), and push when the
 work is sound. The branch tracks `origin/main` and is usually ahead of it.
+
+The measurements live in `data/` (in-ear monitors), `data_hp/` (headphones)
+and `data_deltas/` (the rig corrections), and the program's own settings
+live in a `config.toml` — see `config-examples/<platform>/` for the shape
+of one.
 
 **The data is the user's.** `data/real/` and `data_deltas/` are ignored by
 git, because a measurement taken on a person's rig, and a calibration
@@ -356,8 +371,9 @@ hard-coding them (see `field_width()` in `crates/squiglab/src/equalizer.rs`).
 and `−`.
 
 **There is no keyboard focus under Xvfb.** No window manager means no
-focus, so `xdotool type` does nothing and a field cannot be tested by
-typing. Test the mouse paths; say so when a path cannot be checked.
+focus, so `xdotool type` does nothing, a field cannot be tested by typing,
+and the keyboard shortcuts (the equalizer's undo and redo) cannot be
+exercised. Test the mouse paths; say so when a path cannot be checked.
 
 **The `⊗` in the reference is a character, not an icon.** The reference
 writes `⊗` as text in the list rows and uses the filled `--icon-remove` mask

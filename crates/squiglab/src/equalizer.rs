@@ -710,11 +710,26 @@ fn history(ui: &mut Ui, app: &mut App) {
             .font(TypeStep::Title.font_bold())
             .color(palette.text_tertiary.gamma_multiply(0.8)),
     );
+    // The reference's shortcuts: Ctrl+Z to step back, Shift+Ctrl+Z (or
+    // Ctrl+Y) to step forward. They are left alone while a field is being
+    // written in, as the reference leaves them alone.
+    let ctx = ui.ctx().clone();
+    let typing = ctx.egui_wants_keyboard_input();
+    let undo_key = !typing
+        && ctx.input(|input| {
+            input.modifiers.ctrl && !input.modifiers.shift && input.key_pressed(egui::Key::Z)
+        });
+    let redo_key = !typing
+        && ctx.input(|input| {
+            (input.modifiers.ctrl && input.modifiers.shift && input.key_pressed(egui::Key::Z))
+                || (input.modifiers.ctrl && input.key_pressed(egui::Key::Y))
+        });
     ui.horizontal(|ui| {
         if ui
             .add_enabled(app.history.can_undo(), egui::Button::new("Undo"))
             .on_hover_text("Step back to the state before the last change")
             .clicked()
+            || undo_key
         {
             if let Some(state) = app.history.undo() {
                 app.session.eq_filters = state.filters;
@@ -726,6 +741,7 @@ fn history(ui: &mut Ui, app: &mut App) {
             .add_enabled(app.history.can_redo(), egui::Button::new("Redo"))
             .on_hover_text("Step forward again")
             .clicked()
+            || redo_key
         {
             if let Some(state) = app.history.redo() {
                 app.session.eq_filters = state.filters;
