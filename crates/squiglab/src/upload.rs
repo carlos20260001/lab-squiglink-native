@@ -32,21 +32,11 @@ pub fn show(ui: &mut Ui, app: &mut App) {
     );
     ui.add_space(metrics::GAP);
 
+    // The file is chosen with the system's own dialog, and its name is
+    // shown beside it, as the reference's file input shows it.
     ui.horizontal(|ui| {
-        ui.label(
-            RichText::new("File")
-                .font(TypeStep::Label.font())
-                .color(palette.text_tertiary),
-        );
-        ui.add_sized(
-            [ui.available_width() - 150.0, 36.0],
-            egui::TextEdit::singleline(&mut app.upload_path)
-                .hint_text("A measurement file")
-                .desired_width(ui.available_width() - 150.0),
-        );
-        // The system dialog, where there is one.
         if ui
-            .button("Browse")
+            .button("Choose a file")
             .on_hover_text("Choose the file with the system's own dialog")
             .clicked()
         {
@@ -54,6 +44,18 @@ pub fn show(ui: &mut Ui, app: &mut App) {
                 crate::app::Pick::Upload,
                 "A measurement file",
                 &["txt", "csv", "fr"],
+            );
+        }
+        let name = app
+            .pending_upload
+            .as_ref()
+            .map(|chosen| chosen.name.clone())
+            .unwrap_or_default();
+        if !name.is_empty() {
+            ui.label(
+                RichText::new(name)
+                    .font(TypeStep::Label.font())
+                    .color(palette.text_tertiary),
             );
         }
     });

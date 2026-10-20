@@ -114,10 +114,11 @@ pub struct App {
     /// The measurement the user chose with the system's dialog, waiting to be
     /// loaded as a measurement or as a target.
     pub pending_upload: Option<crate::filepick::Chosen>,
+    /// The equalizer file the user chose with the system's dialog, waiting to
+    /// be imported.
+    pub pending_import: Option<crate::filepick::Chosen>,
     /// The file the upload panel is waiting to load.
-    pub upload_path: String,
     /// The file the equalizer's import is waiting to load.
-    pub import_path: String,
     /// What the upload panel last said.
     pub upload_message: Option<String>,
 }
@@ -199,8 +200,7 @@ impl App {
             graph_drag: None,
             picker: None,
             pending_upload: None,
-            upload_path: String::new(),
-            import_path: String::new(),
+            pending_import: None,
             upload_message: None,
         }
         .with_theme(theme)
@@ -435,7 +435,10 @@ impl App {
                 self.pending_upload = Some(chosen);
                 self.upload_message = None;
             }
-            Pick::ImportParametric => self.import_chosen(chosen),
+            Pick::ImportParametric => {
+                self.pending_import = Some(chosen);
+                self.status = None;
+            }
             Pick::Music => self.play_chosen(chosen),
         }
     }
@@ -460,23 +463,8 @@ impl App {
                 }
             }
             None => {
-                let path = self.upload_path.trim().to_owned();
-                if path.is_empty() {
-                    self.upload_message = Some("Name the file to load.".to_owned());
-                    return;
-                }
-                let name = std::path::Path::new(&path)
-                    .file_stem()
-                    .and_then(|stem| stem.to_str())
-                    .unwrap_or("The file")
-                    .to_owned();
-                match std::fs::read_to_string(&path) {
-                    Ok(text) => (name, text),
-                    Err(problem) => {
-                        self.upload_message = Some(format!("The file was not loaded: {problem}"));
-                        return;
-                    }
-                }
+                self.upload_message = Some("Choose a file to load.".to_owned());
+                return;
             }
         };
         match self.session.import_upload_text(&name, &text, as_target) {
@@ -487,26 +475,6 @@ impl App {
             Err(problem) => {
                 self.upload_message = Some(format!("The file was not loaded: {problem}"))
             }
-        }
-    }
-
-    /// Load the equalizer file the user chose.
-    fn import_chosen(&mut self, chosen: crate::filepick::Chosen) {
-        let Some(text) = chosen.text() else {
-            self.status = Some("That file could not be read.".to_owned());
-            return;
-        };
-        let Some(phone) = self.session.eq_phone else {
-            self.status = Some("Choose a measurement to give it an equalizer.".to_owned());
-            return;
-        };
-        match self.session.import_parametric(phone, &text) {
-            Ok(count) => {
-                self.status = Some(format!("{count} bands were imported."));
-                self.session.rebuild_display_curves();
-                crate::sound::push_chain(self);
-            }
-            Err(problem) => self.status = Some(format!("The file was not imported: {problem}")),
         }
     }
 

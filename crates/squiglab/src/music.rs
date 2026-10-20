@@ -33,8 +33,6 @@ impl Track {
 /// What the player is doing.
 #[derive(Clone, Default)]
 pub struct Music {
-    /// The file the user named.
-    pub path: String,
     /// The track being played, and where it came from.
     pub playing: Option<Track>,
     /// The search being typed.
@@ -43,7 +41,7 @@ pub struct Music {
     pub results: Vec<Track>,
     /// Whether a search is running.
     pub searching: bool,
-    /// Whether the file's field is open.
+    /// Whether the file's button is showing.
     pub naming: bool,
     /// Whether the search's field is open.
     pub searching_for: bool,
@@ -102,7 +100,6 @@ pub fn text_button_in(ui: &mut egui::Ui, text: &str, width: Option<f32>) -> egui
 
 pub fn show(ui: &mut Ui, app: &mut App) {
     let palette = theme::current_palette();
-    let path = app.music.path.clone();
     let query = app.music.query.clone();
     let results = app.music.results.clone();
     let searching = app.music.searching;
@@ -133,29 +130,19 @@ pub fn show(ui: &mut Ui, app: &mut App) {
         // --- the file ---
         if app.music.naming {
             ui.add_space(metrics::GAP);
-            ui.horizontal(|ui| {
-                if ui.button("Play").on_hover_text("Play this file").clicked() {
-                    play_file(app);
-                }
-                ui.add_sized(
-                    [ui.available_width() - 110.0, 36.0],
-                    egui::TextEdit::singleline(&mut app.music.path)
-                        .hint_text("A music file")
-                        .desired_width(ui.available_width() - 110.0),
+            // The file is chosen with the system's own dialog, and it plays
+            // as soon as it is chosen.
+            if ui
+                .button("Choose a file")
+                .on_hover_text("Choose the file with the system's own dialog")
+                .clicked()
+            {
+                app.ask_for_file(
+                    crate::app::Pick::Music,
+                    "A music file",
+                    &["mp3", "flac", "wav", "ogg", "m4a"],
                 );
-                // The system dialog, where there is one.
-                if ui
-                    .button("Browse")
-                    .on_hover_text("Choose the file with the system's own dialog")
-                    .clicked()
-                {
-                    app.ask_for_file(
-                        crate::app::Pick::Music,
-                        "A music file",
-                        &["mp3", "flac", "wav", "ogg", "m4a"],
-                    );
-                }
-            });
+            }
         }
 
         // --- the search ---
@@ -214,7 +201,7 @@ pub fn show(ui: &mut Ui, app: &mut App) {
             );
         }
     });
-    let _ = (path, query);
+    let _ = query;
 }
 
 /// Take the results of a search that has finished.
@@ -261,23 +248,6 @@ pub fn take_preview(app: &mut App) {
         },
         Ok(Err(problem)) => app.music.message = Some(problem),
         Err(_) => app.music.message = Some("The preview could not be fetched.".to_owned()),
-    }
-}
-
-/// Play the file the user named.
-fn play_file(app: &mut App) {
-    let path = app.music.path.trim().to_owned();
-    if path.is_empty() {
-        app.music.message = Some("Name the file to play.".to_owned());
-        return;
-    }
-    match squiglab_core::audio::decode::decode_file(std::path::Path::new(&path)) {
-        Ok(decoded) => {
-            let seconds = decoded.seconds();
-            play_decoded(app, decoded);
-            app.music.message = Some(format!("Playing {path} ({seconds:.0} seconds)."));
-        }
-        Err(problem) => app.music.message = Some(problem),
     }
 }
 

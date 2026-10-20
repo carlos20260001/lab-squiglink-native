@@ -456,20 +456,11 @@ pub fn show(ui: &mut Ui, app: &mut App) {
 
     // --- the exports ---
     ui.add_space(metrics::GAP);
+    // The file is chosen with the system's own dialog, and its name is
+    // shown beside it, as the reference's file input shows it.
     ui.horizontal(|ui| {
-        ui.label(
-            RichText::new("Import")
-                .font(TypeStep::Label.font())
-                .color(palette.text_tertiary),
-        );
-        ui.add(
-            egui::TextEdit::singleline(&mut app.import_path)
-                .hint_text("An Equalizer APO file")
-                .desired_width(ui.available_width() - 110.0),
-        );
-        // The system dialog, where there is one.
         if ui
-            .button("Browse")
+            .button("Choose a file")
             .on_hover_text("Choose the file with the system's own dialog")
             .clicked()
         {
@@ -477,6 +468,18 @@ pub fn show(ui: &mut Ui, app: &mut App) {
                 crate::app::Pick::ImportParametric,
                 "An Equalizer APO file",
                 &["txt", "cfg", "apo"],
+            );
+        }
+        let name = app
+            .pending_import
+            .as_ref()
+            .map(|chosen| chosen.name.clone())
+            .unwrap_or_default();
+        if !name.is_empty() {
+            ui.label(
+                RichText::new(name)
+                    .font(TypeStep::Label.font())
+                    .color(palette.text_tertiary),
             );
         }
     });
@@ -1012,23 +1015,18 @@ fn number(
 
 /// Load an Equalizer APO file into the curve's equalizer.
 ///
-/// There is no file dialog, so the path is typed, as the upload panel's is.
+/// The file is the one that was chosen with the system's own dialog.
 fn import(app: &mut App, phone: usize) {
-    let path = app.import_path.trim();
-    if path.is_empty() {
-        app.say("Name the file to import.");
+    let Some(chosen) = app.pending_import.take() else {
+        app.say("Choose a file to import.");
         return;
-    }
-    let text = match std::fs::read_to_string(path) {
-        Ok(text) => text,
-        Err(problem) => {
-            app.say(format!("The file was not read: {problem}"));
-            return;
-        }
+    };
+    let Some(text) = chosen.text() else {
+        app.say("That file could not be read.");
+        return;
     };
     match app.session.import_parametric(phone, &text) {
         Ok(count) => {
-            app.import_path.clear();
             app.say(format!("{count} bands were imported."));
             app.session.rebuild_display_curves();
         }
