@@ -174,10 +174,9 @@ pub fn to_exponential(value: f64, digits: usize) -> String {
     };
     // The mantissa may have carried into a whole number, and the
     // exponent is then one less.
-    let (front, written) = match front.strip_prefix("10.") {
-        Some(rest) => (format!("1.{}", rest), written - 1),
-        None => (front, written),
-    };
+    // The mantissa may have carried into a whole number, and the
+    // exponent is then one greater.
+    let (front, written) = normalise(&front, written);
     let text = fix_exponent(&format!("{}e{}", front, written), written);
     if negative {
         format!("-{}", text)
@@ -237,6 +236,9 @@ pub fn to_precision(value: f64, digits: usize) -> String {
         let (front, back) = text.split_once('e').expect("the exponent");
         (front.to_owned(), back.parse().expect("the exponent"))
     };
+    // The mantissa may have carried into a whole number, and the
+    // exponent is then one greater.
+    let (front, written) = normalise(&front, written);
     // The exponent the number has after it is rounded, which the
     // JavaScript's own form is chosen by.
     let own = written;
@@ -280,6 +282,62 @@ pub fn to_precision(value: f64, digits: usize) -> String {
     }
 }
 
+/// The JavaScript's `toString(radix)`, which writes a whole number in
+/// another base.
+///
+/// The number is a whole number, for the JavaScript's own `toString`
+/// writes the whole part of it, and the formats that use this round the
+/// number first.
+pub fn to_radix(value: f64, radix: u32) -> String {
+    if value.is_nan() {
+        return "NaN".to_owned();
+    }
+    if value.is_infinite() {
+        return if value < 0.0 {
+            "-Infinity".to_owned()
+        } else {
+            "Infinity".to_owned()
+        };
+    }
+    if radix == 10 {
+        // The JavaScript gives the number to its own `ToString`.
+        return js::number_to_string(value);
+    }
+    let negative = value < 0.0;
+    let value = value.abs();
+    let whole = value.trunc();
+    if whole >= 1e21 {
+        // The JavaScript writes a number this large in full.
+        return js::number_to_string(value);
+    }
+    // The digits, which the JavaScript takes by dividing the number by
+    // the base, and which are written from the last one to the first.
+    //
+    // The number is divided by the base while the quotient is large
+    // enough for the division to lose the last of it, and the digits
+    // that are lost are written as zeros.
+    let mut integer = whole;
+    let mut digits = Vec::new();
+    loop {
+        let remainder = integer % radix as f64;
+        digits.push(DIGITS[remainder as usize]);
+        integer = (integer - remainder) / radix as f64;
+        if integer <= 0.0 {
+            break;
+        }
+    }
+    digits.reverse();
+    let text = String::from_utf8(digits).expect("the digits");
+    if negative {
+        format!("-{}", text)
+    } else {
+        text
+    }
+}
+
+/// The digits the JavaScript writes a number in another base with.
+const DIGITS: &[u8; 36] = b"0123456789abcdefghijklmnopqrstuvwxyz";
+
 /// The exponent the number has, which the shortest writing of it gives.
 fn exponent_of(value: f64) -> i32 {
     let shortest = format!("{:e}", value);
@@ -287,6 +345,23 @@ fn exponent_of(value: f64) -> i32 {
         .split_once('e')
         .and_then(|(_, exponent)| exponent.parse::<i32>().ok())
         .unwrap_or(0)
+}
+
+/// A mantissa that has carried into a whole number, which is written as
+/// a mantissa again and with an exponent one greater.
+fn normalise(front: &str, written: i32) -> (String, i32) {
+    let (whole, after) = match front.split_once('.') {
+        Some((whole, after)) => (whole, Some(after)),
+        None => (front, None),
+    };
+    if whole != "10" {
+        return (front.to_owned(), written);
+    }
+    let front = match after {
+        Some(after) => format!("1.{}", after),
+        None => "1".to_owned(),
+    };
+    (front, written + 1)
 }
 
 /// The exponent of the exponential form, which the JavaScript writes

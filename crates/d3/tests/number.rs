@@ -5,7 +5,7 @@
 
 use std::fs;
 
-use d3::number::{to_exponential, to_fixed, to_precision};
+use d3::number::{to_exponential, to_fixed, to_precision, to_radix};
 use serde_json::Value;
 
 fn fixture() -> Value {
@@ -53,6 +53,27 @@ fn the_exponential_numbers_are_the_javascripts_way() {
             expected.as_str().expect("a number"),
             "the exponential form of {}",
             key
+        );
+    }
+}
+
+#[test]
+fn the_numbers_in_another_base_are_the_javascripts_way() {
+    let fixture = fixture();
+    let table = fixture.get("radix").expect("the numbers in another base");
+    let table = table.as_object().expect("a table of numbers");
+    assert!(!table.is_empty());
+    for (key, expected) in table {
+        let (value, radix) = key.rsplit_once('/').expect("a number and a base");
+        let value = value.parse::<f64>().expect("a number");
+        let radix = radix.parse::<u32>().expect("a base");
+        // The formats that use this round the number first.
+        assert_eq!(
+            to_radix(d3::js::round(value), radix),
+            expected.as_str().expect("a number"),
+            "the number {} in the base {}",
+            value,
+            radix
         );
     }
 }
