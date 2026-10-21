@@ -114,10 +114,16 @@ The licence of that translation is in
 | `voronoi` | d3-voronoi |
 | `zoom` | d3-zoom |
 
-The modules that are written are `array`, `color`, `ieee754`, `js`, `path`
-and `shape`; the rest are named in `src/lib.rs` with a note that they are
-not yet written, and the order they are to be written in is the order
-they depend on each other.
+The modules that are written are `array`, `color`, `ieee754`,
+`interpolate`, `js`, `path` and `shape`; the rest are named in
+`src/lib.rs` with a note that they are not yet written, and the order
+they are to be written in is the order they depend on each other.
+
+The transform interpolation reads a transform out of a string with a
+document, in the JavaScript, and the port asks for it through a trait —
+`interpolate::transform::TransformParser` — which a program implements
+for whatever it draws with. The matrix's own taking apart is tested
+against the JavaScript, for it needs no document.
 
 ## The commands
 

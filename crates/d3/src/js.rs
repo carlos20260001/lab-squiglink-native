@@ -65,6 +65,31 @@ pub fn object_is(a: f64, b: f64) -> bool {
     a == b
 }
 
+/// JavaScript's `Math.round`.
+///
+/// The JavaScript rounds a half towards the greater integer, and Rust
+/// rounds it away from zero: `Math.round(-2.5)` is `-2` in JavaScript
+/// and `-3.0` in Rust. The JavaScript's own rule is that the number is
+/// the closest integer, and a half is the one that is greater.
+pub fn round(value: f64) -> f64 {
+    if value.is_nan() || value.is_infinite() {
+        return value;
+    }
+    let floor = value.floor();
+    let rounded = if value - floor >= 0.5 {
+        floor + 1.0
+    } else {
+        floor
+    };
+    if rounded == 0.0 && value < 0.0 {
+        // The JavaScript gives a negative zero for a number that rounds
+        // to zero from below.
+        -0.0
+    } else {
+        rounded
+    }
+}
+
 /// Whether a number is truthy in JavaScript.
 ///
 /// The JavaScript's curves keep a flag of `0`, `1` or `NaN`, and they ask

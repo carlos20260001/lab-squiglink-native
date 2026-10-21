@@ -78,6 +78,7 @@
 pub mod array;
 pub mod color;
 pub mod ieee754;
+pub mod interpolate;
 pub mod js;
 // pub mod axis;  // not yet written.
 // pub mod brush;  // not yet written.
