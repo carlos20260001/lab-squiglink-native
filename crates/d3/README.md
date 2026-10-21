@@ -114,7 +114,7 @@ The licence of that translation is in
 | `voronoi` | d3-voronoi |
 | `zoom` | d3-zoom |
 
-The modules that are written are `array`, `color`, `format`, `ieee754`,
+The modules that are written are `array`, `collection`, `color`, `format`, `ieee754`,
 `interpolate`, `js`, `number`, `path` and `shape`; the rest are named in
 `src/lib.rs` with a note that they are not yet written, and the order
 they are to be written in is the order they depend on each other.
