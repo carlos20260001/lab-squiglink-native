@@ -12,6 +12,8 @@ pub mod locale;
 pub mod specifier;
 pub mod type_;
 
-pub use locale::{format_default_locale, format_locale, Locale, LocaleDefinition};
+pub use locale::{
+    format_default_locale, format_locale, Format, FormatPrefix, Locale, LocaleDefinition,
+};
 pub use specifier::{format_specifier, FormatSpecifier};
-pub use type_::format_type;
+pub use type_::{format_type, precision_fixed, precision_prefix, precision_round};

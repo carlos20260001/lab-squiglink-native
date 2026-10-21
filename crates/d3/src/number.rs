@@ -306,10 +306,6 @@ pub fn to_radix(value: f64, radix: u32) -> String {
     let negative = value < 0.0;
     let value = value.abs();
     let whole = value.trunc();
-    if whole >= 1e21 {
-        // The JavaScript writes a number this large in full.
-        return js::number_to_string(value);
-    }
     // The digits, which the JavaScript takes by dividing the number by
     // the base, and which are written from the last one to the first.
     //

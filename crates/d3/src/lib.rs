@@ -77,6 +77,7 @@
 
 pub mod array;
 pub mod color;
+pub mod format;
 pub mod ieee754;
 pub mod interpolate;
 pub mod js;
