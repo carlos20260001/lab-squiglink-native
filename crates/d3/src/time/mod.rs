@@ -6,8 +6,10 @@
 //! the program is given — the system's own for a program that runs
 //! natively, and the browser's own for a program that runs in a browser.
 
+pub mod interval;
 pub mod zone;
 
+pub use interval::Interval;
 pub use zone::TimeZone;
 
 /// A date, which is the JavaScript's own.
