@@ -1,0 +1,30 @@
+The licence of the transcendental functions in `src/ieee754.rs`.
+
+The file is translated from V8's `src/base/ieee754.cc`, version 12.0.267.10,
+which is itself adapted from fdlibm by Sun Microsystems. The C++ is kept
+alongside it, in `scripts/ieee754.cc`, and the translation script,
+`scripts/translate_ieee754.py`, reads that file and writes the Rust.
+
+The notice the C++ carries is this:
+
+    The following is adapted from fdlibm (http://www.netlib.org/fdlibm).
+
+    ====================================================
+    Copyright (C) 1993 by Sun Microsystems, Inc. All rights reserved.
+
+    Developed at SunSoft, a Sun Microsystems, Inc. business.
+    Permission to use, copy, modify, and distribute this
+    software is freely granted, provided that this notice
+    is preserved.
+    ====================================================
+
+    The original source code covered by the above license above has been
+    modified significantly by Google Inc.
+    Copyright 2016 the V8 project authors. All rights reserved.
+
+The conditions of that notice are kept: the notice is preserved, in this
+file and at the head of the C++ it was translated from.
+
+V8 is a project of Google LLC and is published under the BSD three-clause
+licence. The licence of the d3 packages this crate is a port of is in
+`LICENSE.d3-packages`, and the licence of the crate itself is in `LICENSE`.

@@ -21,3 +21,6 @@ data_deltas/*
 /devicePEQ/
 /.playwright-cli/
 /docs/design-reference/native-current.png
+
+# The Python the translator leaves behind:
+__pycache__/

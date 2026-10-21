@@ -57,6 +57,25 @@ returns `NaN`, the port returns `f64::NAN`.
 The JavaScript's number semantics are in [`js`](src/js.rs), because the
 JavaScript's own results depend on them.
 
+## The port carries its own mathematics
+
+The JavaScript this crate is a port of runs on V8, and V8's `Math.cos`,
+`Math.sin`, `Math.exp` and the rest are V8's own copy of fdlibm rather
+than the platform's. The two differ: on this machine the platform's `cos`
+differs from V8's on about one argument in twenty-five, by one unit in
+the last place — and a unit in the last place is enough to change the
+last digit of a path.
+
+So the crate carries its own copy in [`ieee754`](src/ieee754.rs),
+translated from V8's `src/base/ieee754.cc` by
+`scripts/translate_ieee754.py`, and the shapes call it rather than the
+platform's own. The fixture under `tests/fixtures/ieee754.json` was
+produced by running Node — which is V8 — and writing down the bits of
+what it produced, and the test requires the port to give the same bits.
+
+The licence of that translation is in
+[`LICENSE.ieee754`](LICENSE.ieee754).
+
 ## The modules
 
 | Module | The package |
@@ -77,7 +96,9 @@ JavaScript's own results depend on them.
 | `format` | d3-format |
 | `geo` | d3-geo |
 | `hierarchy` | d3-hierarchy |
+| `ieee754` | V8's own mathematics, which d3 runs on |
 | `interpolate` | d3-interpolate |
+| `js` | the JavaScript's own number semantics |
 | `path` | d3-path |
 | `polygon` | d3-polygon |
 | `quadtree` | d3-quadtree |

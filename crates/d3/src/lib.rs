@@ -64,7 +64,19 @@
 //! DOM implements it over that; a program that draws with a native toolkit
 //! implements it over that. The port's own behaviour does not change.
 
+// The JavaScript's own tests are written as `!(x > epsilon)`, which is
+// false for a `NaN` as well as for a value that is not above the epsilon.
+// Rust's own `partial_cmp` would read the same way, but the port keeps
+// the JavaScript's form so that the two can be read side by side.
+#![allow(clippy::neg_cmp_op_on_partial_ord)]
+// The JavaScript's curves hold their numbers on the object itself, and
+// the port's helper functions take them as arguments, which is the same
+// thing written out. The port does not gather them into a struct, because
+// that would hide which numbers the JavaScript has where.
+#![allow(clippy::too_many_arguments)]
+
 pub mod array;
+pub mod ieee754;
 pub mod js;
 // pub mod axis;  // not yet written.
 // pub mod brush;  // not yet written.
@@ -83,14 +95,14 @@ pub mod js;
 // pub mod geo;  // not yet written.
 // pub mod hierarchy;  // not yet written.
 // pub mod interpolate;  // not yet written.
-// pub mod path;  // not yet written.
+pub mod path;
 // pub mod polygon;  // not yet written.
 // pub mod quadtree;  // not yet written.
 // pub mod random;  // not yet written.
 // pub mod scale;  // not yet written.
 // pub mod scale_chromatic;  // not yet written.
 // pub mod selection;  // not yet written.
-// pub mod shape;  // not yet written.
+pub mod shape;
 // pub mod time;  // not yet written.
 // pub mod time_format;  // not yet written.
 // pub mod timer;  // not yet written.
