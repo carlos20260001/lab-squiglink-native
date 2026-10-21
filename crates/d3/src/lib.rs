@@ -108,6 +108,7 @@ pub mod path;
 // pub mod scale_chromatic;  // not yet written.
 // pub mod selection;  // not yet written.
 pub mod shape;
+pub mod time;
 // pub mod time;  // not yet written.
 // pub mod time_format;  // not yet written.
 // pub mod timer;  // not yet written.

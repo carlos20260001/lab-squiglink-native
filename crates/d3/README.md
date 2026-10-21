@@ -107,6 +107,7 @@ The licence of that translation is in
 | `scale_chromatic` | d3-scale-chromatic |
 | `selection` | d3-selection |
 | `shape` | d3-shape |
+| `time` | d3-time, and the timezone it is read in |
 | `time` | d3-time |
 | `time_format` | d3-time-format |
 | `timer` | d3-timer |
@@ -129,22 +130,25 @@ document, in the JavaScript, and the port asks for it through a trait —
 for whatever it draws with. The matrix's own taking apart is tested
 against the JavaScript, for it needs no document.
 
-## The one thing left to decide
+## The timezone the dates are read in
 
 The `d3-time` package is the JavaScript's own calendar, and its local
 intervals — the day, the week, the month and the year — are defined by
 the timezone the browser is in: the day of a date is the day it is in
 the reader's own town, and not the day it is in Greenwich.
 
-A native program has no browser, and so it has no such a day unless it
-is told what the timezone is. The port has to answer that before it
-writes the package, and the two answers are the system's own timezone
-(the `TZ` of the environment, or `/etc/localtime`) or no timezone at all,
-with the local intervals becoming the UTC ones.
+The port reads the timezone in the way the program is built for:
 
-The system's own is the faithful one, for it is the timezone the
-browser would have been in, and it is a file the port can read: the
-information is there, and it is a day's worth of arithmetic to read it.
+- A program that runs **natively** reads the **operating system's own**
+  timezone: the C library on a Unix, and the operating system itself on
+  Windows. It is the timezone the browser would have been in.
+- A program that runs in a **browser** reads the **browser's own**
+  timezone, which the host of the program gives it.
+
+Which of the two is used is settled when the program is built, for the
+two are the program's own kind. The crate's `time` module holds the
+choice, and the offset it gives is the one the reader would say it in —
+the other way about from the JavaScript's `getTimezoneOffset`.
 
 ## The commands
 
