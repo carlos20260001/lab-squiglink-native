@@ -129,6 +129,23 @@ document, in the JavaScript, and the port asks for it through a trait —
 for whatever it draws with. The matrix's own taking apart is tested
 against the JavaScript, for it needs no document.
 
+## The one thing left to decide
+
+The `d3-time` package is the JavaScript's own calendar, and its local
+intervals — the day, the week, the month and the year — are defined by
+the timezone the browser is in: the day of a date is the day it is in
+the reader's own town, and not the day it is in Greenwich.
+
+A native program has no browser, and so it has no such a day unless it
+is told what the timezone is. The port has to answer that before it
+writes the package, and the two answers are the system's own timezone
+(the `TZ` of the environment, or `/etc/localtime`) or no timezone at all,
+with the local intervals becoming the UTC ones.
+
+The system's own is the faithful one, for it is the timezone the
+browser would have been in, and it is a file the port can read: the
+information is there, and it is a day's worth of arithmetic to read it.
+
 ## The commands
 
 ```sh
