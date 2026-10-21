@@ -76,6 +76,7 @@
 #![allow(clippy::too_many_arguments)]
 
 pub mod array;
+pub mod color;
 pub mod ieee754;
 pub mod js;
 // pub mod axis;  // not yet written.

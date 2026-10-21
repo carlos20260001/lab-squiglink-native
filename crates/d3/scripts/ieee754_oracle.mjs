@@ -101,6 +101,20 @@ for (const [name, function_] of Object.entries({
   cases[name] = result;
 }
 
+// The powers, which have a case of their own for a whole number and
+// one for a fraction, and for a base below one and one above it.
+{
+  const result = {};
+  const exponents = [0, 1, 2, 3, 4, 10, 0.5, 1.5, 2.4, -1, -0.5, -2.5,
+                     1e-300, 1e300];
+  for (const x of [0.5, 0.25, 2, 3, 10, 0.1, 1e-10, 1e10, 0, 1, -1, -2]) {
+    for (const y of exponents) {
+      result[bits(x) + "/" + bits(y)] = bits(Math.pow(x, y));
+    }
+  }
+  cases["pow"] = result;
+}
+
 // The `sqrt`, and the rest, are the same in every JavaScript and in
 // Rust, for they are the platform's own.
 cases["sqrt"] = Object.fromEntries(

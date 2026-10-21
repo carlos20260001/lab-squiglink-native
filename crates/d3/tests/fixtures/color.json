@@ -1,0 +1,361 @@
+{
+ "parsed": {
+  "#ff0000": {
+   "channels": {
+    "r": "406fe00000000000",
+    "g": "0000000000000000",
+    "b": "0000000000000000",
+    "opacity": "3ff0000000000000"
+   },
+   "formatHex": "#ff0000",
+   "formatRgb": "rgb(255, 0, 0)",
+   "formatHsl": "hsl(0, 100%, 50%)",
+   "displayable": true
+  },
+  "#f00": {
+   "channels": {
+    "r": "406fe00000000000",
+    "g": "0000000000000000",
+    "b": "0000000000000000",
+    "opacity": "3ff0000000000000"
+   },
+   "formatHex": "#ff0000",
+   "formatRgb": "rgb(255, 0, 0)",
+   "formatHsl": "hsl(0, 100%, 50%)",
+   "displayable": true
+  },
+  "#ff000000": {
+   "channels": {
+    "r": "7ff8000000000000",
+    "g": "7ff8000000000000",
+    "b": "7ff8000000000000",
+    "opacity": "0000000000000000"
+   },
+   "formatHex": "#000000",
+   "formatRgb": "rgba(0, 0, 0, 0)",
+   "formatHsl": "hsla(0, 0%, 0%, 0)",
+   "displayable": false
+  },
+  "#f000": {
+   "channels": {
+    "r": "7ff8000000000000",
+    "g": "7ff8000000000000",
+    "b": "7ff8000000000000",
+    "opacity": "0000000000000000"
+   },
+   "formatHex": "#000000",
+   "formatRgb": "rgba(0, 0, 0, 0)",
+   "formatHsl": "hsla(0, 0%, 0%, 0)",
+   "displayable": false
+  },
+  "#FF0000": {
+   "channels": {
+    "r": "406fe00000000000",
+    "g": "0000000000000000",
+    "b": "0000000000000000",
+    "opacity": "3ff0000000000000"
+   },
+   "formatHex": "#ff0000",
+   "formatRgb": "rgb(255, 0, 0)",
+   "formatHsl": "hsl(0, 100%, 50%)",
+   "displayable": true
+  },
+  "  #ff0000  ": {
+   "channels": {
+    "r": "406fe00000000000",
+    "g": "0000000000000000",
+    "b": "0000000000000000",
+    "opacity": "3ff0000000000000"
+   },
+   "formatHex": "#ff0000",
+   "formatRgb": "rgb(255, 0, 0)",
+   "formatHsl": "hsl(0, 100%, 50%)",
+   "displayable": true
+  },
+  "rgb(255, 0, 0)": {
+   "channels": {
+    "r": "406fe00000000000",
+    "g": "0000000000000000",
+    "b": "0000000000000000",
+    "opacity": "3ff0000000000000"
+   },
+   "formatHex": "#ff0000",
+   "formatRgb": "rgb(255, 0, 0)",
+   "formatHsl": "hsl(0, 100%, 50%)",
+   "displayable": true
+  },
+  "rgb(100%, 0%, 0%)": {
+   "channels": {
+    "r": "406fe00000000000",
+    "g": "0000000000000000",
+    "b": "0000000000000000",
+    "opacity": "3ff0000000000000"
+   },
+   "formatHex": "#ff0000",
+   "formatRgb": "rgb(255, 0, 0)",
+   "formatHsl": "hsl(0, 100%, 50%)",
+   "displayable": true
+  },
+  "rgba(255, 0, 0, 1)": {
+   "channels": {
+    "r": "406fe00000000000",
+    "g": "0000000000000000",
+    "b": "0000000000000000",
+    "opacity": "3ff0000000000000"
+   },
+   "formatHex": "#ff0000",
+   "formatRgb": "rgb(255, 0, 0)",
+   "formatHsl": "hsl(0, 100%, 50%)",
+   "displayable": true
+  },
+  "rgba(255, 0, 0, 0.5)": {
+   "channels": {
+    "r": "406fe00000000000",
+    "g": "0000000000000000",
+    "b": "0000000000000000",
+    "opacity": "3fe0000000000000"
+   },
+   "formatHex": "#ff0000",
+   "formatRgb": "rgba(255, 0, 0, 0.5)",
+   "formatHsl": "hsla(0, 100%, 50%, 0.5)",
+   "displayable": true
+  },
+  "rgba(100%, 0%, 0%, 0.5)": {
+   "channels": {
+    "r": "406fe00000000000",
+    "g": "0000000000000000",
+    "b": "0000000000000000",
+    "opacity": "3fe0000000000000"
+   },
+   "formatHex": "#ff0000",
+   "formatRgb": "rgba(255, 0, 0, 0.5)",
+   "formatHsl": "hsla(0, 100%, 50%, 0.5)",
+   "displayable": true
+  },
+  "hsl(120, 50%, 50%)": {
+   "channels": {
+    "h": "405e000000000000",
+    "s": "3fe0000000000000",
+    "l": "3fe0000000000000",
+    "opacity": "3ff0000000000000"
+   },
+   "formatHex": "#40bf40",
+   "formatRgb": "rgb(64, 191, 64)",
+   "formatHsl": "hsl(120, 50%, 50%)",
+   "displayable": true
+  },
+  "hsla(120, 50%, 50%, 1)": {
+   "channels": {
+    "h": "405e000000000000",
+    "s": "3fe0000000000000",
+    "l": "3fe0000000000000",
+    "opacity": "3ff0000000000000"
+   },
+   "formatHex": "#40bf40",
+   "formatRgb": "rgb(64, 191, 64)",
+   "formatHsl": "hsl(120, 50%, 50%)",
+   "displayable": true
+  },
+  "hsla(120, 50%, 50%, 0.5)": {
+   "channels": {
+    "h": "405e000000000000",
+    "s": "3fe0000000000000",
+    "l": "3fe0000000000000",
+    "opacity": "3fe0000000000000"
+   },
+   "formatHex": "#40bf40",
+   "formatRgb": "rgba(64, 191, 64, 0.5)",
+   "formatHsl": "hsla(120, 50%, 50%, 0.5)",
+   "displayable": true
+  },
+  "red": {
+   "channels": {
+    "r": "406fe00000000000",
+    "g": "0000000000000000",
+    "b": "0000000000000000",
+    "opacity": "3ff0000000000000"
+   },
+   "formatHex": "#ff0000",
+   "formatRgb": "rgb(255, 0, 0)",
+   "formatHsl": "hsl(0, 100%, 50%)",
+   "displayable": true
+  },
+  "rebeccapurple": {
+   "channels": {
+    "r": "4059800000000000",
+    "g": "4049800000000000",
+    "b": "4063200000000000",
+    "opacity": "3ff0000000000000"
+   },
+   "formatHex": "#663399",
+   "formatRgb": "rgb(102, 51, 153)",
+   "formatHsl": "hsl(270, 49.99999999999999%, 40%)",
+   "displayable": true
+  },
+  "transparent": {
+   "channels": {
+    "r": "7ff8000000000000",
+    "g": "7ff8000000000000",
+    "b": "7ff8000000000000",
+    "opacity": "0000000000000000"
+   },
+   "formatHex": "#000000",
+   "formatRgb": "rgba(0, 0, 0, 0)",
+   "formatHsl": "hsla(0, 0%, 0%, 0)",
+   "displayable": false
+  },
+  "white": {
+   "channels": {
+    "r": "406fe00000000000",
+    "g": "406fe00000000000",
+    "b": "406fe00000000000",
+    "opacity": "3ff0000000000000"
+   },
+   "formatHex": "#ffffff",
+   "formatRgb": "rgb(255, 255, 255)",
+   "formatHsl": "hsl(0, 0%, 100%)",
+   "displayable": true
+  },
+  "black": {
+   "channels": {
+    "r": "0000000000000000",
+    "g": "0000000000000000",
+    "b": "0000000000000000",
+    "opacity": "3ff0000000000000"
+   },
+   "formatHex": "#000000",
+   "formatRgb": "rgb(0, 0, 0)",
+   "formatHsl": "hsl(0, 0%, 0%)",
+   "displayable": true
+  },
+  "not a colour": null,
+  "": null,
+  "#ff00": {
+   "channels": {
+    "r": "7ff8000000000000",
+    "g": "7ff8000000000000",
+    "b": "7ff8000000000000",
+    "opacity": "0000000000000000"
+   },
+   "formatHex": "#000000",
+   "formatRgb": "rgba(0, 0, 0, 0)",
+   "formatHsl": "hsla(0, 0%, 0%, 0)",
+   "displayable": false
+  },
+  "#ff00000000": null,
+  "rgb(255, 0)": null,
+  "rgb(1, 2, 3, 4)": null,
+  "hsl(120, 50, 50)": null,
+  "rgb( 255 , 0 , 0 )": {
+   "channels": {
+    "r": "406fe00000000000",
+    "g": "0000000000000000",
+    "b": "0000000000000000",
+    "opacity": "3ff0000000000000"
+   },
+   "formatHex": "#ff0000",
+   "formatRgb": "rgb(255, 0, 0)",
+   "formatHsl": "hsl(0, 100%, 50%)",
+   "displayable": true
+  },
+  "RGB(255, 0, 0)": {
+   "channels": {
+    "r": "406fe00000000000",
+    "g": "0000000000000000",
+    "b": "0000000000000000",
+    "opacity": "3ff0000000000000"
+   },
+   "formatHex": "#ff0000",
+   "formatRgb": "rgb(255, 0, 0)",
+   "formatHsl": "hsl(0, 100%, 50%)",
+   "displayable": true
+  }
+ },
+ "conversions": {
+  "rgb": [
+   "4051800000000000",
+   "4060400000000000",
+   "4066800000000000",
+   "3ff0000000000000"
+  ],
+  "hsl": [
+   "4069e8ba2e8ba2e9",
+   "3fdc28f5c28f5c29",
+   "3fdf5f5f5f5f5f60",
+   "3ff0000000000000"
+  ],
+  "lab": [
+   "4049fe3d67756e0a",
+   "c020b9bfe0bc73a0",
+   "c0406a95e543eca8",
+   "3ff0000000000000"
+  ],
+  "hcl": [
+   "406ff6b91145fb1e",
+   "4040f0c4bea8881a",
+   "4049fe3d67756e0a",
+   "3ff0000000000000"
+  ],
+  "cubehelix": [
+   "40695b25eba49a0c",
+   "3fe412f6537d62e6",
+   "3fdd7d7daacbebdf",
+   "3ff0000000000000"
+  ]
+ },
+ "brighter": [
+  [
+   "rgb(100, 186, 255)",
+   "#64baff",
+   "hsl(207.27272727272728, 102.80373831775707%, 70.0280112044818%)"
+  ],
+  [
+   "rgb(255, 0, 0)",
+   "#ff0000",
+   "hsl(0, 250%, 71.42857142857143%)"
+  ],
+  [
+   "rgb(146, 219, 146)",
+   "#92db92",
+   "hsl(120, 50%, 71.42857142857143%)"
+  ],
+  [
+   "rgba(0, 0, 0, 0)",
+   "#000000",
+   "hsla(0, 0%, 0%, 0)"
+  ]
+ ],
+ "darker": [
+  [
+   "rgb(49, 91, 126)",
+   "#315b7e",
+   "hsl(207.27272727272728, 43.999999999999986%, 34.31372549019608%)"
+  ],
+  [
+   "rgb(179, 0, 0)",
+   "#b30000",
+   "hsl(0, 100%, 35%)"
+  ],
+  [
+   "rgb(45, 134, 45)",
+   "#2d862d",
+   "hsl(120, 50%, 35%)"
+  ],
+  [
+   "rgba(0, 0, 0, 0)",
+   "#000000",
+   "hsla(0, 0%, 0%, 0)"
+  ]
+ ],
+ "made": {
+  "rgb": "rgb(1, 2, 3)",
+  "rgbOpacity": "rgba(1, 2, 3, 0.5)",
+  "hsl": "hsl(120, 50%, 50%)",
+  "hslOpacity": "hsla(120, 50%, 50%, 0.5)",
+  "lab": "rgb(133, 108, 170)",
+  "gray": "rgb(119, 119, 119)",
+  "hcl": "rgb(99, 128, 56)",
+  "lch": "rgb(99, 128, 56)",
+  "cubehelix": "rgb(81, 157, 96)"
+ }
+}

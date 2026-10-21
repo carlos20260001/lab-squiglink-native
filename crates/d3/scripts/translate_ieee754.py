@@ -1660,10 +1660,19 @@ def translate_body(text, tables, where=""):
         r"\1 = ((((\2) as u32) & ((\3) as u32)) as i32);",
         out)
     # The C's comparison of a word with a constant that does not fit in
-    # a signed word is on unsigned words, and the port does the same.
+    # a signed word is on unsigned words, for the C's constant is an
+    # unsigned one, and the port does the same. A constant that does fit
+    # is a signed one, and the comparison is a signed one.
+    def compare(match):
+        word, operator, literal = (
+            match.group(1), match.group(2), match.group(3))
+        if int(literal, 16) >= 0x80000000:
+            return f"({word} as u32) {operator} ({literal}u32)"
+        return match.group(0)
+
     out = re.sub(
         r"\b(" + words + r") (<=|>=|<|>|=) (0x[0-9A-Fa-f]{8,})\b",
-        r"(\1 as u32) \2 (\3 as u32)",
+        compare,
         out)
     out = re.sub(
         r"\b(" + words + r") \| (0x[0-9A-Fa-f]+)\b",

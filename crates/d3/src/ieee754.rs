@@ -627,12 +627,12 @@ fn ieee754_rem_pio2(x: f64, y: &mut [f64; 3]) -> Int32 {
     z = 0.0;
     hx = (get_high_word(x) as Int32) as Int32;
     ix = ((((hx as u32) as u32) & (0x7FFFFFFF as u32) as u32) as i32) as Int32;
-    if ((ix as u32) <= (0x3FE921FB as u32)) {
+    if (ix <= 0x3FE921FB) {
         y[0] = x;
         y[(1) as usize] = 0.0;
         return 0;
     }
-    if ((ix as u32) < (0x4002D97C as u32)) {
+    if (ix < 0x4002D97C) {
         if (hx > 0) {
             z = x - pio2_1_IEEE754_REM_PIO2_1;
             if (ix != 0x3FF921FB) {
@@ -657,7 +657,7 @@ fn ieee754_rem_pio2(x: f64, y: &mut [f64; 3]) -> Int32 {
             return -1;
         }
     }
-    if ((ix as u32) <= (0x413921FB as u32)) {
+    if (ix <= 0x413921FB) {
         t = f64::abs(x);
         n = ((t * invpio2_IEEE754_REM_PIO2_1 + half_IEEE754_REM_PIO2_1) as Int32) as Int32;
         c_fn = ((n) as f64);
@@ -698,7 +698,7 @@ fn ieee754_rem_pio2(x: f64, y: &mut [f64; 3]) -> Int32 {
         }
     }
 
-    if ((ix as u32) >= (0x7FF00000 as u32)) {
+    if (ix >= 0x7FF00000) {
         y[0] = x - x;
         y[1] = x - x;
         return 0;
@@ -1038,7 +1038,7 @@ fn kernel_cos(x: f64, y: f64) -> f64 {
     let mut ix: Int32 = 0;
     ix = (get_high_word(x) as Int32) as Int32;
     ix &= 0x7FFFFFFF;
-    if ((ix as u32) < (0x3E400000 as u32)) {
+    if (ix < 0x3E400000) {
         if (((x) as Int32) == 0) {
             return one_KERNEL_COS_1;
         }
@@ -1049,10 +1049,10 @@ fn kernel_cos(x: f64, y: f64) -> f64 {
             + z * (C2_KERNEL_COS_1
                 + z * (C3_KERNEL_COS_1
                     + z * (C4_KERNEL_COS_1 + z * (C5_KERNEL_COS_1 + z * C6_KERNEL_COS_1)))));
-    if ((ix as u32) < (0x3FD33333 as u32)) {
+    if (ix < 0x3FD33333) {
         return one_KERNEL_COS_1 - (0.5 * z - (z * r - x * y));
     } else {
-        if ((ix as u32) > (0x3FE90000 as u32)) {
+        if (ix > 0x3FE90000) {
             qx = 0.28125;
         } else {
             qx = insert_words(
@@ -1075,7 +1075,7 @@ fn kernel_sin(x: f64, y: f64, iy: Int32) -> f64 {
     let mut ix: Int32 = 0;
     ix = (get_high_word(x) as Int32) as Int32;
     ix &= 0x7FFFFFFF;
-    if ((ix as u32) < (0x3E400000 as u32)) {
+    if (ix < 0x3E400000) {
         if (((x) as Int32) == 0) {
             return x;
         }
@@ -1104,7 +1104,7 @@ fn kernel_tan(mut x: f64, mut y: f64, iy: Int32) -> f64 {
 
     hx = (get_high_word(x) as Int32) as Int32;
     ix = ((((hx as u32) as u32) & (0x7FFFFFFF as u32) as u32) as i32) as Int32;
-    if ((ix as u32) < (0x3E300000 as u32)) {
+    if (ix < 0x3E300000) {
         if (((x) as Int32) == 0) {
             let mut low: Int32 = 0;
             low = (get_low_word(x) as Int32) as Int32;
@@ -1130,7 +1130,7 @@ fn kernel_tan(mut x: f64, mut y: f64, iy: Int32) -> f64 {
             }
         }
     }
-    if ((ix as u32) >= (0x3FE59428 as u32)) {
+    if (ix >= 0x3FE59428) {
         if (hx < 0) {
             x = -x;
             y = -y;
@@ -1149,7 +1149,7 @@ fn kernel_tan(mut x: f64, mut y: f64, iy: Int32) -> f64 {
     r = y + z * (s * (r + v) + y);
     r += T[0] * s;
     w = x + r;
-    if ((ix as u32) >= (0x3FE59428 as u32)) {
+    if (ix >= 0x3FE59428) {
         v = (iy) as f64;
         return ((1 - ((hx >> 30) & 2)) as f64) * (v - 2.0 * (x - (w * w / (w + v) - r)));
     }
@@ -1179,9 +1179,9 @@ pub fn cos(x: f64) -> f64 {
     ix = (get_high_word(x) as Int32) as Int32;
 
     ix &= 0x7FFFFFFF;
-    if ((ix as u32) <= (0x3FE921FB as u32)) {
+    if (ix <= 0x3FE921FB) {
         return kernel_cos(x, z);
-    } else if ((ix as u32) >= (0x7FF00000 as u32)) {
+    } else if (ix >= 0x7FF00000) {
         return x - x;
     } else {
         n = (ieee754_rem_pio2(x, &mut y)) as Int32;
@@ -1212,9 +1212,9 @@ pub fn sin(x: f64) -> f64 {
     ix = (get_high_word(x) as Int32) as Int32;
 
     ix &= 0x7FFFFFFF;
-    if ((ix as u32) <= (0x3FE921FB as u32)) {
+    if (ix <= 0x3FE921FB) {
         return kernel_sin(x, z, 0);
-    } else if ((ix as u32) >= (0x7FF00000 as u32)) {
+    } else if (ix >= 0x7FF00000) {
         return x - x;
     } else {
         n = (ieee754_rem_pio2(x, &mut y)) as Int32;
@@ -1245,9 +1245,9 @@ pub fn tan(x: f64) -> f64 {
     ix = (get_high_word(x) as Int32) as Int32;
 
     ix &= 0x7FFFFFFF;
-    if ((ix as u32) <= (0x3FE921FB as u32)) {
+    if (ix <= 0x3FE921FB) {
         return kernel_tan(x, z, 1);
-    } else if ((ix as u32) >= (0x7FF00000 as u32)) {
+    } else if (ix >= 0x7FF00000) {
         return x - x;
     } else {
         n = (ieee754_rem_pio2(x, &mut y)) as Int32;
@@ -1270,7 +1270,7 @@ pub fn acos(x: f64) -> f64 {
     let mut ix: Int32 = 0;
     hx = (get_high_word(x) as Int32) as Int32;
     ix = ((((hx as u32) as u32) & (0x7FFFFFFF as u32) as u32) as i32) as Int32;
-    if ((ix as u32) >= (0x3FF00000 as u32)) {
+    if (ix >= 0x3FF00000) {
         let mut lx: Int32 = 0;
         lx = (get_low_word(x) as Int32) as Int32;
         if ((((ix.wrapping_sub(0x3FF00000)) as u32) | (lx as u32)) == 0) {
@@ -1282,8 +1282,8 @@ pub fn acos(x: f64) -> f64 {
         }
         return f64::NAN;
     }
-    if ((ix as u32) < (0x3FE00000 as u32)) {
-        if ((ix as u32) <= (0x3C600000 as u32)) {
+    if (ix < 0x3FE00000) {
+        if (ix <= 0x3C600000) {
             return pio2_hi_ACOS_1 + pio2_lo_ACOS_1;
         }
         z = x * x;
@@ -1337,15 +1337,15 @@ pub fn asin(x: f64) -> f64 {
     t = 0.0;
     hx = (get_high_word(x) as Int32) as Int32;
     ix = ((((hx as u32) as u32) & (0x7FFFFFFF as u32) as u32) as i32) as Int32;
-    if ((ix as u32) >= (0x3FF00000 as u32)) {
+    if (ix >= 0x3FF00000) {
         let mut lx: Int32 = 0;
         lx = (get_low_word(x) as Int32) as Int32;
         if ((((ix.wrapping_sub(0x3FF00000)) as u32) | (lx as u32)) == 0) {
             return x * pio2_hi_ASIN_1 + x * pio2_lo_ASIN_1;
         }
         return f64::NAN;
-    } else if ((ix as u32) < (0x3FE00000 as u32)) {
-        if ((ix as u32) < (0x3E400000 as u32)) {
+    } else if (ix < 0x3FE00000) {
+        if (ix < 0x3E400000) {
             if (huge_ASIN_1 + x > one_ASIN_1) {
                 return x;
             }
@@ -1369,7 +1369,7 @@ pub fn asin(x: f64) -> f64 {
                 + t * (pS2_ASIN_1 + t * (pS3_ASIN_1 + t * (pS4_ASIN_1 + t * pS5_ASIN_1)))));
     q = one_ASIN_1 + t * (qS1_ASIN_1 + t * (qS2_ASIN_1 + t * (qS3_ASIN_1 + t * qS4_ASIN_1)));
     s = f64::sqrt(t);
-    if ((ix as u32) >= (0x3FEF3333 as u32)) {
+    if (ix >= 0x3FEF3333) {
         w = p / q;
         t = pio2_hi_ASIN_1 - (2.0 * (s + s * w) - pio2_lo_ASIN_1);
     } else {
@@ -1400,10 +1400,10 @@ pub fn atan(mut x: f64) -> f64 {
 
     hx = (get_high_word(x) as Int32) as Int32;
     ix = ((((hx as u32) as u32) & (0x7FFFFFFF as u32) as u32) as i32) as Int32;
-    if ((ix as u32) >= (0x44100000 as u32)) {
+    if (ix >= 0x44100000) {
         let mut low: Int32 = 0;
         low = (get_low_word(x) as Int32) as Int32;
-        if ((ix as u32) > (0x7FF00000 as u32) || (ix == 0x7FF00000 && (low != 0))) {
+        if (ix > 0x7FF00000 || (ix == 0x7FF00000 && (low != 0))) {
             return x + x;
         }
         if (hx > 0) {
@@ -1412,8 +1412,8 @@ pub fn atan(mut x: f64) -> f64 {
             return -atanhi_ATAN_1[3] - atanlo_ATAN_1[3];
         }
     }
-    if ((ix as u32) < (0x3FDC0000 as u32)) {
-        if ((ix as u32) < (0x3E400000 as u32)) {
+    if (ix < 0x3FDC0000) {
+        if (ix < 0x3E400000) {
             if (huge_ATAN_1 + x > one_ATAN_1) {
                 return x;
             }
@@ -1421,8 +1421,8 @@ pub fn atan(mut x: f64) -> f64 {
         id = -1;
     } else {
         x = f64::abs(x);
-        if ((ix as u32) < (0x3FF30000 as u32)) {
-            if ((ix as u32) < (0x3FE60000 as u32)) {
+        if (ix < 0x3FF30000) {
+            if (ix < 0x3FE60000) {
                 id = 0;
                 x = (2.0 * x - one_ATAN_1) / (2.0 + x);
             } else {
@@ -1430,7 +1430,7 @@ pub fn atan(mut x: f64) -> f64 {
                 x = (x - one_ATAN_1) / (x + one_ATAN_1);
             }
         } else {
-            if ((ix as u32) < (0x40038000 as u32)) {
+            if (ix < 0x40038000) {
                 id = 2;
                 x = (x - 1.5) / (one_ATAN_1 + 1.5 * x);
             } else {
@@ -1599,8 +1599,8 @@ pub fn exp(mut x: f64) -> f64 {
     xsb = (hx >> 31) & 1;
     hx &= 0x7FFFFFFF;
 
-    if ((hx as u32) >= (0x40862E42 as u32)) {
-        if ((hx as u32) >= (0x7FF00000 as u32)) {
+    if (hx >= 0x40862E42) {
+        if (hx >= 0x7FF00000) {
             let mut lx: Int32 = 0;
             lx = (get_low_word(x) as Int32) as Int32;
             if ((((hx & (0xFFFFF as i32)) as u32) | (lx as u32)) != 0) {
@@ -1617,8 +1617,8 @@ pub fn exp(mut x: f64) -> f64 {
         }
     }
 
-    if ((hx as u32) > (0x3FD62E42 as u32)) {
-        if ((hx as u32) < (0x3FF0A2B2 as u32)) {
+    if (hx > 0x3FD62E42) {
+        if (hx < 0x3FF0A2B2) {
             if (x == 1.0) {
                 return E_EXP_1;
             }
@@ -1632,7 +1632,7 @@ pub fn exp(mut x: f64) -> f64 {
             lo = t * ln2LO[0];
         }
         x = hi - lo;
-    } else if ((hx as u32) < (0x3E300000 as u32)) {
+    } else if (hx < 0x3E300000) {
         if (huge_EXP_1 + x > one_EXP_1) {
             return one_EXP_1 + x;
         }
@@ -1688,7 +1688,7 @@ pub fn log(mut x: f64) -> f64 {
     (hx, lx) = (extract_words(x).0 as Int32, extract_words(x).1 as Int32);
 
     k = 0;
-    if ((hx as u32) < (0x00100000 as u32)) {
+    if (hx < 0x00100000) {
         if ((((hx & (0x7FFFFFFF as i32)) as u32) | (lx as u32)) == 0) {
             return -f64::INFINITY;
         }
@@ -1699,7 +1699,7 @@ pub fn log(mut x: f64) -> f64 {
         x *= two54_LOG_1;
         hx = (get_high_word(x) as Int32) as Int32;
     }
-    if ((hx as u32) >= (0x7FF00000 as u32)) {
+    if (hx >= 0x7FF00000) {
         return x + x;
     }
     k = k.wrapping_add((hx >> 20) - 1023);
@@ -1770,7 +1770,7 @@ pub fn log2(mut x: f64) -> f64 {
     (hx, lx) = (extract_words(x).0 as Int32, extract_words(x).1 as Int32);
 
     k = 0;
-    if ((hx as u32) < (0x00100000 as u32)) {
+    if (hx < 0x00100000) {
         if ((((hx & (0x7FFFFFFF as i32)) as u32) | (lx as u32)) == 0) {
             return -f64::INFINITY;
         }
@@ -1781,7 +1781,7 @@ pub fn log2(mut x: f64) -> f64 {
         x *= two54_LOG2_1;
         hx = (get_high_word(x) as Int32) as Int32;
     }
-    if ((hx as u32) >= (0x7FF00000 as u32)) {
+    if (hx >= 0x7FF00000) {
         return x + x;
     }
     if (hx == 0x3FF00000 && lx == 0) {
@@ -1821,7 +1821,7 @@ pub fn log10(mut x: f64) -> f64 {
     (hx, lx) = (extract_words(x).0 as Int32, extract_words(x).1 as Int32);
 
     k = 0;
-    if ((hx as u32) < (0x00100000 as u32)) {
+    if (hx < 0x00100000) {
         if ((((hx & (0x7FFFFFFF as i32)) as u32) | (lx as u32)) == 0) {
             return -f64::INFINITY;
         }
@@ -1833,7 +1833,7 @@ pub fn log10(mut x: f64) -> f64 {
         hx = (get_high_word(x) as Int32) as Int32;
         lx = (get_low_word(x) as Int32) as Int32;
     }
-    if ((hx as u32) >= (0x7FF00000 as u32)) {
+    if (hx >= 0x7FF00000) {
         return x + x;
     }
     if (hx == 0x3FF00000 && lx == 0) {
@@ -1869,16 +1869,16 @@ pub fn log1p(x: f64) -> f64 {
     ax = hx & (0x7FFFFFFF as i32);
 
     k = 1;
-    if ((hx as u32) < (0x3FDA827A as u32)) {
-        if ((ax as u32) >= (0x3FF00000 as u32)) {
+    if (hx < 0x3FDA827A) {
+        if (ax >= 0x3FF00000) {
             if (x == -1.0) {
                 return -f64::INFINITY;
             } else {
                 return f64::NAN;
             }
         }
-        if ((ax as u32) < (0x3E200000 as u32)) {
-            if (two54_LOG1P_1 + x > zero_LOG1P_1 && (ax as u32) < (0x3C900000 as u32)) {
+        if (ax < 0x3E200000) {
+            if (two54_LOG1P_1 + x > zero_LOG1P_1 && ax < 0x3C900000) {
                 return x;
             } else {
                 return x - x * x * 0.5;
@@ -1890,11 +1890,11 @@ pub fn log1p(x: f64) -> f64 {
             hu = 1;
         }
     }
-    if ((hx as u32) >= (0x7FF00000 as u32)) {
+    if (hx >= 0x7FF00000) {
         return x + x;
     }
     if (k != 0) {
-        if ((hx as u32) < (0x43400000 as u32)) {
+        if (hx < 0x43400000) {
             u = 1.0 + x;
             hu = (get_high_word(u) as Int32) as Int32;
             k = (hu >> 20) - 1023;
@@ -1992,9 +1992,9 @@ pub fn pow(x: f64, y: f64) -> f64 {
         return one_POW_1;
     }
 
-    if ((ix as u32) > (0x7ff00000 as u32)
+    if (ix > 0x7ff00000
         || ((ix == 0x7ff00000) && (lx != 0))
-        || (iy as u32) > (0x7ff00000 as u32)
+        || iy > 0x7ff00000
         || ((iy == 0x7ff00000) && (ly != 0)))
     {
         return x + y;
@@ -2002,9 +2002,9 @@ pub fn pow(x: f64, y: f64) -> f64 {
 
     yisint = 0;
     if (hx < 0) {
-        if ((iy as u32) >= (0x43400000 as u32)) {
+        if (iy >= 0x43400000) {
             yisint = 2;
-        } else if ((iy as u32) >= (0x3ff00000 as u32)) {
+        } else if (iy >= 0x3ff00000) {
             k = (iy >> 20) - 0x3ff;
             if (k > 20) {
                 j = ly >> (52 - k);
@@ -2024,7 +2024,7 @@ pub fn pow(x: f64, y: f64) -> f64 {
         if (iy == 0x7ff00000) {
             if ((((ix.wrapping_sub(0x3ff00000)) as u32) | (lx as u32)) == 0) {
                 return y - y;
-            } else if ((ix as u32) >= (0x3ff00000 as u32)) {
+            } else if (ix >= 0x3ff00000) {
                 return if (hy >= 0) { y } else { zero_POW_1 };
             } else {
                 return if (hy < 0) { -y } else { zero_POW_1 };
@@ -2077,16 +2077,16 @@ pub fn pow(x: f64, y: f64) -> f64 {
         s = -one_POW_1;
     }
 
-    if ((iy as u32) > (0x41e00000 as u32)) {
-        if ((iy as u32) > (0x43f00000 as u32)) {
-            if ((ix as u32) <= (0x3fefffff as u32)) {
+    if (iy > 0x41e00000) {
+        if (iy > 0x43f00000) {
+            if (ix <= 0x3fefffff) {
                 return if (hy < 0) {
                     huge_POW_1 * huge_POW_1
                 } else {
                     tiny_POW_1 * tiny_POW_1
                 };
             }
-            if ((ix as u32) >= (0x3ff00000 as u32)) {
+            if (ix >= 0x3ff00000) {
                 return if (hy > 0) {
                     huge_POW_1 * huge_POW_1
                 } else {
@@ -2095,14 +2095,14 @@ pub fn pow(x: f64, y: f64) -> f64 {
             }
         }
 
-        if ((ix as u32) < (0x3fefffff as u32)) {
+        if (ix < 0x3fefffff) {
             return if (hy < 0) {
                 s * huge_POW_1 * huge_POW_1
             } else {
                 s * tiny_POW_1 * tiny_POW_1
             };
         }
-        if ((ix as u32) > (0x3ff00000 as u32)) {
+        if (ix > 0x3ff00000) {
             return if (hy > 0) {
                 s * huge_POW_1 * huge_POW_1
             } else {
@@ -2126,7 +2126,7 @@ pub fn pow(x: f64, y: f64) -> f64 {
         let mut t_l: f64 = 0.0;
         n = 0;
 
-        if ((ix as u32) < (0x00100000 as u32)) {
+        if (ix < 0x00100000) {
             ax *= two53_POW_1;
             n -= 53;
             ix = (get_high_word(ax) as Int32) as Int32;
@@ -2193,7 +2193,7 @@ pub fn pow(x: f64, y: f64) -> f64 {
     p_h = y1 * t1;
     z = p_l + p_h;
     (j, i) = (extract_words(z).0 as Int32, extract_words(z).1 as Int32);
-    if ((j as u32) >= (0x40900000 as u32)) {
+    if (j >= 0x40900000) {
         if (((((j as u32).wrapping_sub(0x40900000 as u32)) as u32) | (i as u32)) != 0) {
             return s * huge_POW_1 * huge_POW_1;
         } else {
@@ -2214,7 +2214,7 @@ pub fn pow(x: f64, y: f64) -> f64 {
     i = j & (0x7fffffff as i32);
     k = (i >> 20) - 0x3ff;
     n = 0;
-    if ((i as u32) > (0x3fe00000 as u32)) {
+    if (i > 0x3fe00000) {
         n = j + (0x00100000 >> (k + 1));
         k = ((n & (0x7fffffff as i32)) >> 20) - 0x3ff;
         t = zero_POW_1;
@@ -2261,11 +2261,11 @@ pub fn cbrt(x: f64) -> f64 {
     (hx, low) = (extract_words(x).0 as Int32, extract_words(x).1 as Int32);
     sign = (((hx as u32) as u32) & (0x80000000u32) as u32) as Int32;
     hx ^= sign;
-    if ((hx as u32) >= (0x7FF00000 as u32)) {
+    if (hx >= 0x7FF00000) {
         return (x + x);
     }
 
-    if ((hx as u32) < (0x00100000 as u32)) {
+    if (hx < 0x00100000) {
         if (((hx as u32) | (low as u32)) == 0) {
             return (x);
         }
@@ -2318,9 +2318,9 @@ pub fn expm1(mut x: f64) -> f64 {
     xsb = ((((hx as u32) as u32) & (0x80000000u32) as u32) as Int32) as Int32;
     hx &= 0x7FFFFFFF;
 
-    if ((hx as u32) >= (0x4043687A as u32)) {
-        if ((hx as u32) >= (0x40862E42 as u32)) {
-            if ((hx as u32) >= (0x7FF00000 as u32)) {
+    if (hx >= 0x4043687A) {
+        if (hx >= 0x40862E42) {
+            if (hx >= 0x7FF00000) {
                 let mut low: Int32 = 0;
                 low = (get_low_word(x) as Int32) as Int32;
                 if ((((hx & (0xFFFFF as i32)) as u32) | (low as u32)) != 0) {
@@ -2340,8 +2340,8 @@ pub fn expm1(mut x: f64) -> f64 {
         }
     }
 
-    if ((hx as u32) > (0x3FD62E42 as u32)) {
-        if ((hx as u32) < (0x3FF0A2B2 as u32)) {
+    if (hx > 0x3FD62E42) {
+        if (hx < 0x3FF0A2B2) {
             if (xsb == 0) {
                 hi = x - ln2_hi_EXPM1_1;
                 lo = ln2_lo_EXPM1_1;
@@ -2359,7 +2359,7 @@ pub fn expm1(mut x: f64) -> f64 {
         }
         x = hi - lo;
         c = (hi - x) - lo;
-    } else if ((hx as u32) < (0x3C900000 as u32)) {
+    } else if (hx < 0x3C900000) {
         t = huge_EXPM1_1 + x;
         return x - (t - (huge_EXPM1_1 + x));
     } else {
@@ -2454,22 +2454,22 @@ pub fn cosh(x: f64) -> f64 {
     ix = (get_high_word(x) as Int32) as Int32;
     ix &= 0x7FFFFFFF;
 
-    if ((ix as u32) < (0x3FD62E43 as u32)) {
+    if (ix < 0x3FD62E43) {
         let mut t: f64 = expm1(f64::abs(x));
         let mut w: f64 = one_COSH_1 + t;
 
-        if ((ix as u32) < (0x3C800000 as u32)) {
+        if (ix < 0x3C800000) {
             return w;
         }
         return one_COSH_1 + (t * t) / (w + w);
     }
 
-    if ((ix as u32) < (0x40360000 as u32)) {
+    if (ix < 0x40360000) {
         let mut t: f64 = exp(f64::abs(x));
         return half_COSH_1 * t + half_COSH_1 / t;
     }
 
-    if ((ix as u32) < (0x40862E42 as u32)) {
+    if (ix < 0x40862E42) {
         return half_COSH_1 * exp(f64::abs(x));
     }
 
@@ -2479,7 +2479,7 @@ pub fn cosh(x: f64) -> f64 {
         return t * w;
     }
 
-    if ((ix as u32) >= (0x7FF00000 as u32)) {
+    if (ix >= 0x7FF00000) {
         return x * x;
     }
 
@@ -2496,7 +2496,7 @@ pub fn tanh(x: f64) -> f64 {
     jx = (get_high_word(x) as Int32) as Int32;
     ix = jx & (0x7FFFFFFF as i32);
 
-    if ((ix as u32) >= (0x7FF00000 as u32)) {
+    if (ix >= 0x7FF00000) {
         if (jx >= 0) {
             return one_TANH_1 / x + one_TANH_1;
         } else {
@@ -2504,13 +2504,13 @@ pub fn tanh(x: f64) -> f64 {
         }
     }
 
-    if ((ix as u32) < (0x40360000 as u32)) {
-        if ((ix as u32) < (0x3E300000 as u32)) {
+    if (ix < 0x40360000) {
+        if (ix < 0x3E300000) {
             if (huge_TANH_1 + x > one_TANH_1) {
                 return x;
             }
         }
-        if ((ix as u32) >= (0x3FF00000 as u32)) {
+        if (ix >= 0x3FF00000) {
             t = expm1(two_TANH_1 * f64::abs(x));
             z = one_TANH_1 - two_TANH_1 / (t + two_TANH_1);
         } else {
@@ -2531,17 +2531,17 @@ pub fn asinh(x: f64) -> f64 {
     let mut ix: Int32 = 0;
     hx = (get_high_word(x) as Int32) as Int32;
     ix = ((((hx as u32) as u32) & (0x7FFFFFFF as u32) as u32) as i32) as Int32;
-    if ((ix as u32) >= (0x7FF00000 as u32)) {
+    if (ix >= 0x7FF00000) {
         return x + x;
     }
-    if ((ix as u32) < (0x3E300000 as u32)) {
+    if (ix < 0x3E300000) {
         if (huge_ASINH_1 + x > one_ASINH_1) {
             return x;
         }
     }
-    if ((ix as u32) > (0x41B00000 as u32)) {
+    if (ix > 0x41B00000) {
         w = log(f64::abs(x)) + ln2_ASINH_1;
-    } else if ((ix as u32) > (0x40000000 as u32)) {
+    } else if (ix > 0x40000000) {
         t = f64::abs(x);
         w = log(2.0 * t + one_ASINH_1 / (f64::sqrt(x * x + one_ASINH_1) + t));
     } else {
@@ -2561,17 +2561,17 @@ pub fn acosh(x: f64) -> f64 {
     let mut hx: Int32 = 0;
     let mut lx: Int32 = 0;
     (hx, lx) = (extract_words(x).0 as Int32, extract_words(x).1 as Int32);
-    if ((hx as u32) < (0x3FF00000 as u32)) {
+    if (hx < 0x3FF00000) {
         return f64::NAN;
-    } else if ((hx as u32) >= (0x41B00000 as u32)) {
-        if ((hx as u32) >= (0x7FF00000 as u32)) {
+    } else if (hx >= 0x41B00000) {
+        if (hx >= 0x7FF00000) {
             return x + x;
         } else {
             return log(x) + ln2_ACOSH_1;
         }
     } else if (((((hx as u32).wrapping_sub(0x3FF00000 as u32)) as u32) | (lx as u32)) == 0) {
         return 0.0;
-    } else if ((hx as u32) > (0x40000000 as u32)) {
+    } else if (hx > 0x40000000) {
         t = x * x;
         return log(2.0 * x - one_ACOSH_1 / (x + f64::sqrt(t - one_ACOSH_1)));
     } else {
@@ -2602,11 +2602,11 @@ pub fn atanh(mut x: f64) -> f64 {
             -f64::INFINITY
         };
     }
-    if ((ix as u32) < (0x3E300000 as u32) && (huge_ATANH_1 + x) > zero_ATANH_1) {
+    if (ix < 0x3E300000 && (huge_ATANH_1 + x) > zero_ATANH_1) {
         return x;
     }
     set_high_word(&mut x, (ix) as u32);
-    if ((ix as u32) < (0x3FE00000 as u32)) {
+    if (ix < 0x3FE00000) {
         t = x + x;
         t = 0.5 * log1p(t + t * x / (one_ATANH_1 - x));
     } else {
