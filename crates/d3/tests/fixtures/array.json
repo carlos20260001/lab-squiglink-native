@@ -1,0 +1,196 @@
+{
+  "range": [
+    0,
+    2,
+    4,
+    6,
+    8
+  ],
+  "rangeNeg": [
+    10,
+    8,
+    6,
+    4,
+    2
+  ],
+  "rangeFloat": [
+    0,
+    0.25,
+    0.5,
+    0.75
+  ],
+  "rangeOne": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ],
+  "min": 1,
+  "minEmpty": null,
+  "minNaN": 2,
+  "max": 3,
+  "maxEmpty": null,
+  "extent": [
+    1,
+    3
+  ],
+  "extentEmpty": [
+    null,
+    null
+  ],
+  "sum": 6,
+  "sumEmpty": 0,
+  "mean": 2,
+  "meanEmpty": null,
+  "median": 2,
+  "medianEven": 2.5,
+  "quantile": 2.5,
+  "quantileUnsorted": 2,
+  "variance": 1.6666666666666667,
+  "deviation": 1.2909944487358056,
+  "merge": [
+    1,
+    2,
+    3,
+    4,
+    5
+  ],
+  "transpose": [
+    [
+      1,
+      4
+    ],
+    [
+      2,
+      5
+    ],
+    [
+      3,
+      6
+    ]
+  ],
+  "transposeRagged": [
+    [
+      1,
+      4
+    ]
+  ],
+  "pairs": [
+    [
+      1,
+      2
+    ],
+    [
+      2,
+      3
+    ],
+    [
+      3,
+      4
+    ]
+  ],
+  "cross": [
+    [
+      1,
+      10
+    ],
+    [
+      1,
+      20
+    ],
+    [
+      2,
+      10
+    ],
+    [
+      2,
+      20
+    ]
+  ],
+  "zip": [
+    [
+      1,
+      10
+    ],
+    [
+      2,
+      20
+    ],
+    [
+      3,
+      30
+    ]
+  ],
+  "ticks": [
+    0,
+    2,
+    4,
+    6,
+    8,
+    10
+  ],
+  "ticksNeg": [
+    10,
+    8,
+    6,
+    4,
+    2,
+    0
+  ],
+  "tickIncrement": 2,
+  "tickStep": 2,
+  "tickStepNeg": -2,
+  "bisect": 3,
+  "bisectRight": 3,
+  "bisectLeft": 2,
+  "bisectorLeft": 2,
+  "bisectorRight": 3,
+  "ascending": [
+    -1,
+    1,
+    0
+  ],
+  "descending": [
+    1,
+    -1,
+    0
+  ],
+  "scan": 0,
+  "scanEmpty": null,
+  "permute": [
+    "c",
+    "a",
+    "b"
+  ],
+  "sturges": 4,
+  "scott": 2,
+  "fd": 2,
+  "histogram": [
+    {
+      "x0": 1,
+      "x1": 2,
+      "n": 1
+    },
+    {
+      "x0": 2,
+      "x1": 4,
+      "n": 5
+    },
+    {
+      "x0": 4,
+      "x1": 6,
+      "n": 3
+    },
+    {
+      "x0": 6,
+      "x1": 8,
+      "n": 2
+    },
+    {
+      "x0": 8,
+      "x1": 9,
+      "n": 2
+    }
+  ]
+}
