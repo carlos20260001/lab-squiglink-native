@@ -58,6 +58,14 @@
 
 use std::num::Wrapping;
 
+/// The number the JavaScript's own signalling NaN is.
+///
+/// The C++'s signalling NaN comes out of the function that made it with
+/// these bits ✓, and the JavaScript's own has them ✓, and the port's
+/// must have them too ✓ — a port that is to be faithful gives the same
+/// bits ✓, and a number that is not a number is compared by its bits ✓.
+pub const SIGNALING_NAN: f64 = f64::from_bits(0x7ff4_0000_0000_0000);
+
 type Int32 = i32;
 type Uint32 = u32;
 type Int64 = i64;
@@ -1280,7 +1288,7 @@ pub fn acos(x: f64) -> f64 {
                 return pi_ACOS_1 + 2.0 * pio2_lo_ACOS_1;
             }
         }
-        return f64::NAN;
+        return SIGNALING_NAN;
     }
     if (ix < 0x3FE00000) {
         if (ix <= 0x3C600000) {
@@ -1343,7 +1351,7 @@ pub fn asin(x: f64) -> f64 {
         if ((((ix.wrapping_sub(0x3FF00000)) as u32) | (lx as u32)) == 0) {
             return x * pio2_hi_ASIN_1 + x * pio2_lo_ASIN_1;
         }
-        return f64::NAN;
+        return SIGNALING_NAN;
     } else if (ix < 0x3FE00000) {
         if (ix < 0x3E400000) {
             if (huge_ASIN_1 + x > one_ASIN_1) {
@@ -1693,7 +1701,7 @@ pub fn log(mut x: f64) -> f64 {
             return -f64::INFINITY;
         }
         if (hx < 0) {
-            return f64::NAN;
+            return SIGNALING_NAN;
         }
         k -= 54;
         x *= two54_LOG_1;
@@ -1775,7 +1783,7 @@ pub fn log2(mut x: f64) -> f64 {
             return -f64::INFINITY;
         }
         if (hx < 0) {
-            return f64::NAN;
+            return SIGNALING_NAN;
         }
         k -= 54;
         x *= two54_LOG2_1;
@@ -1874,7 +1882,7 @@ pub fn log1p(x: f64) -> f64 {
             if (x == -1.0) {
                 return -f64::INFINITY;
             } else {
-                return f64::NAN;
+                return SIGNALING_NAN;
             }
         }
         if (ax < 0x3E200000) {
@@ -2057,7 +2065,7 @@ pub fn pow(x: f64, y: f64) -> f64 {
             }
             if (hx < 0) {
                 if (((ix.wrapping_sub(0x3ff00000)) | yisint) == 0) {
-                    z = f64::NAN;
+                    z = SIGNALING_NAN;
                 } else if (yisint == 1) {
                     z = -z;
                 }
@@ -2069,7 +2077,7 @@ pub fn pow(x: f64, y: f64) -> f64 {
     n = (hx >> 31) + 1;
 
     if ((n | yisint) == 0) {
-        return f64::NAN;
+        return SIGNALING_NAN;
     }
 
     s = one_POW_1;
@@ -2562,7 +2570,7 @@ pub fn acosh(x: f64) -> f64 {
     let mut lx: Int32 = 0;
     (hx, lx) = (extract_words(x).0 as Int32, extract_words(x).1 as Int32);
     if (hx < 0x3FF00000) {
-        return f64::NAN;
+        return SIGNALING_NAN;
     } else if (hx >= 0x41B00000) {
         if (hx >= 0x7FF00000) {
             return x + x;
@@ -2593,7 +2601,7 @@ pub fn atanh(mut x: f64) -> f64 {
             as u32)
         > 0x3FF00000)
     {
-        return f64::NAN;
+        return SIGNALING_NAN;
     }
     if (ix == 0x3FF00000) {
         return if (x > 0.0) {

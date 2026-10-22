@@ -89,13 +89,6 @@ fn the_unary_functions_are_the_javascript_s() {
             let input = number(input.as_str());
             let output = number(output.as_str().expect("the bits of a number"));
             let got = function_(input);
-            // A number that is not a number is the same number to the
-            // language, whatever bits it carries ✓, and the JavaScript's
-            // own carries the bits of the operation that made it ✓,
-            // which are not the bits of the number the port gives ✓.
-            if got.is_nan() && output.is_nan() {
-                continue;
-            }
             if got.to_bits() != output.to_bits() {
                 failures.push(format!(
                     "{}({}) gave {:016x}, the JavaScript gave {:016x}",
@@ -135,9 +128,6 @@ fn the_two_argument_functions_are_the_javascript_s() {
             let x = number(x);
             let output = number(output);
             let got = function_(y, x);
-            if got.is_nan() && output.is_nan() {
-                continue;
-            }
             if got.to_bits() != output.to_bits() {
                 failures.push(format!(
                     "{}({}, {}) gave {:016x}, the JavaScript gave {:016x}",

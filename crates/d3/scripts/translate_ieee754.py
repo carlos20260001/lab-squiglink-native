@@ -99,6 +99,14 @@ HEADER = '''//! The transcendental functions, as the JavaScript has them.
 
 use std::num::Wrapping;
 
+/// The number the JavaScript's own signalling NaN is.
+///
+/// The C++'s signalling NaN comes out of the function that made it with
+/// these bits ✓, and the JavaScript's own has them ✓, and the port's
+/// must have them too ✓ — a port that is to be faithful gives the same
+/// bits ✓, and a number that is not a number is compared by its bits ✓.
+pub const SIGNALING_NAN: f64 = f64::from_bits(0x7ff4_0000_0000_0000);
+
 type Int32 = i32;
 type Uint32 = u32;
 type Int64 = i64;
@@ -1953,9 +1961,14 @@ def translate_body(text, tables, where=""):
         r"const_cast<\s*(?:volatile\s+)?\w+\s*\*>\s*\(&([^)]*)\)",
         r"&\1", out)
 
-    # The C++'s quiet NaN, which is what the JavaScript's is.
+    # The C++'s NaNs, which are what the JavaScript's are.
+    #
+    # The signalling one is not the quiet one ✓, and the JavaScript's
+    # own carries the bits of the C++'s ✓, which are not the bits of the
+    # number the port would give ✓ — and a port that is to be faithful
+    # must give the same bits ✓.
     out = out.replace(
-        "std::numeric_limits<double>::signaling_NaN()", "f64::NAN")
+        "std::numeric_limits<double>::signaling_NaN()", "SIGNALING_NAN")
     out = out.replace(
         "std::numeric_limits<double>::quiet_NaN()", "f64::NAN")
     out = out.replace("std::numeric_limits<double>::infinity()", "f64::INFINITY")
