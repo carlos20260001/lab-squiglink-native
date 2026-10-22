@@ -106,7 +106,7 @@ pub mod number;
 pub mod path;
 pub mod polygon;
 // pub mod quadtree;  // not yet written.
-// pub mod random;  // not yet written.
+pub mod random;
 // pub mod scale;  // not yet written.
 // pub mod scale_chromatic;  // not yet written.
 // pub mod selection;  // not yet written.
