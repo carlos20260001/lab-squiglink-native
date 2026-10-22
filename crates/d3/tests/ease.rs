@@ -40,28 +40,11 @@ fn numbers(value: &Value) -> Vec<f64> {
 
 /// Whether two numbers are the same number.
 ///
-/// The bits are the same, except that a `NaN` is a `NaN`.
-///
-/// The difference is the bits of a number that is not a number, and it
-/// is not a difference in the port: every step of the JavaScript's own
-/// arithmetic gives the same bits on both sides ✓ — the `pow` ✓, the
-/// `sin` ✓, the `tpmt` ✓ and the argument of the sine ✓ — and they
-/// differ only in the last multiplication, where the two are multiplying
-/// two numbers that are not numbers ✓.
-///
-/// And there the two runtimes differ: V8 gives the second of the two ✓
-/// and Rust gives the first ✓, so the same multiplication gives a
-/// different number by its bits ✓ — and the port cannot be made to
-/// agree without writing the multiplication the other way round ✓,
-/// which would be a translation that is not the JavaScript's ✓.
-///
-/// The value is the same either way ✓ — a number that is not a number
-/// is a number that is not a number ✓ — and only the bits of it differ
-/// ✓.
+/// The bits are the same, and the port's arithmetic ✓ — the
+/// [`crate::arith`] ✗ — is the JavaScript's own ✓, for the two
+/// runtimes give a number that is not a number different bits ✓ and
+/// the port has to give the JavaScript's ✓.
 fn same(a: f64, b: f64) -> bool {
-    if a.is_nan() && b.is_nan() {
-        return true;
-    }
     a.to_bits() == b.to_bits()
 }
 

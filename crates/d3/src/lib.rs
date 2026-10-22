@@ -75,6 +75,7 @@
 // that would hide which numbers the JavaScript has where.
 #![allow(clippy::too_many_arguments)]
 
+pub mod arith;
 pub mod array;
 pub mod collection;
 pub mod color;

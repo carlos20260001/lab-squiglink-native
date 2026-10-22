@@ -32,6 +32,7 @@
 //! [`crate::ieee754`], which is the same code, so that the eases agree with
 //! the JavaScript to the last bit.
 
+use crate::arith;
 use crate::ieee754;
 use crate::js;
 
@@ -614,7 +615,12 @@ pub fn ease_elastic_in_out(t: f64) -> f64 {
 /// }
 /// ```
 fn tpmt(x: f64) -> f64 {
-    (ieee754::pow(2.0, -10.0 * x) - 0.0009765625) * 1.0009775171065494
+    // The JavaScript's own arithmetic, which gives the second of two
+    // numbers that are not numbers ✓, and the machine's does not ✓.
+    arith::multiply(
+        arith::subtract(ieee754::pow(2.0, -10.0 * x), 0.0009765625),
+        1.0009775171065494,
+    )
 }
 
 /// d3-ease's `easePoly`, `easePolyIn`, `easePolyOut` and `easePolyInOut`,
@@ -930,7 +936,10 @@ impl Elastic {
     /// ```
     pub fn elastic_in(&self, mut t: f64) -> f64 {
         t -= 1.0;
-        self.amplitude * tpmt(-t) * ieee754::sin((self.phase - t) / self.period)
+        arith::multiply(
+            arith::multiply(self.amplitude, tpmt(-t)),
+            ieee754::sin((self.phase - t) / self.period),
+        )
     }
 
     /// The JavaScript's `elasticOut`.
@@ -944,7 +953,13 @@ impl Elastic {
     /// ```
     pub fn elastic_out(&self, t: f64) -> f64 {
         let t = js::number(t);
-        1.0 - self.amplitude * tpmt(t) * ieee754::sin((t + self.phase) / self.period)
+        arith::subtract(
+            1.0,
+            arith::multiply(
+                arith::multiply(self.amplitude, tpmt(t)),
+                ieee754::sin((t + self.phase) / self.period),
+            ),
+        )
     }
 
     /// The JavaScript's `elasticInOut`.
@@ -961,9 +976,18 @@ impl Elastic {
     pub fn elastic_in_out(&self, t: f64) -> f64 {
         let t = t * 2.0 - 1.0;
         let value = if t < 0.0 {
-            self.amplitude * tpmt(-t) * ieee754::sin((self.phase - t) / self.period)
+            arith::multiply(
+                arith::multiply(self.amplitude, tpmt(-t)),
+                ieee754::sin((self.phase - t) / self.period),
+            )
         } else {
-            2.0 - self.amplitude * tpmt(t) * ieee754::sin((self.phase + t) / self.period)
+            arith::subtract(
+                2.0,
+                arith::multiply(
+                    arith::multiply(self.amplitude, tpmt(t)),
+                    ieee754::sin((self.phase + t) / self.period),
+                ),
+            )
         };
         value / 2.0
     }
