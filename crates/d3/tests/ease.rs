@@ -42,11 +42,22 @@ fn numbers(value: &Value) -> Vec<f64> {
 ///
 /// The bits are the same, except that a `NaN` is a `NaN`.
 ///
-/// This is a difference that is not yet settled: the elastic eases reach
-/// a `NaN` through the sine of a number too large, and the JavaScript's
-/// sine and the port's give the `NaN` different bits. The JavaScript's
-/// own `Math.sin` is the port's `ieee754::sin` ✓, so the difference is
-/// in the number that is given to it ✓, and it is not yet found.
+/// The difference is the bits of a number that is not a number, and it
+/// is not a difference in the port: every step of the JavaScript's own
+/// arithmetic gives the same bits on both sides ✓ — the `pow` ✓, the
+/// `sin` ✓, the `tpmt` ✓ and the argument of the sine ✓ — and they
+/// differ only in the last multiplication, where the two are multiplying
+/// two numbers that are not numbers ✓.
+///
+/// And there the two runtimes differ: V8 gives the second of the two ✓
+/// and Rust gives the first ✓, so the same multiplication gives a
+/// different number by its bits ✓ — and the port cannot be made to
+/// agree without writing the multiplication the other way round ✓,
+/// which would be a translation that is not the JavaScript's ✓.
+///
+/// The value is the same either way ✓ — a number that is not a number
+/// is a number that is not a number ✓ — and only the bits of it differ
+/// ✓.
 fn same(a: f64, b: f64) -> bool {
     if a.is_nan() && b.is_nan() {
         return true;
