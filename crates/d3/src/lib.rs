@@ -78,6 +78,9 @@
 pub mod array;
 pub mod collection;
 pub mod color;
+pub mod dispatch;
+pub mod dsv;
+pub mod ease;
 pub mod format;
 pub mod ieee754;
 pub mod interpolate;

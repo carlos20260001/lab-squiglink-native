@@ -1,0 +1,871 @@
+{
+ "prototypeNames": [
+  "constructor",
+  "__defineGetter__",
+  "__defineSetter__",
+  "hasOwnProperty",
+  "__lookupGetter__",
+  "__lookupSetter__",
+  "isPrototypeOf",
+  "propertyIsEnumerable",
+  "toString",
+  "valueOf",
+  "__proto__",
+  "toLocaleString"
+ ],
+ "scenarios": {
+  "the types are refused": {
+   "steps": [
+    {
+     "do": "dispatch",
+     "as": "d",
+     "types": [
+      "start"
+     ]
+    },
+    {
+     "do": "dispatch",
+     "as": "d",
+     "types": [
+      "start",
+      "end"
+     ]
+    },
+    {
+     "do": "dispatch",
+     "as": "d",
+     "types": []
+    },
+    {
+     "do": "dispatch",
+     "as": "d",
+     "types": [
+      "start",
+      "start"
+     ]
+    },
+    {
+     "do": "dispatch",
+     "as": "d",
+     "types": [
+      "toString"
+     ]
+    },
+    {
+     "do": "dispatch",
+     "as": "d",
+     "types": [
+      "constructor"
+     ]
+    },
+    {
+     "do": "dispatch",
+     "as": "d",
+     "types": [
+      "hasOwnProperty"
+     ]
+    },
+    {
+     "do": "dispatch",
+     "as": "d",
+     "types": [
+      "isPrototypeOf"
+     ]
+    },
+    {
+     "do": "dispatch",
+     "as": "d",
+     "types": [
+      "propertyIsEnumerable"
+     ]
+    },
+    {
+     "do": "dispatch",
+     "as": "d",
+     "types": [
+      "toLocaleString"
+     ]
+    },
+    {
+     "do": "dispatch",
+     "as": "d",
+     "types": [
+      "valueOf"
+     ]
+    },
+    {
+     "do": "dispatch",
+     "as": "d",
+     "types": [
+      "__proto__"
+     ]
+    },
+    {
+     "do": "dispatch",
+     "as": "d",
+     "types": [
+      "__defineGetter__"
+     ]
+    },
+    {
+     "do": "dispatch",
+     "as": "d",
+     "types": [
+      "__defineSetter__"
+     ]
+    },
+    {
+     "do": "dispatch",
+     "as": "d",
+     "types": [
+      "__lookupGetter__"
+     ]
+    },
+    {
+     "do": "dispatch",
+     "as": "d",
+     "types": [
+      "__lookupSetter__"
+     ]
+    },
+    {
+     "do": "dispatch",
+     "as": "d",
+     "types": [
+      "a b"
+     ]
+    },
+    {
+     "do": "dispatch",
+     "as": "d",
+     "types": [
+      "a\tb"
+     ]
+    },
+    {
+     "do": "dispatch",
+     "as": "d",
+     "types": [
+      " start "
+     ]
+    },
+    {
+     "do": "dispatch",
+     "as": "d",
+     "types": [
+      "a.b"
+     ]
+    },
+    {
+     "do": "dispatch",
+     "as": "d",
+     "types": [
+      ""
+     ]
+    },
+    {
+     "do": "dispatch",
+     "as": "d",
+     "types": [
+      "0"
+     ]
+    },
+    {
+     "do": "dispatch",
+     "as": "d",
+     "types": [
+      "start",
+      "end",
+      "middle"
+     ]
+    }
+   ],
+   "log": [
+    "dispatch d",
+    "dispatch d",
+    "dispatch d",
+    "dispatch d ERROR illegal type: start",
+    "dispatch d ERROR illegal type: toString",
+    "dispatch d ERROR illegal type: constructor",
+    "dispatch d ERROR illegal type: hasOwnProperty",
+    "dispatch d ERROR illegal type: isPrototypeOf",
+    "dispatch d ERROR illegal type: propertyIsEnumerable",
+    "dispatch d ERROR illegal type: toLocaleString",
+    "dispatch d ERROR illegal type: valueOf",
+    "dispatch d ERROR illegal type: __proto__",
+    "dispatch d ERROR illegal type: __defineGetter__",
+    "dispatch d ERROR illegal type: __defineSetter__",
+    "dispatch d ERROR illegal type: __lookupGetter__",
+    "dispatch d ERROR illegal type: __lookupSetter__",
+    "dispatch d ERROR illegal type: a b",
+    "dispatch d ERROR illegal type: a\tb",
+    "dispatch d ERROR illegal type:  start ",
+    "dispatch d ERROR illegal type: a.b",
+    "dispatch d ERROR illegal type: ",
+    "dispatch d",
+    "dispatch d"
+   ]
+  },
+  "a callback is called": {
+   "steps": [
+    {
+     "do": "dispatch",
+     "as": "d",
+     "types": [
+      "start",
+      "end"
+     ]
+    },
+    {
+     "do": "on",
+     "typename": "start",
+     "callback": "a"
+    },
+    {
+     "do": "on",
+     "typename": "end",
+     "callback": "b"
+    },
+    {
+     "do": "call",
+     "typename": "start",
+     "args": [
+      {
+       "bits": "3ff0000000000000"
+      },
+      {
+       "text": "two"
+      }
+     ]
+    },
+    {
+     "do": "call",
+     "typename": "end",
+     "args": []
+    },
+    {
+     "do": "apply",
+     "typename": "start",
+     "args": [
+      {
+       "bits": "3ff0000000000000"
+      },
+      {
+       "text": "two"
+      }
+     ]
+    }
+   ],
+   "log": [
+    "dispatch d",
+    "on start a",
+    "on end b",
+    "call start",
+    "a(t:null,n:3ff0000000000000,s:two)",
+    "call end",
+    "b(t:null)",
+    "apply start",
+    "a(t:null,n:3ff0000000000000,s:two)"
+   ]
+  },
+  "the callbacks are called in order": {
+   "steps": [
+    {
+     "do": "dispatch",
+     "as": "d",
+     "types": [
+      "start"
+     ]
+    },
+    {
+     "do": "on",
+     "typename": "start.a",
+     "callback": "a"
+    },
+    {
+     "do": "on",
+     "typename": "start.b",
+     "callback": "b"
+    },
+    {
+     "do": "on",
+     "typename": "start.a",
+     "callback": "a2"
+    },
+    {
+     "do": "call",
+     "typename": "start",
+     "args": []
+    }
+   ],
+   "log": [
+    "dispatch d",
+    "on start.a a",
+    "on start.b b",
+    "on start.a a2",
+    "call start",
+    "b(t:null)",
+    "a2(t:null)"
+   ]
+  },
+  "the callback is given back": {
+   "steps": [
+    {
+     "do": "dispatch",
+     "as": "d",
+     "types": [
+      "start",
+      "end"
+     ]
+    },
+    {
+     "do": "on",
+     "typename": "start",
+     "callback": "a"
+    },
+    {
+     "do": "on",
+     "typename": "start.named",
+     "callback": "n"
+    },
+    {
+     "do": "on_get",
+     "typename": "start"
+    },
+    {
+     "do": "on_get",
+     "typename": "start.named"
+    },
+    {
+     "do": "on_get",
+     "typename": "start.missing"
+    },
+    {
+     "do": "on_get",
+     "typename": "end"
+    },
+    {
+     "do": "on_get",
+     "typename": "end start"
+    },
+    {
+     "do": "on_get",
+     "typename": "nope"
+    }
+   ],
+   "log": [
+    "dispatch d",
+    "on start a",
+    "on start.named n",
+    "get start found",
+    "a(t:null)",
+    "get start.named found",
+    "n(t:null)",
+    "get start.missing none",
+    "get end none",
+    "get end start found",
+    "a(t:null)",
+    "get nope ERROR unknown type: nope"
+   ]
+  },
+  "a callback is taken away": {
+   "steps": [
+    {
+     "do": "dispatch",
+     "as": "d",
+     "types": [
+      "start",
+      "end"
+     ]
+    },
+    {
+     "do": "on",
+     "typename": "start",
+     "callback": "s"
+    },
+    {
+     "do": "on",
+     "typename": "end",
+     "callback": "e"
+    },
+    {
+     "do": "on_null",
+     "typename": "start"
+    },
+    {
+     "do": "call",
+     "typename": "start",
+     "args": []
+    },
+    {
+     "do": "call",
+     "typename": "end",
+     "args": []
+    }
+   ],
+   "log": [
+    "dispatch d",
+    "on start s",
+    "on end e",
+    "remove start",
+    "call start",
+    "call end",
+    "e(t:null)"
+   ]
+  },
+  "a named callback is taken away": {
+   "steps": [
+    {
+     "do": "dispatch",
+     "as": "d",
+     "types": [
+      "start",
+      "end"
+     ]
+    },
+    {
+     "do": "on",
+     "typename": "start.foo",
+     "callback": "sf"
+    },
+    {
+     "do": "on",
+     "typename": "end.foo",
+     "callback": "ef"
+    },
+    {
+     "do": "on_null",
+     "typename": "start.foo"
+    },
+    {
+     "do": "call",
+     "typename": "start",
+     "args": []
+    },
+    {
+     "do": "call",
+     "typename": "end",
+     "args": []
+    },
+    {
+     "do": "on_null",
+     "typename": ".foo"
+    },
+    {
+     "do": "call",
+     "typename": "start",
+     "args": []
+    },
+    {
+     "do": "call",
+     "typename": "end",
+     "args": []
+    }
+   ],
+   "log": [
+    "dispatch d",
+    "on start.foo sf",
+    "on end.foo ef",
+    "remove start.foo",
+    "call start",
+    "call end",
+    "ef(t:null)",
+    "remove .foo",
+    "call start",
+    "call end"
+   ]
+  },
+  "several types at once": {
+   "steps": [
+    {
+     "do": "dispatch",
+     "as": "d",
+     "types": [
+      "start",
+      "end",
+      "middle"
+     ]
+    },
+    {
+     "do": "on",
+     "typename": "start end",
+     "callback": "se"
+    },
+    {
+     "do": "call",
+     "typename": "start",
+     "args": []
+    },
+    {
+     "do": "call",
+     "typename": "end",
+     "args": []
+    },
+    {
+     "do": "call",
+     "typename": "middle",
+     "args": []
+    },
+    {
+     "do": "on",
+     "typename": "start.foo end.bar",
+     "callback": "x"
+    },
+    {
+     "do": "on",
+     "typename": "start.baz",
+     "callback": "y"
+    },
+    {
+     "do": "call",
+     "typename": "start",
+     "args": []
+    },
+    {
+     "do": "call",
+     "typename": "end",
+     "args": []
+    }
+   ],
+   "log": [
+    "dispatch d",
+    "on start end se",
+    "call start",
+    "se(t:null)",
+    "call end",
+    "se(t:null)",
+    "call middle",
+    "on start.foo end.bar x",
+    "on start.baz y",
+    "call start",
+    "se(t:null)",
+    "x(t:null)",
+    "y(t:null)",
+    "call end",
+    "se(t:null)",
+    "x(t:null)"
+   ]
+  },
+  "the copy is a copy": {
+   "steps": [
+    {
+     "do": "dispatch",
+     "as": "d",
+     "types": [
+      "start"
+     ]
+    },
+    {
+     "do": "on",
+     "typename": "start",
+     "callback": "a"
+    },
+    {
+     "do": "copy",
+     "as": "second",
+     "from": "d"
+    },
+    {
+     "do": "use",
+     "as": "second"
+    },
+    {
+     "do": "on",
+     "typename": "start",
+     "callback": "b"
+    },
+    {
+     "do": "call",
+     "typename": "start",
+     "args": []
+    },
+    {
+     "do": "use",
+     "as": "d"
+    },
+    {
+     "do": "call",
+     "typename": "start",
+     "args": []
+    }
+   ],
+   "log": [
+    "dispatch d",
+    "on start a",
+    "copy second",
+    "use second",
+    "on start b",
+    "call start",
+    "b(t:null)",
+    "use d",
+    "call start",
+    "a(t:null)"
+   ]
+  },
+  "the unknown type": {
+   "steps": [
+    {
+     "do": "dispatch",
+     "as": "d",
+     "types": [
+      "start"
+     ]
+    },
+    {
+     "do": "call",
+     "typename": "nope",
+     "args": []
+    },
+    {
+     "do": "apply",
+     "typename": "nope",
+     "args": []
+    },
+    {
+     "do": "on",
+     "typename": "nope",
+     "callback": "x"
+    },
+    {
+     "do": "on_get",
+     "typename": "nope"
+    },
+    {
+     "do": "on_null",
+     "typename": "nope"
+    },
+    {
+     "do": "on",
+     "typename": "start nope",
+     "callback": "x"
+    },
+    {
+     "do": "on",
+     "typename": "start. nope",
+     "callback": "x"
+    },
+    {
+     "do": "call",
+     "typename": "toString",
+     "args": []
+    },
+    {
+     "do": "on",
+     "typename": "toString",
+     "callback": "x"
+    }
+   ],
+   "log": [
+    "dispatch d",
+    "call nope",
+    "call nope ERROR unknown type: nope",
+    "apply nope",
+    "apply nope ERROR unknown type: nope",
+    "on nope ERROR unknown type: nope",
+    "get nope ERROR unknown type: nope",
+    "remove nope ERROR unknown type: nope",
+    "on start nope ERROR unknown type: nope",
+    "on start. nope ERROR unknown type: nope",
+    "call toString",
+    "call toString ERROR unknown type: toString",
+    "on toString ERROR unknown type: toString"
+   ]
+  },
+  "the arguments and the context": {
+   "steps": [
+    {
+     "do": "dispatch",
+     "as": "d",
+     "types": [
+      "start"
+     ]
+    },
+    {
+     "do": "on",
+     "typename": "start",
+     "callback": "a"
+    },
+    {
+     "do": "call",
+     "typename": "start",
+     "args": [
+      {
+       "bits": "3ff0000000000000"
+      },
+      {
+       "bits": "4004000000000000"
+      },
+      {
+       "text": "three"
+      }
+     ]
+    },
+    {
+     "do": "apply",
+     "typename": "start",
+     "args": [
+      {
+       "bits": "3ff0000000000000"
+      },
+      {
+       "bits": "4004000000000000"
+      },
+      {
+       "text": "three"
+      }
+     ]
+    },
+    {
+     "do": "call",
+     "typename": "start",
+     "args": [],
+     "that": "one"
+    },
+    {
+     "do": "apply",
+     "typename": "start",
+     "args": [],
+     "that": "two"
+    }
+   ],
+   "log": [
+    "dispatch d",
+    "on start a",
+    "call start",
+    "a(t:null,n:3ff0000000000000,n:4004000000000000,s:three)",
+    "apply start",
+    "a(t:null,n:3ff0000000000000,n:4004000000000000,s:three)",
+    "call start",
+    "a(t:one)",
+    "apply start",
+    "a(t:two)"
+   ]
+  },
+  "the whitespace of a typename": {
+   "steps": [
+    {
+     "do": "dispatch",
+     "as": "d",
+     "types": [
+      "start",
+      "end"
+     ]
+    },
+    {
+     "do": "on",
+     "typename": " start  end ",
+     "callback": "se"
+    },
+    {
+     "do": "call",
+     "typename": "start",
+     "args": []
+    },
+    {
+     "do": "call",
+     "typename": "end",
+     "args": []
+    },
+    {
+     "do": "on",
+     "typename": "\tstart\tend\n",
+     "callback": "tab"
+    },
+    {
+     "do": "call",
+     "typename": "start",
+     "args": []
+    },
+    {
+     "do": "call",
+     "typename": "end",
+     "args": []
+    }
+   ],
+   "log": [
+    "dispatch d",
+    "on  start  end  se",
+    "call start",
+    "se(t:null)",
+    "call end",
+    "se(t:null)",
+    "on \tstart\tend\n tab",
+    "call start",
+    "tab(t:null)",
+    "call end",
+    "tab(t:null)"
+   ]
+  },
+  "the typename with nothing in it": {
+   "steps": [
+    {
+     "do": "dispatch",
+     "as": "d",
+     "types": [
+      "start"
+     ]
+    },
+    {
+     "do": "on",
+     "typename": "start",
+     "callback": "s"
+    },
+    {
+     "do": "on",
+     "typename": "",
+     "callback": "x"
+    },
+    {
+     "do": "on_null",
+     "typename": ""
+    },
+    {
+     "do": "on",
+     "typename": ".foo",
+     "callback": "y"
+    },
+    {
+     "do": "call",
+     "typename": "start",
+     "args": []
+    },
+    {
+     "do": "on",
+     "typename": "start.",
+     "callback": "dot"
+    },
+    {
+     "do": "call",
+     "typename": "start",
+     "args": []
+    },
+    {
+     "do": "on",
+     "typename": "start..two",
+     "callback": "two"
+    },
+    {
+     "do": "call",
+     "typename": "start",
+     "args": []
+    }
+   ],
+   "log": [
+    "dispatch d",
+    "on start s",
+    "on  x",
+    "remove ",
+    "on .foo y",
+    "call start",
+    "s(t:null)",
+    "on start. dot",
+    "call start",
+    "dot(t:null)",
+    "on start..two two",
+    "call start",
+    "dot(t:null)",
+    "two(t:null)"
+   ]
+  }
+ }
+}
