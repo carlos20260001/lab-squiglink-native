@@ -27,6 +27,19 @@ pub enum TimeZone {
 }
 
 impl TimeZone {
+    /// The offset from Greenwich of this timezone, in seconds, at a given
+    /// time.
+    ///
+    /// The JavaScript's own dates keep the seconds of the offset ✓, for
+    /// the offset of a timezone may be a number of seconds ✓, and the
+    /// whole minutes are the `getTimezoneOffset` of the JavaScript ✓.
+    pub fn offset_seconds_at(&self, instant: f64) -> i32 {
+        match self {
+            TimeZone::Utc => 0,
+            TimeZone::Local => local_offset_seconds_at(instant),
+        }
+    }
+
     /// The offset from Greenwich of this timezone, in minutes, at a given
     /// time.
     ///
@@ -49,6 +62,12 @@ fn local_offset_at(instant: f64) -> i32 {
     unix::offset_at(instant)
 }
 
+/// The system's own offset from Greenwich, in seconds, at a given time.
+#[cfg(unix)]
+fn local_offset_seconds_at(instant: f64) -> i32 {
+    unix::offset_seconds_at(instant)
+}
+
 /// The system's own offset from Greenwich, in minutes, at a given time.
 #[cfg(windows)]
 fn local_offset_at(instant: f64) -> i32 {
@@ -59,6 +78,15 @@ fn local_offset_at(instant: f64) -> i32 {
 #[cfg(target_arch = "wasm32")]
 fn local_offset_at(instant: f64) -> i32 {
     browser::offset_at(instant)
+}
+
+/// The browser's own offset from Greenwich, in seconds, at a given time.
+///
+/// The browser's own offset is a whole number of minutes ✓ — for its
+/// `getTimezoneOffset` is ✓ — and the seconds of it are not to be had ✓.
+#[cfg(target_arch = "wasm32")]
+fn local_offset_seconds_at(instant: f64) -> i32 {
+    browser::offset_at(instant) * 60
 }
 
 /// The offset of the operating system, on a program that runs natively.
@@ -92,6 +120,11 @@ mod unix {
 
     /// The offset from Greenwich, in minutes, at a given time ✓.
     pub fn offset_at(instant: f64) -> i32 {
+        offset_seconds_at(instant) / 60
+    }
+
+    /// The offset from Greenwich, in seconds, at a given time ✓.
+    pub fn offset_seconds_at(instant: f64) -> i32 {
         // The C library's own time is a whole number of seconds.
         let seconds = (instant / 1000.0).floor() as i64;
         let mut local = Tm {
@@ -111,8 +144,8 @@ mod unix {
         if read.is_null() {
             return 0;
         }
-        // The offset is in seconds, and the port counts minutes.
-        (local.offset as i32) / 60
+        // The offset is in seconds ✓, and the port keeps them ✓.
+        local.offset as i32
     }
 }
 

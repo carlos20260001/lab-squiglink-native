@@ -57,7 +57,10 @@ impl Date {
     }
 
     /// The local time of the date, in milliseconds since the epoch ✓.
+    ///
+    /// The offset is taken in seconds ✓, for the JavaScript's own dates
+    /// keep the seconds of it ✓.
     pub fn local_instant(&self) -> f64 {
-        self.instant + (self.offset() as f64) * 60_000.0
+        self.instant + (self.timezone.offset_seconds_at(self.instant) as f64) * 1000.0
     }
 }
