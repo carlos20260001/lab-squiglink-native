@@ -19,6 +19,7 @@ pub mod zoom;
 
 use std::collections::BTreeMap;
 
+use crate::arith;
 use crate::color::Color;
 use crate::js;
 
@@ -151,13 +152,18 @@ pub fn constant(value: Value) -> Box<dyn FnMut(f64) -> Value> {
 
 /// The JavaScript's `number`, which draws between two numbers.
 pub fn interpolate_number(a: f64, b: f64) -> impl Fn(f64) -> f64 {
-    move |t| a * (1.0 - t) + b * t
+    move |t| {
+        arith::add(
+            arith::multiply(a, arith::subtract(1.0, t)),
+            arith::multiply(b, t),
+        )
+    }
 }
 
 /// The JavaScript's `round`, which draws between two numbers and rounds
 /// the result to a whole number.
 pub fn interpolate_round(a: f64, b: f64) -> impl Fn(f64) -> f64 {
-    move |t| js::round(a * (1.0 - t) + b * t)
+    move |t| js::round(interpolate_number(a, b)(t))
 }
 
 /// The JavaScript's `date`, which draws between two dates.
@@ -166,7 +172,7 @@ pub fn interpolate_round(a: f64, b: f64) -> impl Fn(f64) -> f64 {
 /// `setTime` of it takes the whole part of the number, and not the
 /// number itself.
 pub fn interpolate_date(a: f64, b: f64) -> impl Fn(f64) -> f64 {
-    move |t| (a * (1.0 - t) + b * t).trunc()
+    move |t| interpolate_number(a, b)(t).trunc()
 }
 
 /// The JavaScript's `numberArray`, which draws between two lists of

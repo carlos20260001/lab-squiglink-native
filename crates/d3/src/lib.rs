@@ -89,7 +89,7 @@ pub mod js;
 pub mod number;
 // pub mod axis;  // not yet written.
 // pub mod brush;  // not yet written.
-// pub mod chord;  // not yet written.
+pub mod chord;
 // pub mod collection;  // not yet written.
 // pub mod color;  // not yet written.
 // pub mod contour;  // not yet written.
