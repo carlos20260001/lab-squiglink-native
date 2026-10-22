@@ -116,8 +116,8 @@ The licence of that translation is in
 | `zoom` | d3-zoom |
 
 The modules that are written are `array`, `collection`, `color`, `format`, `ieee754`,
-`interpolate`, `js`, `number`, `path`, `shape` and `time`; the rest are named in
-`src/lib.rs` with a note that they are not yet written, and the order
+`interpolate`, `js`, `number`, `path`, `polygon`, `shape` and `time`; the rest are
+named in `src/lib.rs` with a note that they are not yet written, and the order
 they are to be written in is the order they depend on each other.
 
 The formats write the numbers with the language's own rules, which are

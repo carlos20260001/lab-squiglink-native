@@ -104,7 +104,7 @@ pub mod number;
 // pub mod hierarchy;  // not yet written.
 // pub mod interpolate;  // not yet written.
 pub mod path;
-// pub mod polygon;  // not yet written.
+pub mod polygon;
 // pub mod quadtree;  // not yet written.
 // pub mod random;  // not yet written.
 // pub mod scale;  // not yet written.
