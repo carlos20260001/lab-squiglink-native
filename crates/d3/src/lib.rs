@@ -114,7 +114,7 @@ pub mod shape;
 pub mod time;
 // pub mod time;  // not yet written.
 pub mod time_format;
-// pub mod timer;  // not yet written.
+pub mod timer;
 // pub mod transition;  // not yet written.
 // pub mod voronoi;  // not yet written.
 // pub mod zoom;  // not yet written.

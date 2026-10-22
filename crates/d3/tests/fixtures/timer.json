@@ -1,0 +1,9075 @@
+{
+ "scenarios": {
+  "the clock is read": {
+   "steps": [
+    {
+     "do": "set",
+     "clock": {
+      "bits": "408f400000000000"
+     }
+    },
+    {
+     "do": "now"
+    },
+    {
+     "do": "advance",
+     "by": {
+      "bits": "4014000000000000"
+     }
+    },
+    {
+     "do": "now"
+    },
+    {
+     "do": "frame"
+    },
+    {
+     "do": "now"
+    }
+   ],
+   "log": [
+    "set n:408f400000000000",
+    "ask frame",
+    "now n:408f400000000000",
+    "advance n:4014000000000000",
+    "now n:408f400000000000",
+    "frame",
+    "ask frame",
+    "now n:408f680000000000"
+   ]
+  },
+  "a timer fires when its time comes": {
+   "steps": [
+    {
+     "do": "set",
+     "clock": {
+      "bits": "408f400000000000"
+     }
+    },
+    {
+     "do": "timer",
+     "id": 0,
+     "delay": {
+      "bits": "4059000000000000"
+     },
+     "time": null
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "advance",
+     "by": {
+      "bits": "4059000000000000"
+     }
+    },
+    {
+     "do": "frame"
+    },
+    {
+     "do": "advance",
+     "by": {
+      "bits": "4059000000000000"
+     }
+    },
+    {
+     "do": "frame"
+    }
+   ],
+   "log": [
+    "set n:408f400000000000",
+    "timer 0",
+    "ask frame",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "flush",
+    "advance n:4059000000000000",
+    "frame",
+    "call 0 n:0000000000000000",
+    "ask frame",
+    "advance n:4059000000000000",
+    "frame",
+    "call 0 n:4059000000000000",
+    "ask frame"
+   ]
+  },
+  "a timer with a time of its own": {
+   "steps": [
+    {
+     "do": "set",
+     "clock": {
+      "bits": "408f400000000000"
+     }
+    },
+    {
+     "do": "timer",
+     "id": 0,
+     "delay": {
+      "bits": "0000000000000000"
+     },
+     "time": {
+      "bits": "409f400000000000"
+     }
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "advance",
+     "by": {
+      "bits": "408f400000000000"
+     }
+    },
+    {
+     "do": "frame"
+    }
+   ],
+   "log": [
+    "set n:408f400000000000",
+    "timer 0",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "flush",
+    "ask frame",
+    "advance n:408f400000000000",
+    "frame",
+    "call 0 n:0000000000000000",
+    "ask frame"
+   ]
+  },
+  "a timer with no delay": {
+   "steps": [
+    {
+     "do": "set",
+     "clock": {
+      "bits": "408f400000000000"
+     }
+    },
+    {
+     "do": "timer",
+     "id": 0,
+     "delay": null,
+     "time": null
+    },
+    {
+     "do": "flush"
+    }
+   ],
+   "log": [
+    "set n:408f400000000000",
+    "timer 0",
+    "ask frame",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "flush",
+    "call 0 n:0000000000000000"
+   ]
+  },
+  "a timer whose time has passed": {
+   "steps": [
+    {
+     "do": "set",
+     "clock": {
+      "bits": "408f400000000000"
+     }
+    },
+    {
+     "do": "timer",
+     "id": 0,
+     "delay": {
+      "bits": "c059000000000000"
+     },
+     "time": null
+    },
+    {
+     "do": "flush"
+    }
+   ],
+   "log": [
+    "set n:408f400000000000",
+    "timer 0",
+    "ask frame",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "flush",
+    "call 0 n:4059000000000000"
+   ]
+  },
+  "a timer that is stopped does not fire": {
+   "steps": [
+    {
+     "do": "set",
+     "clock": {
+      "bits": "408f400000000000"
+     }
+    },
+    {
+     "do": "timer",
+     "id": 0,
+     "delay": {
+      "bits": "4059000000000000"
+     },
+     "time": null
+    },
+    {
+     "do": "stop",
+     "id": 0
+    },
+    {
+     "do": "advance",
+     "by": {
+      "bits": "4069000000000000"
+     }
+    },
+    {
+     "do": "frame"
+    },
+    {
+     "do": "flush"
+    }
+   ],
+   "log": [
+    "set n:408f400000000000",
+    "timer 0",
+    "ask frame",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "stop 0",
+    "advance n:4069000000000000",
+    "frame",
+    "clearInterval",
+    "flush",
+    "ask frame"
+   ]
+  },
+  "a timer that is stopped and started again": {
+   "steps": [
+    {
+     "do": "set",
+     "clock": {
+      "bits": "408f400000000000"
+     }
+    },
+    {
+     "do": "timer",
+     "id": 0,
+     "delay": {
+      "bits": "4059000000000000"
+     },
+     "time": null
+    },
+    {
+     "do": "stop",
+     "id": 0
+    },
+    {
+     "do": "frame"
+    },
+    {
+     "do": "restart",
+     "id": 0,
+     "delay": {
+      "bits": "4024000000000000"
+     },
+     "time": null
+    },
+    {
+     "do": "advance",
+     "by": {
+      "bits": "4034000000000000"
+     }
+    },
+    {
+     "do": "frame"
+    }
+   ],
+   "log": [
+    "set n:408f400000000000",
+    "timer 0",
+    "ask frame",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "stop 0",
+    "frame",
+    "clearInterval",
+    "restart 0",
+    "ask frame",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "advance n:4034000000000000",
+    "frame",
+    "call 0 n:4024000000000000",
+    "ask frame"
+   ]
+  },
+  "a timeout fires once": {
+   "steps": [
+    {
+     "do": "set",
+     "clock": {
+      "bits": "408f400000000000"
+     }
+    },
+    {
+     "do": "timeout",
+     "id": 0,
+     "delay": {
+      "bits": "4059000000000000"
+     },
+     "time": null
+    },
+    {
+     "do": "advance",
+     "by": {
+      "bits": "4059000000000000"
+     }
+    },
+    {
+     "do": "frame"
+    },
+    {
+     "do": "frame"
+    }
+   ],
+   "log": [
+    "set n:408f400000000000",
+    "timeout 0",
+    "ask frame",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "advance n:4059000000000000",
+    "frame",
+    "call 0 n:4059000000000000",
+    "clearInterval",
+    "frame"
+   ]
+  },
+  "a timeout with no delay": {
+   "steps": [
+    {
+     "do": "set",
+     "clock": {
+      "bits": "408f400000000000"
+     }
+    },
+    {
+     "do": "timeout",
+     "id": 0,
+     "delay": null,
+     "time": null
+    },
+    {
+     "do": "flush"
+    }
+   ],
+   "log": [
+    "set n:408f400000000000",
+    "timeout 0",
+    "ask frame",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "flush",
+    "call 0 n:0000000000000000"
+   ]
+  },
+  "an interval goes on firing": {
+   "steps": [
+    {
+     "do": "set",
+     "clock": {
+      "bits": "408f400000000000"
+     }
+    },
+    {
+     "do": "interval",
+     "id": 0,
+     "delay": {
+      "bits": "4059000000000000"
+     },
+     "time": null
+    },
+    {
+     "do": "advance",
+     "by": {
+      "bits": "4059000000000000"
+     }
+    },
+    {
+     "do": "frame"
+    },
+    {
+     "do": "advance",
+     "by": {
+      "bits": "4059000000000000"
+     }
+    },
+    {
+     "do": "frame"
+    },
+    {
+     "do": "advance",
+     "by": {
+      "bits": "4059000000000000"
+     }
+    },
+    {
+     "do": "frame"
+    }
+   ],
+   "log": [
+    "set n:408f400000000000",
+    "interval 0",
+    "ask frame",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "advance n:4059000000000000",
+    "frame",
+    "call 0 n:4059000000000000",
+    "setTimeout n:4059000000000000",
+    "clearInterval",
+    "advance n:4059000000000000",
+    "call 0 n:4069000000000000",
+    "setTimeout n:4059000000000000",
+    "frame",
+    "advance n:4059000000000000",
+    "call 0 n:4072c00000000000",
+    "setTimeout n:4059000000000000",
+    "frame"
+   ]
+  },
+  "an interval with no delay": {
+   "steps": [
+    {
+     "do": "set",
+     "clock": {
+      "bits": "408f400000000000"
+     }
+    },
+    {
+     "do": "interval",
+     "id": 0,
+     "delay": null,
+     "time": null
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "flush"
+    }
+   ],
+   "log": [
+    "set n:408f400000000000",
+    "interval 0",
+    "ask frame",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "flush",
+    "call 0 n:0000000000000000",
+    "flush",
+    "call 0 n:0000000000000000"
+   ]
+  },
+  "the timers are called in the order they were made in": {
+   "steps": [
+    {
+     "do": "set",
+     "clock": {
+      "bits": "408f400000000000"
+     }
+    },
+    {
+     "do": "timer",
+     "id": 0,
+     "delay": {
+      "bits": "4059000000000000"
+     },
+     "time": null
+    },
+    {
+     "do": "timer",
+     "id": 1,
+     "delay": {
+      "bits": "4049000000000000"
+     },
+     "time": null
+    },
+    {
+     "do": "advance",
+     "by": {
+      "bits": "4059000000000000"
+     }
+    },
+    {
+     "do": "frame"
+    }
+   ],
+   "log": [
+    "set n:408f400000000000",
+    "timer 0",
+    "ask frame",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "timer 1",
+    "advance n:4059000000000000",
+    "frame",
+    "call 0 n:0000000000000000",
+    "call 1 n:4049000000000000",
+    "ask frame"
+   ]
+  },
+  "a timer that is started again": {
+   "steps": [
+    {
+     "do": "set",
+     "clock": {
+      "bits": "408f400000000000"
+     }
+    },
+    {
+     "do": "timer",
+     "id": 0,
+     "delay": {
+      "bits": "4059000000000000"
+     },
+     "time": null
+    },
+    {
+     "do": "restart",
+     "id": 0,
+     "delay": {
+      "bits": "4049000000000000"
+     },
+     "time": null
+    },
+    {
+     "do": "advance",
+     "by": {
+      "bits": "404e000000000000"
+     }
+    },
+    {
+     "do": "frame"
+    }
+   ],
+   "log": [
+    "set n:408f400000000000",
+    "timer 0",
+    "ask frame",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "restart 0",
+    "advance n:404e000000000000",
+    "frame",
+    "call 0 n:4024000000000000",
+    "ask frame"
+   ]
+  },
+  "a callback that stops another timer": {
+   "steps": [
+    {
+     "do": "set",
+     "clock": {
+      "bits": "408f400000000000"
+     }
+    },
+    {
+     "do": "timer",
+     "id": 0,
+     "delay": {
+      "bits": "4059000000000000"
+     },
+     "time": null,
+     "stops": 1
+    },
+    {
+     "do": "timer",
+     "id": 1,
+     "delay": {
+      "bits": "4059000000000000"
+     },
+     "time": null
+    },
+    {
+     "do": "advance",
+     "by": {
+      "bits": "4059000000000000"
+     }
+    },
+    {
+     "do": "frame"
+    }
+   ],
+   "log": [
+    "set n:408f400000000000",
+    "timer 0",
+    "ask frame",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "timer 1",
+    "advance n:4059000000000000",
+    "frame",
+    "call 0 n:0000000000000000",
+    "ask frame"
+   ]
+  },
+  "the flush with nothing to do": {
+   "steps": [
+    {
+     "do": "set",
+     "clock": {
+      "bits": "408f400000000000"
+     }
+    },
+    {
+     "do": "flush"
+    }
+   ],
+   "log": [
+    "set n:408f400000000000",
+    "flush",
+    "ask frame"
+   ]
+  },
+  "the timer that is due within the frame": {
+   "steps": [
+    {
+     "do": "set",
+     "clock": {
+      "bits": "408f400000000000"
+     }
+    },
+    {
+     "do": "timer",
+     "id": 0,
+     "delay": {
+      "bits": "4038000000000000"
+     },
+     "time": null
+    },
+    {
+     "do": "frame"
+    }
+   ],
+   "log": [
+    "set n:408f400000000000",
+    "timer 0",
+    "ask frame",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "frame",
+    "ask frame"
+   ]
+  },
+  "the timer that is due after the frame": {
+   "steps": [
+    {
+     "do": "set",
+     "clock": {
+      "bits": "408f400000000000"
+     }
+    },
+    {
+     "do": "timer",
+     "id": 0,
+     "delay": {
+      "bits": "4039000000000000"
+     },
+     "time": null
+    },
+    {
+     "do": "frame"
+    }
+   ],
+   "log": [
+    "set n:408f400000000000",
+    "timer 0",
+    "ask frame",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "frame",
+    "setTimeout n:4039000000000000",
+    "clearInterval"
+   ]
+  },
+  "the clock's skew": {
+   "steps": [
+    {
+     "do": "set",
+     "clock": {
+      "bits": "408f400000000000"
+     }
+    },
+    {
+     "do": "timer",
+     "id": 0,
+     "delay": {
+      "bits": "4024000000000000"
+     },
+     "time": null
+    },
+    {
+     "do": "frame"
+    },
+    {
+     "do": "advance",
+     "by": {
+      "bits": "409f400000000000"
+     }
+    },
+    {
+     "do": "now"
+    }
+   ],
+   "log": [
+    "set n:408f400000000000",
+    "timer 0",
+    "ask frame",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "frame",
+    "ask frame",
+    "advance n:409f400000000000",
+    "ask frame",
+    "now n:408f400000000000"
+   ]
+  }
+ },
+ "fuzz": [
+  {
+   "steps": [
+    {
+     "do": "flush"
+    },
+    {
+     "do": "interval",
+     "id": 2,
+     "delay": {
+      "bits": "4038000000000000"
+     },
+     "time": {
+      "bits": "408f400000000000"
+     }
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "frame"
+    },
+    {
+     "do": "timeout",
+     "id": 1,
+     "delay": {
+      "bits": "4059000000000000"
+     },
+     "time": {
+      "bits": "40b3880000000000"
+     }
+    },
+    {
+     "do": "now"
+    }
+   ],
+   "log": [
+    "flush",
+    "ask frame",
+    "interval 2",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "flush",
+    "ask frame",
+    "flush",
+    "ask frame",
+    "frame",
+    "ask frame",
+    "setTimeout n:4090000000000000",
+    "clearInterval",
+    "timeout 1",
+    "clearTimeout",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "ask frame",
+    "now n:0000000000000000"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "flush"
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "advance",
+     "by": {
+      "bits": "4048000000000000"
+     }
+    },
+    {
+     "do": "now"
+    },
+    {
+     "do": "frame"
+    },
+    {
+     "do": "frame"
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "interval",
+     "id": 0,
+     "delay": {
+      "bits": "4049000000000000"
+     },
+     "time": {
+      "bits": "407f400000000000"
+     }
+    },
+    {
+     "do": "flush"
+    }
+   ],
+   "log": [
+    "flush",
+    "ask frame",
+    "flush",
+    "ask frame",
+    "advance n:4048000000000000",
+    "ask frame",
+    "now n:4048000000000000",
+    "frame",
+    "frame",
+    "flush",
+    "ask frame",
+    "interval 0",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "flush"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "flush"
+    },
+    {
+     "do": "interval",
+     "id": 1,
+     "delay": null,
+     "time": {
+      "bits": "409f400000000000"
+     }
+    },
+    {
+     "do": "stop",
+     "id": 1
+    }
+   ],
+   "log": [
+    "flush",
+    "ask frame",
+    "interval 1",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "stop 1"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "flush"
+    },
+    {
+     "do": "frame"
+    },
+    {
+     "do": "set",
+     "clock": {
+      "bits": "4091680000000000"
+     }
+    },
+    {
+     "do": "interval",
+     "id": 2,
+     "delay": {
+      "bits": "408f400000000000"
+     },
+     "time": {
+      "bits": "407f400000000000"
+     }
+    },
+    {
+     "do": "frame"
+    },
+    {
+     "do": "advance",
+     "by": {
+      "bits": "405d000000000000"
+     }
+    }
+   ],
+   "log": [
+    "flush",
+    "ask frame",
+    "frame",
+    "set n:4091680000000000",
+    "interval 2",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "frame",
+    "setTimeout n:4078200000000000",
+    "clearInterval",
+    "advance n:405d000000000000"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "timeout",
+     "id": 2,
+     "delay": {
+      "bits": "4049000000000000"
+     },
+     "time": null
+    },
+    {
+     "do": "now"
+    },
+    {
+     "do": "set",
+     "clock": {
+      "bits": "4062400000000000"
+     }
+    },
+    {
+     "do": "advance",
+     "by": {
+      "bits": "406de00000000000"
+     }
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "now"
+    }
+   ],
+   "log": [
+    "timeout 2",
+    "ask frame",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "ask frame",
+    "now n:0000000000000000",
+    "set n:4062400000000000",
+    "advance n:406de00000000000",
+    "flush",
+    "ask frame",
+    "call 2 n:4078100000000000",
+    "flush",
+    "now n:4078100000000000"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "flush"
+    },
+    {
+     "do": "set",
+     "clock": {
+      "bits": "407bd00000000000"
+     }
+    },
+    {
+     "do": "flush"
+    }
+   ],
+   "log": [
+    "flush",
+    "ask frame",
+    "set n:407bd00000000000",
+    "flush",
+    "ask frame"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "now"
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "frame"
+    },
+    {
+     "do": "advance",
+     "by": {
+      "bits": "4062600000000000"
+     }
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "now"
+    },
+    {
+     "do": "frame"
+    }
+   ],
+   "log": [
+    "ask frame",
+    "now n:0000000000000000",
+    "flush",
+    "ask frame",
+    "flush",
+    "ask frame",
+    "flush",
+    "ask frame",
+    "frame",
+    "advance n:4062600000000000",
+    "flush",
+    "ask frame",
+    "flush",
+    "now n:4062600000000000",
+    "frame"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "advance",
+     "by": {
+      "bits": "406be00000000000"
+     }
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "timeout",
+     "id": 0,
+     "delay": {
+      "bits": "4038000000000000"
+     },
+     "time": {
+      "bits": "408f400000000000"
+     }
+    },
+    {
+     "do": "stop",
+     "id": 0
+    },
+    {
+     "do": "stop",
+     "id": 0
+    },
+    {
+     "do": "timer",
+     "id": 1,
+     "delay": {
+      "bits": "4059000000000000"
+     },
+     "time": {
+      "bits": "409f400000000000"
+     }
+    },
+    {
+     "do": "advance",
+     "by": {
+      "bits": "406f600000000000"
+     }
+    }
+   ],
+   "log": [
+    "advance n:406be00000000000",
+    "flush",
+    "ask frame",
+    "flush",
+    "timeout 0",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "stop 0",
+    "stop 0",
+    "timer 1",
+    "advance n:406f600000000000"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "flush"
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "frame"
+    },
+    {
+     "do": "timer",
+     "id": 1,
+     "delay": {
+      "bits": "3ff0000000000000"
+     },
+     "time": {
+      "bits": "0000000000000000"
+     }
+    },
+    {
+     "do": "frame"
+    },
+    {
+     "do": "timeout",
+     "id": 0,
+     "delay": {
+      "bits": "4059000000000000"
+     },
+     "time": {
+      "bits": "40b3880000000000"
+     }
+    },
+    {
+     "do": "flush"
+    }
+   ],
+   "log": [
+    "flush",
+    "ask frame",
+    "flush",
+    "ask frame",
+    "frame",
+    "timer 1",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "frame",
+    "ask frame",
+    "ask frame",
+    "timeout 0",
+    "flush",
+    "ask frame"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "interval",
+     "id": 2,
+     "delay": {
+      "bits": "408f400000000000"
+     },
+     "time": null
+    },
+    {
+     "do": "interval",
+     "id": 0,
+     "delay": {
+      "bits": "4059000000000000"
+     },
+     "time": {
+      "bits": "40b3880000000000"
+     }
+    },
+    {
+     "do": "timer",
+     "id": 2,
+     "delay": {
+      "bits": "4049000000000000"
+     },
+     "time": null
+    },
+    {
+     "do": "timer",
+     "id": 1,
+     "delay": {
+      "bits": "4038000000000000"
+     },
+     "time": {
+      "bits": "0000000000000000"
+     }
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "advance",
+     "by": {
+      "bits": "4060200000000000"
+     }
+    },
+    {
+     "do": "interval",
+     "id": 0,
+     "delay": {
+      "bits": "0000000000000000"
+     },
+     "time": {
+      "bits": "408f400000000000"
+     }
+    },
+    {
+     "do": "set",
+     "clock": {
+      "bits": "40a1ee0000000000"
+     }
+    },
+    {
+     "do": "stop",
+     "id": 0
+    }
+   ],
+   "log": [
+    "interval 2",
+    "ask frame",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "interval 0",
+    "timer 2",
+    "ask frame",
+    "timer 1",
+    "flush",
+    "ask frame",
+    "advance n:4060200000000000",
+    "interval 0",
+    "set n:40a1ee0000000000",
+    "stop 0"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "advance",
+     "by": {
+      "bits": "406e200000000000"
+     }
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "timer",
+     "id": 2,
+     "delay": {
+      "bits": "0000000000000000"
+     },
+     "time": {
+      "bits": "40b3880000000000"
+     }
+    },
+    {
+     "do": "timer",
+     "id": 2,
+     "delay": {
+      "bits": "4024000000000000"
+     },
+     "time": {
+      "bits": "40b3880000000000"
+     }
+    },
+    {
+     "do": "advance",
+     "by": {
+      "bits": "4066400000000000"
+     }
+    },
+    {
+     "do": "interval",
+     "id": 1,
+     "delay": {
+      "bits": "408f400000000000"
+     },
+     "time": {
+      "bits": "407f400000000000"
+     }
+    },
+    {
+     "do": "frame"
+    },
+    {
+     "do": "timer",
+     "id": 0,
+     "delay": {
+      "bits": "c059000000000000"
+     },
+     "time": {
+      "bits": "408f400000000000"
+     }
+    },
+    {
+     "do": "now"
+    },
+    {
+     "do": "frame"
+    }
+   ],
+   "log": [
+    "advance n:406e200000000000",
+    "flush",
+    "ask frame",
+    "timer 2",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "timer 2",
+    "advance n:4066400000000000",
+    "interval 1",
+    "frame",
+    "setTimeout n:4090e40000000000",
+    "clearInterval",
+    "timer 0",
+    "clearTimeout",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "ask frame",
+    "now n:407a300000000000",
+    "frame",
+    "setTimeout n:407e100000000000",
+    "clearInterval"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "frame"
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "frame"
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "frame"
+    },
+    {
+     "do": "timeout",
+     "id": 0,
+     "delay": {
+      "bits": "408f400000000000"
+     },
+     "time": {
+      "bits": "407f400000000000"
+     }
+    },
+    {
+     "do": "now"
+    },
+    {
+     "do": "frame"
+    }
+   ],
+   "log": [
+    "frame",
+    "flush",
+    "ask frame",
+    "frame",
+    "flush",
+    "ask frame",
+    "frame",
+    "timeout 0",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "ask frame",
+    "now n:0000000000000000",
+    "frame",
+    "ask frame",
+    "setTimeout n:4097700000000000",
+    "clearInterval"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "timeout",
+     "id": 1,
+     "delay": {
+      "bits": "4038000000000000"
+     },
+     "time": {
+      "bits": "0000000000000000"
+     }
+    },
+    {
+     "do": "set",
+     "clock": {
+      "bits": "4082e80000000000"
+     }
+    },
+    {
+     "do": "advance",
+     "by": {
+      "bits": "4068200000000000"
+     }
+    },
+    {
+     "do": "set",
+     "clock": {
+      "bits": "407ca00000000000"
+     }
+    },
+    {
+     "do": "timer",
+     "id": 1,
+     "delay": {
+      "bits": "c059000000000000"
+     },
+     "time": {
+      "bits": "409f400000000000"
+     }
+    },
+    {
+     "do": "frame"
+    },
+    {
+     "do": "restart",
+     "id": 1,
+     "delay": {
+      "bits": "408f400000000000"
+     },
+     "time": {
+      "bits": "408f400000000000"
+     }
+    },
+    {
+     "do": "stop",
+     "id": 1
+    },
+    {
+     "do": "restart",
+     "id": 1,
+     "delay": {
+      "bits": "3ff0000000000000"
+     },
+     "time": {
+      "bits": "409f400000000000"
+     }
+    },
+    {
+     "do": "stop",
+     "id": 1
+    }
+   ],
+   "log": [
+    "timeout 1",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "set n:4082e80000000000",
+    "advance n:4068200000000000",
+    "set n:407ca00000000000",
+    "timer 1",
+    "frame",
+    "call 1 n:407ca00000000000",
+    "setTimeout n:4096880000000000",
+    "clearInterval",
+    "restart 1",
+    "clearTimeout",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "stop 1",
+    "restart 1",
+    "stop 1"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "set",
+     "clock": {
+      "bits": "4097c80000000000"
+     }
+    },
+    {
+     "do": "now"
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "now"
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "interval",
+     "id": 0,
+     "delay": {
+      "bits": "c059000000000000"
+     },
+     "time": {
+      "bits": "0000000000000000"
+     }
+    },
+    {
+     "do": "timeout",
+     "id": 1,
+     "delay": {
+      "bits": "4024000000000000"
+     },
+     "time": {
+      "bits": "409f400000000000"
+     }
+    }
+   ],
+   "log": [
+    "set n:4097c80000000000",
+    "ask frame",
+    "now n:4097c80000000000",
+    "flush",
+    "flush",
+    "now n:4097c80000000000",
+    "flush",
+    "interval 0",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "timeout 1"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "timeout",
+     "id": 2,
+     "delay": {
+      "bits": "4038000000000000"
+     },
+     "time": {
+      "bits": "409f400000000000"
+     }
+    },
+    {
+     "do": "frame"
+    },
+    {
+     "do": "timer",
+     "id": 2,
+     "delay": {
+      "bits": "4039000000000000"
+     },
+     "time": null
+    },
+    {
+     "do": "timer",
+     "id": 1,
+     "delay": {
+      "bits": "4038000000000000"
+     },
+     "time": {
+      "bits": "408f400000000000"
+     }
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "set",
+     "clock": {
+      "bits": "408fd00000000000"
+     }
+    },
+    {
+     "do": "flush"
+    }
+   ],
+   "log": [
+    "timeout 2",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "frame",
+    "ask frame",
+    "setTimeout n:409fa00000000000",
+    "clearInterval",
+    "timer 2",
+    "ask frame",
+    "clearTimeout",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "timer 1",
+    "flush",
+    "ask frame",
+    "set n:408fd00000000000",
+    "flush",
+    "ask frame",
+    "call 2 n:408f080000000000"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "set",
+     "clock": {
+      "bits": "4085a00000000000"
+     }
+    },
+    {
+     "do": "interval",
+     "id": 2,
+     "delay": {
+      "bits": "4059000000000000"
+     },
+     "time": {
+      "bits": "407f400000000000"
+     }
+    },
+    {
+     "do": "timeout",
+     "id": 0,
+     "delay": {
+      "bits": "0000000000000000"
+     },
+     "time": {
+      "bits": "0000000000000000"
+     }
+    },
+    {
+     "do": "flush"
+    }
+   ],
+   "log": [
+    "set n:4085a00000000000",
+    "interval 2",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "timeout 0",
+    "flush",
+    "ask frame",
+    "call 2 n:4068000000000000",
+    "call 0 n:4085a00000000000"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "flush"
+    },
+    {
+     "do": "timeout",
+     "id": 2,
+     "delay": {
+      "bits": "4024000000000000"
+     },
+     "time": {
+      "bits": "407f400000000000"
+     }
+    },
+    {
+     "do": "timer",
+     "id": 1,
+     "delay": {
+      "bits": "4024000000000000"
+     },
+     "time": null
+    },
+    {
+     "do": "interval",
+     "id": 0,
+     "delay": null,
+     "time": {
+      "bits": "407f400000000000"
+     }
+    },
+    {
+     "do": "advance",
+     "by": {
+      "bits": "4065400000000000"
+     }
+    },
+    {
+     "do": "timeout",
+     "id": 1,
+     "delay": {
+      "bits": "408f400000000000"
+     },
+     "time": {
+      "bits": "408f400000000000"
+     }
+    },
+    {
+     "do": "interval",
+     "id": 1,
+     "delay": {
+      "bits": "4039000000000000"
+     },
+     "time": {
+      "bits": "40b3880000000000"
+     }
+    },
+    {
+     "do": "timeout",
+     "id": 0,
+     "delay": {
+      "bits": "c059000000000000"
+     },
+     "time": {
+      "bits": "40b3880000000000"
+     }
+    }
+   ],
+   "log": [
+    "flush",
+    "ask frame",
+    "timeout 2",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "timer 1",
+    "ask frame",
+    "interval 0",
+    "advance n:4065400000000000",
+    "timeout 1",
+    "interval 1",
+    "timeout 0"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "interval",
+     "id": 1,
+     "delay": {
+      "bits": "4038000000000000"
+     },
+     "time": {
+      "bits": "0000000000000000"
+     }
+    },
+    {
+     "do": "now"
+    },
+    {
+     "do": "stop",
+     "id": 1
+    }
+   ],
+   "log": [
+    "interval 1",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "ask frame",
+    "now n:0000000000000000",
+    "stop 1"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "flush"
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "now"
+    },
+    {
+     "do": "interval",
+     "id": 1,
+     "delay": {
+      "bits": "c059000000000000"
+     },
+     "time": {
+      "bits": "40b3880000000000"
+     }
+    },
+    {
+     "do": "advance",
+     "by": {
+      "bits": "405d400000000000"
+     }
+    },
+    {
+     "do": "frame"
+    }
+   ],
+   "log": [
+    "flush",
+    "ask frame",
+    "flush",
+    "ask frame",
+    "ask frame",
+    "now n:0000000000000000",
+    "interval 1",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "advance n:405d400000000000",
+    "frame",
+    "setTimeout n:40b2af0000000000",
+    "clearInterval"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "set",
+     "clock": {
+      "bits": "4071200000000000"
+     }
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "timeout",
+     "id": 2,
+     "delay": {
+      "bits": "4038000000000000"
+     },
+     "time": {
+      "bits": "408f400000000000"
+     }
+    },
+    {
+     "do": "interval",
+     "id": 0,
+     "delay": null,
+     "time": null
+    },
+    {
+     "do": "timer",
+     "id": 0,
+     "delay": {
+      "bits": "4038000000000000"
+     },
+     "time": {
+      "bits": "409f400000000000"
+     }
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "timeout",
+     "id": 1,
+     "delay": {
+      "bits": "3ff0000000000000"
+     },
+     "time": {
+      "bits": "409f400000000000"
+     }
+    },
+    {
+     "do": "now"
+    }
+   ],
+   "log": [
+    "set n:4071200000000000",
+    "flush",
+    "ask frame",
+    "timeout 2",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "interval 0",
+    "timer 0",
+    "flush",
+    "call 0 n:0000000000000000",
+    "timeout 1",
+    "now n:4071200000000000"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "advance",
+     "by": {
+      "bits": "4065c00000000000"
+     }
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "set",
+     "clock": {
+      "bits": "409aa40000000000"
+     }
+    },
+    {
+     "do": "timer",
+     "id": 1,
+     "delay": {
+      "bits": "0000000000000000"
+     },
+     "time": null
+    },
+    {
+     "do": "advance",
+     "by": {
+      "bits": "4062e00000000000"
+     }
+    }
+   ],
+   "log": [
+    "advance n:4065c00000000000",
+    "flush",
+    "ask frame",
+    "set n:409aa40000000000",
+    "timer 1",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "advance n:4062e00000000000"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "flush"
+    },
+    {
+     "do": "set",
+     "clock": {
+      "bits": "409f480000000000"
+     }
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "now"
+    },
+    {
+     "do": "set",
+     "clock": {
+      "bits": "407ed00000000000"
+     }
+    },
+    {
+     "do": "frame"
+    },
+    {
+     "do": "timer",
+     "id": 1,
+     "delay": {
+      "bits": "3ff0000000000000"
+     },
+     "time": {
+      "bits": "409f400000000000"
+     }
+    },
+    {
+     "do": "timer",
+     "id": 1,
+     "delay": {
+      "bits": "c059000000000000"
+     },
+     "time": {
+      "bits": "0000000000000000"
+     }
+    },
+    {
+     "do": "timer",
+     "id": 2,
+     "delay": {
+      "bits": "4038000000000000"
+     },
+     "time": {
+      "bits": "0000000000000000"
+     }
+    }
+   ],
+   "log": [
+    "flush",
+    "ask frame",
+    "set n:409f480000000000",
+    "flush",
+    "ask frame",
+    "flush",
+    "now n:409f480000000000",
+    "set n:407ed00000000000",
+    "frame",
+    "timer 1",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "timer 1",
+    "timer 2"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "set",
+     "clock": {
+      "bits": "40a4000000000000"
+     }
+    },
+    {
+     "do": "advance",
+     "by": {
+      "bits": "4051400000000000"
+     }
+    },
+    {
+     "do": "timer",
+     "id": 1,
+     "delay": {
+      "bits": "4038000000000000"
+     },
+     "time": {
+      "bits": "408f400000000000"
+     }
+    },
+    {
+     "do": "restart",
+     "id": 1,
+     "delay": {
+      "bits": "4049000000000000"
+     },
+     "time": {
+      "bits": "408f400000000000"
+     }
+    },
+    {
+     "do": "timer",
+     "id": 1,
+     "delay": {
+      "bits": "4039000000000000"
+     },
+     "time": {
+      "bits": "40b3880000000000"
+     }
+    },
+    {
+     "do": "timer",
+     "id": 0,
+     "delay": {
+      "bits": "408f400000000000"
+     },
+     "time": {
+      "bits": "0000000000000000"
+     }
+    },
+    {
+     "do": "set",
+     "clock": {
+      "bits": "40a3fc0000000000"
+     }
+    },
+    {
+     "do": "frame"
+    },
+    {
+     "do": "flush"
+    }
+   ],
+   "log": [
+    "set n:40a4000000000000",
+    "advance n:4051400000000000",
+    "timer 1",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "restart 1",
+    "timer 1",
+    "timer 0",
+    "set n:40a3fc0000000000",
+    "frame",
+    "call 1 n:4097900000000000",
+    "call 0 n:4098580000000000",
+    "ask frame",
+    "flush",
+    "ask frame",
+    "call 1 n:4097900000000000",
+    "call 0 n:4098580000000000"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "flush"
+    },
+    {
+     "do": "interval",
+     "id": 0,
+     "delay": {
+      "bits": "0000000000000000"
+     },
+     "time": {
+      "bits": "409f400000000000"
+     }
+    },
+    {
+     "do": "interval",
+     "id": 2,
+     "delay": {
+      "bits": "0000000000000000"
+     },
+     "time": {
+      "bits": "0000000000000000"
+     }
+    }
+   ],
+   "log": [
+    "flush",
+    "ask frame",
+    "interval 0",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "interval 2"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "flush"
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "timer",
+     "id": 2,
+     "delay": {
+      "bits": "4024000000000000"
+     },
+     "time": null
+    }
+   ],
+   "log": [
+    "flush",
+    "ask frame",
+    "flush",
+    "ask frame",
+    "timer 2",
+    "ask frame",
+    "setInterval n:408f400000000000",
+    "ask frame"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "interval",
+     "id": 2,
+     "delay": {
+      "bits": "c059000000000000"
+     },
+     "time": null
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "frame"
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "restart",
+     "id": 2,
+     "delay": {
+      "bits": "4038000000000000"
+     },
+     "time": {
+      "bits": "408f400000000000"
+     }
+    },
+    {
+     "do": "now"
+    },
+    {
+     "do": "frame"
+    },
+    {
+     "do": "stop",
+     "id": 2
+    }
+   ],
+   "log": [
+    "interval 2",
+    "ask frame",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "flush",
+    "ask frame",
+    "call 2 n:0000000000000000",
+    "flush",
+    "ask frame",
+    "call 2 n:0000000000000000",
+    "flush",
+    "ask frame",
+    "call 2 n:0000000000000000",
+    "frame",
+    "ask frame",
+    "call 2 n:0000000000000000",
+    "ask frame",
+    "flush",
+    "ask frame",
+    "call 2 n:0000000000000000",
+    "restart 2",
+    "ask frame",
+    "now n:0000000000000000",
+    "frame",
+    "ask frame",
+    "setTimeout n:4090000000000000",
+    "clearInterval",
+    "stop 2",
+    "clearTimeout",
+    "setInterval n:408f400000000000",
+    "ask frame"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "timeout",
+     "id": 1,
+     "delay": {
+      "bits": "4038000000000000"
+     },
+     "time": null
+    },
+    {
+     "do": "set",
+     "clock": {
+      "bits": "409b100000000000"
+     }
+    },
+    {
+     "do": "stop",
+     "id": 1
+    },
+    {
+     "do": "advance",
+     "by": {
+      "bits": "4072300000000000"
+     }
+    },
+    {
+     "do": "timer",
+     "id": 2,
+     "delay": {
+      "bits": "3ff0000000000000"
+     },
+     "time": {
+      "bits": "0000000000000000"
+     }
+    },
+    {
+     "do": "now"
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "interval",
+     "id": 1,
+     "delay": {
+      "bits": "0000000000000000"
+     },
+     "time": {
+      "bits": "408f400000000000"
+     }
+    },
+    {
+     "do": "timeout",
+     "id": 0,
+     "delay": {
+      "bits": "4049000000000000"
+     },
+     "time": {
+      "bits": "409f400000000000"
+     }
+    },
+    {
+     "do": "restart",
+     "id": 1,
+     "delay": {
+      "bits": "c059000000000000"
+     },
+     "time": null,
+     "stops": 1
+    }
+   ],
+   "log": [
+    "timeout 1",
+    "ask frame",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "set n:409b100000000000",
+    "stop 1",
+    "advance n:4072300000000000",
+    "timer 2",
+    "ask frame",
+    "now n:0000000000000000",
+    "flush",
+    "ask frame",
+    "interval 1",
+    "timeout 0",
+    "restart 1",
+    "ask frame"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "set",
+     "clock": {
+      "bits": "40a0960000000000"
+     }
+    },
+    {
+     "do": "advance",
+     "by": {
+      "bits": "4066e00000000000"
+     }
+    },
+    {
+     "do": "now"
+    },
+    {
+     "do": "now"
+    },
+    {
+     "do": "interval",
+     "id": 0,
+     "delay": null,
+     "time": {
+      "bits": "40b3880000000000"
+     }
+    },
+    {
+     "do": "advance",
+     "by": {
+      "bits": "4026000000000000"
+     }
+    },
+    {
+     "do": "now"
+    },
+    {
+     "do": "now"
+    },
+    {
+     "do": "advance",
+     "by": {
+      "bits": "405cc00000000000"
+     }
+    }
+   ],
+   "log": [
+    "set n:40a0960000000000",
+    "advance n:4066e00000000000",
+    "ask frame",
+    "now n:40a2040000000000",
+    "now n:40a2040000000000",
+    "interval 0",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "advance n:4026000000000000",
+    "now n:40a2040000000000",
+    "now n:40a2040000000000",
+    "advance n:405cc00000000000"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "set",
+     "clock": {
+      "bits": "4086600000000000"
+     }
+    },
+    {
+     "do": "frame"
+    },
+    {
+     "do": "timeout",
+     "id": 1,
+     "delay": {
+      "bits": "4049000000000000"
+     },
+     "time": {
+      "bits": "409f400000000000"
+     }
+    },
+    {
+     "do": "set",
+     "clock": {
+      "bits": "4085b00000000000"
+     }
+    },
+    {
+     "do": "now"
+    },
+    {
+     "do": "interval",
+     "id": 0,
+     "delay": {
+      "bits": "0000000000000000"
+     },
+     "time": {
+      "bits": "408f400000000000"
+     }
+    }
+   ],
+   "log": [
+    "set n:4086600000000000",
+    "frame",
+    "timeout 1",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "set n:4085b00000000000",
+    "ask frame",
+    "now n:4085b00000000000",
+    "interval 0"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "frame"
+    },
+    {
+     "do": "set",
+     "clock": {
+      "bits": "405b400000000000"
+     }
+    },
+    {
+     "do": "frame"
+    },
+    {
+     "do": "timer",
+     "id": 0,
+     "delay": null,
+     "time": {
+      "bits": "409f400000000000"
+     }
+    }
+   ],
+   "log": [
+    "frame",
+    "set n:405b400000000000",
+    "frame",
+    "timer 0",
+    "setInterval n:408f400000000000",
+    "ask frame"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "set",
+     "clock": {
+      "bits": "4088a00000000000"
+     }
+    },
+    {
+     "do": "advance",
+     "by": {
+      "bits": "406f600000000000"
+     }
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "flush"
+    }
+   ],
+   "log": [
+    "set n:4088a00000000000",
+    "advance n:406f600000000000",
+    "flush",
+    "ask frame",
+    "flush"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "advance",
+     "by": {
+      "bits": "4051400000000000"
+     }
+    },
+    {
+     "do": "timer",
+     "id": 2,
+     "delay": {
+      "bits": "4038000000000000"
+     },
+     "time": null
+    },
+    {
+     "do": "restart",
+     "id": 2,
+     "delay": {
+      "bits": "4039000000000000"
+     },
+     "time": {
+      "bits": "408f400000000000"
+     }
+    },
+    {
+     "do": "timeout",
+     "id": 1,
+     "delay": {
+      "bits": "408f400000000000"
+     },
+     "time": {
+      "bits": "408f400000000000"
+     }
+    },
+    {
+     "do": "timer",
+     "id": 0,
+     "delay": {
+      "bits": "4039000000000000"
+     },
+     "time": {
+      "bits": "407f400000000000"
+     }
+    }
+   ],
+   "log": [
+    "advance n:4051400000000000",
+    "timer 2",
+    "ask frame",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "restart 2",
+    "timeout 1",
+    "timer 0"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "flush"
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "set",
+     "clock": {
+      "bits": "40a3960000000000"
+     }
+    }
+   ],
+   "log": [
+    "flush",
+    "ask frame",
+    "flush",
+    "ask frame",
+    "flush",
+    "ask frame",
+    "flush",
+    "ask frame",
+    "set n:40a3960000000000"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "flush"
+    },
+    {
+     "do": "set",
+     "clock": {
+      "bits": "4082c00000000000"
+     }
+    },
+    {
+     "do": "flush"
+    }
+   ],
+   "log": [
+    "flush",
+    "ask frame",
+    "set n:4082c00000000000",
+    "flush",
+    "ask frame"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "flush"
+    },
+    {
+     "do": "now"
+    },
+    {
+     "do": "interval",
+     "id": 0,
+     "delay": {
+      "bits": "3ff0000000000000"
+     },
+     "time": {
+      "bits": "407f400000000000"
+     }
+    },
+    {
+     "do": "restart",
+     "id": 0,
+     "delay": {
+      "bits": "4039000000000000"
+     },
+     "time": {
+      "bits": "40b3880000000000"
+     }
+    },
+    {
+     "do": "restart",
+     "id": 0,
+     "delay": {
+      "bits": "408f400000000000"
+     },
+     "time": null
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "flush"
+    }
+   ],
+   "log": [
+    "flush",
+    "ask frame",
+    "ask frame",
+    "now n:0000000000000000",
+    "interval 0",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "restart 0",
+    "restart 0",
+    "ask frame",
+    "flush",
+    "ask frame",
+    "flush",
+    "ask frame"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "frame"
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "interval",
+     "id": 1,
+     "delay": {
+      "bits": "4024000000000000"
+     },
+     "time": {
+      "bits": "407f400000000000"
+     }
+    },
+    {
+     "do": "timer",
+     "id": 1,
+     "delay": null,
+     "time": {
+      "bits": "409f400000000000"
+     }
+    },
+    {
+     "do": "stop",
+     "id": 1
+    }
+   ],
+   "log": [
+    "frame",
+    "flush",
+    "ask frame",
+    "flush",
+    "ask frame",
+    "interval 1",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "timer 1",
+    "stop 1"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "flush"
+    },
+    {
+     "do": "timeout",
+     "id": 2,
+     "delay": {
+      "bits": "4038000000000000"
+     },
+     "time": {
+      "bits": "40b3880000000000"
+     }
+    },
+    {
+     "do": "set",
+     "clock": {
+      "bits": "4097800000000000"
+     }
+    },
+    {
+     "do": "now"
+    }
+   ],
+   "log": [
+    "flush",
+    "ask frame",
+    "timeout 2",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "set n:4097800000000000",
+    "ask frame",
+    "now n:4097800000000000"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "frame"
+    },
+    {
+     "do": "now"
+    },
+    {
+     "do": "now"
+    }
+   ],
+   "log": [
+    "frame",
+    "ask frame",
+    "now n:0000000000000000",
+    "ask frame",
+    "now n:0000000000000000"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "advance",
+     "by": {
+      "bits": "4072700000000000"
+     }
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "timeout",
+     "id": 2,
+     "delay": {
+      "bits": "4038000000000000"
+     },
+     "time": {
+      "bits": "407f400000000000"
+     }
+    },
+    {
+     "do": "interval",
+     "id": 2,
+     "delay": {
+      "bits": "4038000000000000"
+     },
+     "time": {
+      "bits": "409f400000000000"
+     }
+    },
+    {
+     "do": "set",
+     "clock": {
+      "bits": "40a6800000000000"
+     }
+    },
+    {
+     "do": "advance",
+     "by": {
+      "bits": "403a000000000000"
+     }
+    },
+    {
+     "do": "advance",
+     "by": {
+      "bits": "406b800000000000"
+     }
+    }
+   ],
+   "log": [
+    "advance n:4072700000000000",
+    "flush",
+    "ask frame",
+    "timeout 2",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "interval 2",
+    "set n:40a6800000000000",
+    "advance n:403a000000000000",
+    "advance n:406b800000000000"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "flush"
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "now"
+    },
+    {
+     "do": "timer",
+     "id": 0,
+     "delay": {
+      "bits": "c059000000000000"
+     },
+     "time": null
+    },
+    {
+     "do": "interval",
+     "id": 0,
+     "delay": {
+      "bits": "c059000000000000"
+     },
+     "time": {
+      "bits": "407f400000000000"
+     }
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "restart",
+     "id": 0,
+     "delay": {
+      "bits": "408f400000000000"
+     },
+     "time": {
+      "bits": "40b3880000000000"
+     }
+    }
+   ],
+   "log": [
+    "flush",
+    "ask frame",
+    "flush",
+    "ask frame",
+    "ask frame",
+    "now n:0000000000000000",
+    "timer 0",
+    "ask frame",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "interval 0",
+    "flush",
+    "ask frame",
+    "call 0 n:4059000000000000",
+    "flush",
+    "ask frame",
+    "call 0 n:4059000000000000",
+    "restart 0"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "flush"
+    },
+    {
+     "do": "advance",
+     "by": {
+      "bits": "405e400000000000"
+     }
+    },
+    {
+     "do": "set",
+     "clock": {
+      "bits": "408d880000000000"
+     }
+    },
+    {
+     "do": "timer",
+     "id": 1,
+     "delay": {
+      "bits": "4039000000000000"
+     },
+     "time": null
+    },
+    {
+     "do": "restart",
+     "id": 1,
+     "delay": null,
+     "time": {
+      "bits": "409f400000000000"
+     }
+    },
+    {
+     "do": "timer",
+     "id": 0,
+     "delay": {
+      "bits": "4038000000000000"
+     },
+     "time": {
+      "bits": "407f400000000000"
+     }
+    },
+    {
+     "do": "frame"
+    },
+    {
+     "do": "stop",
+     "id": 0
+    },
+    {
+     "do": "restart",
+     "id": 0,
+     "delay": null,
+     "time": {
+      "bits": "407f400000000000"
+     },
+     "stops": 0
+    },
+    {
+     "do": "now"
+    }
+   ],
+   "log": [
+    "flush",
+    "ask frame",
+    "advance n:405e400000000000",
+    "set n:408d880000000000",
+    "timer 1",
+    "ask frame",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "restart 1",
+    "timer 0",
+    "frame",
+    "call 0 n:407a500000000000",
+    "ask frame",
+    "stop 0",
+    "restart 0",
+    "ask frame",
+    "now n:408d880000000000"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "advance",
+     "by": {
+      "bits": "4020000000000000"
+     }
+    },
+    {
+     "do": "frame"
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "flush"
+    }
+   ],
+   "log": [
+    "advance n:4020000000000000",
+    "frame",
+    "flush",
+    "ask frame",
+    "flush",
+    "flush"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "flush"
+    },
+    {
+     "do": "timer",
+     "id": 2,
+     "delay": null,
+     "time": {
+      "bits": "0000000000000000"
+     }
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "advance",
+     "by": {
+      "bits": "406b000000000000"
+     }
+    }
+   ],
+   "log": [
+    "flush",
+    "ask frame",
+    "timer 2",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "flush",
+    "ask frame",
+    "call 2 n:0000000000000000",
+    "advance n:406b000000000000"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "advance",
+     "by": {
+      "bits": "406a600000000000"
+     }
+    },
+    {
+     "do": "set",
+     "clock": {
+      "bits": "4087f80000000000"
+     }
+    },
+    {
+     "do": "now"
+    },
+    {
+     "do": "frame"
+    }
+   ],
+   "log": [
+    "advance n:406a600000000000",
+    "set n:4087f80000000000",
+    "ask frame",
+    "now n:4087f80000000000",
+    "frame"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "timeout",
+     "id": 2,
+     "delay": {
+      "bits": "408f400000000000"
+     },
+     "time": null
+    },
+    {
+     "do": "frame"
+    },
+    {
+     "do": "now"
+    },
+    {
+     "do": "interval",
+     "id": 0,
+     "delay": {
+      "bits": "4049000000000000"
+     },
+     "time": {
+      "bits": "0000000000000000"
+     }
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "interval",
+     "id": 2,
+     "delay": {
+      "bits": "4049000000000000"
+     },
+     "time": {
+      "bits": "40b3880000000000"
+     }
+    },
+    {
+     "do": "flush"
+    }
+   ],
+   "log": [
+    "timeout 2",
+    "ask frame",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "frame",
+    "ask frame",
+    "setTimeout n:408f400000000000",
+    "clearInterval",
+    "ask frame",
+    "now n:0000000000000000",
+    "interval 0",
+    "clearTimeout",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "flush",
+    "ask frame",
+    "interval 2",
+    "flush",
+    "ask frame"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "flush"
+    },
+    {
+     "do": "set",
+     "clock": {
+      "bits": "406c600000000000"
+     }
+    },
+    {
+     "do": "flush"
+    }
+   ],
+   "log": [
+    "flush",
+    "ask frame",
+    "set n:406c600000000000",
+    "flush",
+    "ask frame"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "advance",
+     "by": {
+      "bits": "4065200000000000"
+     }
+    },
+    {
+     "do": "advance",
+     "by": {
+      "bits": "4028000000000000"
+     }
+    },
+    {
+     "do": "set",
+     "clock": {
+      "bits": "4089800000000000"
+     }
+    }
+   ],
+   "log": [
+    "advance n:4065200000000000",
+    "advance n:4028000000000000",
+    "set n:4089800000000000"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "timeout",
+     "id": 2,
+     "delay": {
+      "bits": "408f400000000000"
+     },
+     "time": {
+      "bits": "407f400000000000"
+     }
+    },
+    {
+     "do": "advance",
+     "by": {
+      "bits": "4062400000000000"
+     }
+    },
+    {
+     "do": "set",
+     "clock": {
+      "bits": "409b580000000000"
+     }
+    },
+    {
+     "do": "restart",
+     "id": 2,
+     "delay": {
+      "bits": "3ff0000000000000"
+     },
+     "time": {
+      "bits": "407f400000000000"
+     }
+    },
+    {
+     "do": "restart",
+     "id": 2,
+     "delay": {
+      "bits": "4024000000000000"
+     },
+     "time": {
+      "bits": "409f400000000000"
+     }
+    },
+    {
+     "do": "now"
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "restart",
+     "id": 2,
+     "delay": {
+      "bits": "4038000000000000"
+     },
+     "time": {
+      "bits": "407f400000000000"
+     }
+    }
+   ],
+   "log": [
+    "timeout 2",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "advance n:4062400000000000",
+    "set n:409b580000000000",
+    "restart 2",
+    "restart 2",
+    "ask frame",
+    "now n:409b580000000000",
+    "flush",
+    "restart 2"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "interval",
+     "id": 0,
+     "delay": {
+      "bits": "4059000000000000"
+     },
+     "time": null
+    },
+    {
+     "do": "interval",
+     "id": 0,
+     "delay": {
+      "bits": "0000000000000000"
+     },
+     "time": null
+    },
+    {
+     "do": "stop",
+     "id": 0
+    },
+    {
+     "do": "timer",
+     "id": 0,
+     "delay": {
+      "bits": "3ff0000000000000"
+     },
+     "time": {
+      "bits": "409f400000000000"
+     }
+    },
+    {
+     "do": "stop",
+     "id": 0
+    },
+    {
+     "do": "timeout",
+     "id": 0,
+     "delay": {
+      "bits": "c059000000000000"
+     },
+     "time": {
+      "bits": "409f400000000000"
+     }
+    },
+    {
+     "do": "flush"
+    }
+   ],
+   "log": [
+    "interval 0",
+    "ask frame",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "interval 0",
+    "ask frame",
+    "stop 0",
+    "timer 0",
+    "stop 0",
+    "timeout 0",
+    "flush",
+    "ask frame"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "now"
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "set",
+     "clock": {
+      "bits": "40a5020000000000"
+     }
+    }
+   ],
+   "log": [
+    "ask frame",
+    "now n:0000000000000000",
+    "flush",
+    "ask frame",
+    "set n:40a5020000000000"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "interval",
+     "id": 2,
+     "delay": {
+      "bits": "4049000000000000"
+     },
+     "time": {
+      "bits": "40b3880000000000"
+     }
+    },
+    {
+     "do": "frame"
+    },
+    {
+     "do": "timeout",
+     "id": 0,
+     "delay": null,
+     "time": {
+      "bits": "409f400000000000"
+     }
+    }
+   ],
+   "log": [
+    "interval 2",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "frame",
+    "ask frame",
+    "setTimeout n:40b3ba0000000000",
+    "clearInterval",
+    "timeout 0",
+    "clearTimeout",
+    "setInterval n:408f400000000000",
+    "ask frame"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "flush"
+    },
+    {
+     "do": "set",
+     "clock": {
+      "bits": "40a1360000000000"
+     }
+    },
+    {
+     "do": "timeout",
+     "id": 2,
+     "delay": {
+      "bits": "3ff0000000000000"
+     },
+     "time": null
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "timeout",
+     "id": 1,
+     "delay": {
+      "bits": "4049000000000000"
+     },
+     "time": {
+      "bits": "40b3880000000000"
+     }
+    }
+   ],
+   "log": [
+    "flush",
+    "ask frame",
+    "set n:40a1360000000000",
+    "timeout 2",
+    "ask frame",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "flush",
+    "flush",
+    "timeout 1"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "frame"
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "set",
+     "clock": {
+      "bits": "408c000000000000"
+     }
+    },
+    {
+     "do": "set",
+     "clock": {
+      "bits": "40a12a0000000000"
+     }
+    },
+    {
+     "do": "timeout",
+     "id": 1,
+     "delay": {
+      "bits": "4039000000000000"
+     },
+     "time": {
+      "bits": "409f400000000000"
+     }
+    },
+    {
+     "do": "interval",
+     "id": 1,
+     "delay": {
+      "bits": "4024000000000000"
+     },
+     "time": {
+      "bits": "408f400000000000"
+     }
+    },
+    {
+     "do": "timeout",
+     "id": 1,
+     "delay": {
+      "bits": "4038000000000000"
+     },
+     "time": {
+      "bits": "407f400000000000"
+     }
+    },
+    {
+     "do": "set",
+     "clock": {
+      "bits": "4052c00000000000"
+     }
+    },
+    {
+     "do": "restart",
+     "id": 1,
+     "delay": {
+      "bits": "4038000000000000"
+     },
+     "time": {
+      "bits": "407f400000000000"
+     }
+    },
+    {
+     "do": "restart",
+     "id": 1,
+     "delay": {
+      "bits": "408f400000000000"
+     },
+     "time": {
+      "bits": "0000000000000000"
+     },
+     "stops": 1
+    }
+   ],
+   "log": [
+    "frame",
+    "flush",
+    "ask frame",
+    "set n:408c000000000000",
+    "set n:40a12a0000000000",
+    "timeout 1",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "interval 1",
+    "timeout 1",
+    "set n:4052c00000000000",
+    "restart 1",
+    "restart 1"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "timer",
+     "id": 0,
+     "delay": {
+      "bits": "0000000000000000"
+     },
+     "time": {
+      "bits": "409f400000000000"
+     }
+    },
+    {
+     "do": "now"
+    },
+    {
+     "do": "stop",
+     "id": 0
+    },
+    {
+     "do": "set",
+     "clock": {
+      "bits": "409bdc0000000000"
+     }
+    },
+    {
+     "do": "frame"
+    },
+    {
+     "do": "set",
+     "clock": {
+      "bits": "40a4d20000000000"
+     }
+    },
+    {
+     "do": "restart",
+     "id": 0,
+     "delay": {
+      "bits": "c059000000000000"
+     },
+     "time": {
+      "bits": "407f400000000000"
+     }
+    },
+    {
+     "do": "set",
+     "clock": {
+      "bits": "40987c0000000000"
+     }
+    },
+    {
+     "do": "timer",
+     "id": 1,
+     "delay": {
+      "bits": "408f400000000000"
+     },
+     "time": {
+      "bits": "0000000000000000"
+     }
+    }
+   ],
+   "log": [
+    "timer 0",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "ask frame",
+    "now n:0000000000000000",
+    "stop 0",
+    "set n:409bdc0000000000",
+    "frame",
+    "clearInterval",
+    "set n:40a4d20000000000",
+    "restart 0",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "set n:40987c0000000000",
+    "timer 1"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "advance",
+     "by": {
+      "bits": "4072b00000000000"
+     }
+    },
+    {
+     "do": "frame"
+    },
+    {
+     "do": "timeout",
+     "id": 2,
+     "delay": {
+      "bits": "4039000000000000"
+     },
+     "time": {
+      "bits": "0000000000000000"
+     }
+    }
+   ],
+   "log": [
+    "advance n:4072b00000000000",
+    "frame",
+    "timeout 2",
+    "setInterval n:408f400000000000",
+    "ask frame"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "timer",
+     "id": 2,
+     "delay": null,
+     "time": {
+      "bits": "0000000000000000"
+     }
+    },
+    {
+     "do": "interval",
+     "id": 0,
+     "delay": {
+      "bits": "0000000000000000"
+     },
+     "time": {
+      "bits": "408f400000000000"
+     }
+    },
+    {
+     "do": "frame"
+    },
+    {
+     "do": "now"
+    },
+    {
+     "do": "frame"
+    },
+    {
+     "do": "flush"
+    }
+   ],
+   "log": [
+    "timer 2",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "interval 0",
+    "frame",
+    "ask frame",
+    "call 2 n:0000000000000000",
+    "ask frame",
+    "ask frame",
+    "now n:0000000000000000",
+    "frame",
+    "ask frame",
+    "call 2 n:0000000000000000",
+    "ask frame",
+    "flush",
+    "ask frame",
+    "call 2 n:0000000000000000"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "set",
+     "clock": {
+      "bits": "4075100000000000"
+     }
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "now"
+    },
+    {
+     "do": "set",
+     "clock": {
+      "bits": "4099940000000000"
+     }
+    },
+    {
+     "do": "set",
+     "clock": {
+      "bits": "4078f00000000000"
+     }
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "advance",
+     "by": {
+      "bits": "4065c00000000000"
+     }
+    },
+    {
+     "do": "flush"
+    }
+   ],
+   "log": [
+    "set n:4075100000000000",
+    "flush",
+    "ask frame",
+    "now n:4075100000000000",
+    "set n:4099940000000000",
+    "set n:4078f00000000000",
+    "flush",
+    "flush",
+    "advance n:4065c00000000000",
+    "flush"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "flush"
+    },
+    {
+     "do": "advance",
+     "by": {
+      "bits": "405c000000000000"
+     }
+    },
+    {
+     "do": "advance",
+     "by": {
+      "bits": "4071c00000000000"
+     }
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "set",
+     "clock": {
+      "bits": "40926c0000000000"
+     }
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "set",
+     "clock": {
+      "bits": "40a6420000000000"
+     }
+    }
+   ],
+   "log": [
+    "flush",
+    "ask frame",
+    "advance n:405c000000000000",
+    "advance n:4071c00000000000",
+    "flush",
+    "ask frame",
+    "set n:40926c0000000000",
+    "flush",
+    "flush",
+    "set n:40a6420000000000"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "frame"
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "frame"
+    },
+    {
+     "do": "timeout",
+     "id": 2,
+     "delay": {
+      "bits": "4038000000000000"
+     },
+     "time": {
+      "bits": "407f400000000000"
+     }
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "timeout",
+     "id": 1,
+     "delay": {
+      "bits": "4049000000000000"
+     },
+     "time": null
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "timer",
+     "id": 0,
+     "delay": {
+      "bits": "4039000000000000"
+     },
+     "time": {
+      "bits": "0000000000000000"
+     }
+    }
+   ],
+   "log": [
+    "frame",
+    "flush",
+    "ask frame",
+    "frame",
+    "timeout 2",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "flush",
+    "ask frame",
+    "timeout 1",
+    "ask frame",
+    "flush",
+    "ask frame",
+    "timer 0"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "advance",
+     "by": {
+      "bits": "4000000000000000"
+     }
+    },
+    {
+     "do": "set",
+     "clock": {
+      "bits": "4084f80000000000"
+     }
+    },
+    {
+     "do": "set",
+     "clock": {
+      "bits": "407a100000000000"
+     }
+    },
+    {
+     "do": "frame"
+    },
+    {
+     "do": "set",
+     "clock": {
+      "bits": "40a17a0000000000"
+     }
+    },
+    {
+     "do": "set",
+     "clock": {
+      "bits": "40a1ee0000000000"
+     }
+    },
+    {
+     "do": "timeout",
+     "id": 2,
+     "delay": {
+      "bits": "4039000000000000"
+     },
+     "time": {
+      "bits": "409f400000000000"
+     }
+    },
+    {
+     "do": "now"
+    },
+    {
+     "do": "stop",
+     "id": 2
+    },
+    {
+     "do": "advance",
+     "by": {
+      "bits": "4065e00000000000"
+     }
+    }
+   ],
+   "log": [
+    "advance n:4000000000000000",
+    "set n:4084f80000000000",
+    "set n:407a100000000000",
+    "frame",
+    "set n:40a17a0000000000",
+    "set n:40a1ee0000000000",
+    "timeout 2",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "ask frame",
+    "now n:40a1ee0000000000",
+    "stop 2",
+    "advance n:4065e00000000000"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "advance",
+     "by": {
+      "bits": "4046000000000000"
+     }
+    },
+    {
+     "do": "timer",
+     "id": 0,
+     "delay": null,
+     "time": {
+      "bits": "0000000000000000"
+     }
+    },
+    {
+     "do": "set",
+     "clock": {
+      "bits": "405a400000000000"
+     }
+    },
+    {
+     "do": "now"
+    },
+    {
+     "do": "now"
+    },
+    {
+     "do": "timer",
+     "id": 0,
+     "delay": {
+      "bits": "4024000000000000"
+     },
+     "time": null
+    },
+    {
+     "do": "timeout",
+     "id": 0,
+     "delay": null,
+     "time": {
+      "bits": "409f400000000000"
+     }
+    },
+    {
+     "do": "interval",
+     "id": 0,
+     "delay": {
+      "bits": "0000000000000000"
+     },
+     "time": {
+      "bits": "407f400000000000"
+     }
+    },
+    {
+     "do": "interval",
+     "id": 1,
+     "delay": {
+      "bits": "c059000000000000"
+     },
+     "time": {
+      "bits": "408f400000000000"
+     }
+    },
+    {
+     "do": "restart",
+     "id": 0,
+     "delay": {
+      "bits": "4024000000000000"
+     },
+     "time": null
+    }
+   ],
+   "log": [
+    "advance n:4046000000000000",
+    "timer 0",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "set n:405a400000000000",
+    "ask frame",
+    "now n:405a400000000000",
+    "now n:405a400000000000",
+    "timer 0",
+    "timeout 0",
+    "interval 0",
+    "interval 1",
+    "restart 0"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "set",
+     "clock": {
+      "bits": "40a3dc0000000000"
+     }
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "flush"
+    }
+   ],
+   "log": [
+    "set n:40a3dc0000000000",
+    "flush",
+    "ask frame",
+    "flush",
+    "flush"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "flush"
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "frame"
+    },
+    {
+     "do": "timer",
+     "id": 0,
+     "delay": {
+      "bits": "4039000000000000"
+     },
+     "time": {
+      "bits": "407f400000000000"
+     }
+    },
+    {
+     "do": "advance",
+     "by": {
+      "bits": "4072000000000000"
+     }
+    },
+    {
+     "do": "restart",
+     "id": 0,
+     "delay": {
+      "bits": "4024000000000000"
+     },
+     "time": {
+      "bits": "408f400000000000"
+     }
+    },
+    {
+     "do": "set",
+     "clock": {
+      "bits": "40a0720000000000"
+     }
+    }
+   ],
+   "log": [
+    "flush",
+    "ask frame",
+    "flush",
+    "ask frame",
+    "flush",
+    "ask frame",
+    "flush",
+    "ask frame",
+    "frame",
+    "timer 0",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "advance n:4072000000000000",
+    "restart 0",
+    "set n:40a0720000000000"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "flush"
+    },
+    {
+     "do": "timer",
+     "id": 2,
+     "delay": {
+      "bits": "4039000000000000"
+     },
+     "time": {
+      "bits": "0000000000000000"
+     }
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "timer",
+     "id": 2,
+     "delay": {
+      "bits": "408f400000000000"
+     },
+     "time": {
+      "bits": "408f400000000000"
+     }
+    }
+   ],
+   "log": [
+    "flush",
+    "ask frame",
+    "timer 2",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "flush",
+    "ask frame",
+    "timer 2"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "set",
+     "clock": {
+      "bits": "4061a00000000000"
+     }
+    },
+    {
+     "do": "interval",
+     "id": 2,
+     "delay": {
+      "bits": "4024000000000000"
+     },
+     "time": {
+      "bits": "409f400000000000"
+     }
+    },
+    {
+     "do": "timer",
+     "id": 2,
+     "delay": null,
+     "time": {
+      "bits": "409f400000000000"
+     }
+    },
+    {
+     "do": "advance",
+     "by": {
+      "bits": "4020000000000000"
+     }
+    },
+    {
+     "do": "stop",
+     "id": 2
+    },
+    {
+     "do": "frame"
+    },
+    {
+     "do": "advance",
+     "by": {
+      "bits": "4040800000000000"
+     }
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "timeout",
+     "id": 2,
+     "delay": {
+      "bits": "4038000000000000"
+     },
+     "time": {
+      "bits": "407f400000000000"
+     }
+    },
+    {
+     "do": "set",
+     "clock": {
+      "bits": "4083e80000000000"
+     }
+    }
+   ],
+   "log": [
+    "set n:4061a00000000000",
+    "interval 2",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "timer 2",
+    "advance n:4020000000000000",
+    "stop 2",
+    "frame",
+    "setTimeout n:409d140000000000",
+    "clearInterval",
+    "advance n:4040800000000000",
+    "flush",
+    "ask frame",
+    "timeout 2",
+    "clearTimeout",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "set n:4083e80000000000"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "flush"
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "now"
+    },
+    {
+     "do": "interval",
+     "id": 1,
+     "delay": {
+      "bits": "4038000000000000"
+     },
+     "time": {
+      "bits": "40b3880000000000"
+     }
+    },
+    {
+     "do": "flush"
+    }
+   ],
+   "log": [
+    "flush",
+    "ask frame",
+    "flush",
+    "ask frame",
+    "flush",
+    "ask frame",
+    "ask frame",
+    "now n:0000000000000000",
+    "interval 1",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "flush",
+    "ask frame"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "timer",
+     "id": 0,
+     "delay": null,
+     "time": {
+      "bits": "0000000000000000"
+     }
+    },
+    {
+     "do": "now"
+    },
+    {
+     "do": "restart",
+     "id": 0,
+     "delay": {
+      "bits": "4039000000000000"
+     },
+     "time": {
+      "bits": "408f400000000000"
+     }
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "timer",
+     "id": 0,
+     "delay": {
+      "bits": "4039000000000000"
+     },
+     "time": {
+      "bits": "408f400000000000"
+     }
+    },
+    {
+     "do": "timer",
+     "id": 2,
+     "delay": {
+      "bits": "0000000000000000"
+     },
+     "time": null
+    },
+    {
+     "do": "timer",
+     "id": 2,
+     "delay": null,
+     "time": null
+    },
+    {
+     "do": "timer",
+     "id": 1,
+     "delay": {
+      "bits": "4024000000000000"
+     },
+     "time": {
+      "bits": "409f400000000000"
+     }
+    },
+    {
+     "do": "stop",
+     "id": 1
+    }
+   ],
+   "log": [
+    "timer 0",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "ask frame",
+    "now n:0000000000000000",
+    "restart 0",
+    "flush",
+    "ask frame",
+    "timer 0",
+    "timer 2",
+    "ask frame",
+    "timer 2",
+    "ask frame",
+    "timer 1",
+    "stop 1"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "frame"
+    },
+    {
+     "do": "advance",
+     "by": {
+      "bits": "4068c00000000000"
+     }
+    },
+    {
+     "do": "timer",
+     "id": 1,
+     "delay": {
+      "bits": "4059000000000000"
+     },
+     "time": null
+    },
+    {
+     "do": "timeout",
+     "id": 0,
+     "delay": {
+      "bits": "c059000000000000"
+     },
+     "time": {
+      "bits": "0000000000000000"
+     }
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "now"
+    },
+    {
+     "do": "timeout",
+     "id": 0,
+     "delay": {
+      "bits": "408f400000000000"
+     },
+     "time": {
+      "bits": "40b3880000000000"
+     }
+    },
+    {
+     "do": "frame"
+    },
+    {
+     "do": "set",
+     "clock": {
+      "bits": "4086b80000000000"
+     }
+    }
+   ],
+   "log": [
+    "frame",
+    "advance n:4068c00000000000",
+    "timer 1",
+    "ask frame",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "timeout 0",
+    "flush",
+    "call 0 n:4068c00000000000",
+    "flush",
+    "now n:4068c00000000000",
+    "timeout 0",
+    "frame",
+    "setTimeout n:4059000000000000",
+    "clearInterval",
+    "set n:4086b80000000000"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "frame"
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "interval",
+     "id": 2,
+     "delay": {
+      "bits": "4049000000000000"
+     },
+     "time": {
+      "bits": "40b3880000000000"
+     }
+    },
+    {
+     "do": "now"
+    },
+    {
+     "do": "restart",
+     "id": 2,
+     "delay": {
+      "bits": "c059000000000000"
+     },
+     "time": {
+      "bits": "40b3880000000000"
+     }
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "restart",
+     "id": 2,
+     "delay": {
+      "bits": "4038000000000000"
+     },
+     "time": null
+    }
+   ],
+   "log": [
+    "frame",
+    "flush",
+    "ask frame",
+    "flush",
+    "ask frame",
+    "interval 2",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "ask frame",
+    "now n:0000000000000000",
+    "restart 2",
+    "flush",
+    "ask frame",
+    "restart 2",
+    "ask frame"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "flush"
+    },
+    {
+     "do": "advance",
+     "by": {
+      "bits": "404c000000000000"
+     }
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "now"
+    },
+    {
+     "do": "now"
+    },
+    {
+     "do": "frame"
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "flush"
+    }
+   ],
+   "log": [
+    "flush",
+    "ask frame",
+    "advance n:404c000000000000",
+    "flush",
+    "ask frame",
+    "now n:404c000000000000",
+    "now n:404c000000000000",
+    "frame",
+    "flush",
+    "ask frame",
+    "flush"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "timeout",
+     "id": 0,
+     "delay": null,
+     "time": {
+      "bits": "40b3880000000000"
+     }
+    },
+    {
+     "do": "set",
+     "clock": {
+      "bits": "4067200000000000"
+     }
+    },
+    {
+     "do": "stop",
+     "id": 0
+    }
+   ],
+   "log": [
+    "timeout 0",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "set n:4067200000000000",
+    "stop 0"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "interval",
+     "id": 2,
+     "delay": {
+      "bits": "4049000000000000"
+     },
+     "time": {
+      "bits": "0000000000000000"
+     }
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "interval",
+     "id": 1,
+     "delay": null,
+     "time": {
+      "bits": "409f400000000000"
+     }
+    },
+    {
+     "do": "timeout",
+     "id": 2,
+     "delay": {
+      "bits": "4049000000000000"
+     },
+     "time": {
+      "bits": "409f400000000000"
+     }
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "flush"
+    }
+   ],
+   "log": [
+    "interval 2",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "flush",
+    "ask frame",
+    "interval 1",
+    "timeout 2",
+    "flush",
+    "ask frame",
+    "flush",
+    "ask frame"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "flush"
+    },
+    {
+     "do": "timer",
+     "id": 2,
+     "delay": {
+      "bits": "4038000000000000"
+     },
+     "time": {
+      "bits": "407f400000000000"
+     }
+    },
+    {
+     "do": "restart",
+     "id": 2,
+     "delay": {
+      "bits": "408f400000000000"
+     },
+     "time": {
+      "bits": "409f400000000000"
+     }
+    },
+    {
+     "do": "advance",
+     "by": {
+      "bits": "405b000000000000"
+     }
+    },
+    {
+     "do": "now"
+    },
+    {
+     "do": "timeout",
+     "id": 0,
+     "delay": {
+      "bits": "4024000000000000"
+     },
+     "time": null
+    },
+    {
+     "do": "flush"
+    }
+   ],
+   "log": [
+    "flush",
+    "ask frame",
+    "timer 2",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "restart 2",
+    "advance n:405b000000000000",
+    "ask frame",
+    "now n:405b000000000000",
+    "timeout 0",
+    "flush"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "flush"
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "advance",
+     "by": {
+      "bits": "404f000000000000"
+     }
+    },
+    {
+     "do": "set",
+     "clock": {
+      "bits": "408eb00000000000"
+     }
+    },
+    {
+     "do": "advance",
+     "by": {
+      "bits": "406a600000000000"
+     }
+    },
+    {
+     "do": "timer",
+     "id": 1,
+     "delay": {
+      "bits": "4039000000000000"
+     },
+     "time": {
+      "bits": "408f400000000000"
+     }
+    }
+   ],
+   "log": [
+    "flush",
+    "ask frame",
+    "flush",
+    "ask frame",
+    "advance n:404f000000000000",
+    "set n:408eb00000000000",
+    "advance n:406a600000000000",
+    "timer 1",
+    "setInterval n:408f400000000000",
+    "ask frame"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "flush"
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "set",
+     "clock": {
+      "bits": "40a05e0000000000"
+     }
+    },
+    {
+     "do": "now"
+    },
+    {
+     "do": "set",
+     "clock": {
+      "bits": "40a7220000000000"
+     }
+    },
+    {
+     "do": "frame"
+    }
+   ],
+   "log": [
+    "flush",
+    "ask frame",
+    "flush",
+    "ask frame",
+    "flush",
+    "ask frame",
+    "flush",
+    "ask frame",
+    "set n:40a05e0000000000",
+    "ask frame",
+    "now n:40a05e0000000000",
+    "set n:40a7220000000000",
+    "frame"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "interval",
+     "id": 1,
+     "delay": {
+      "bits": "0000000000000000"
+     },
+     "time": {
+      "bits": "409f400000000000"
+     }
+    },
+    {
+     "do": "stop",
+     "id": 1
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "timeout",
+     "id": 1,
+     "delay": {
+      "bits": "0000000000000000"
+     },
+     "time": {
+      "bits": "408f400000000000"
+     }
+    },
+    {
+     "do": "now"
+    },
+    {
+     "do": "timeout",
+     "id": 1,
+     "delay": {
+      "bits": "408f400000000000"
+     },
+     "time": {
+      "bits": "0000000000000000"
+     }
+    },
+    {
+     "do": "timeout",
+     "id": 2,
+     "delay": {
+      "bits": "408f400000000000"
+     },
+     "time": {
+      "bits": "40b3880000000000"
+     }
+    },
+    {
+     "do": "frame"
+    },
+    {
+     "do": "timeout",
+     "id": 0,
+     "delay": {
+      "bits": "4039000000000000"
+     },
+     "time": {
+      "bits": "408f400000000000"
+     }
+    }
+   ],
+   "log": [
+    "interval 1",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "stop 1",
+    "flush",
+    "ask frame",
+    "flush",
+    "ask frame",
+    "timeout 1",
+    "ask frame",
+    "now n:0000000000000000",
+    "timeout 1",
+    "timeout 2",
+    "frame",
+    "ask frame",
+    "setTimeout n:408f400000000000",
+    "clearInterval",
+    "timeout 0",
+    "clearTimeout",
+    "setInterval n:408f400000000000",
+    "ask frame"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "flush"
+    },
+    {
+     "do": "interval",
+     "id": 0,
+     "delay": {
+      "bits": "4059000000000000"
+     },
+     "time": {
+      "bits": "0000000000000000"
+     }
+    },
+    {
+     "do": "set",
+     "clock": {
+      "bits": "4089600000000000"
+     }
+    },
+    {
+     "do": "frame"
+    },
+    {
+     "do": "timeout",
+     "id": 0,
+     "delay": {
+      "bits": "4059000000000000"
+     },
+     "time": {
+      "bits": "40b3880000000000"
+     }
+    }
+   ],
+   "log": [
+    "flush",
+    "ask frame",
+    "interval 0",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "set n:4089600000000000",
+    "frame",
+    "call 0 n:4089600000000000",
+    "ask frame",
+    "timeout 0"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "flush"
+    },
+    {
+     "do": "timeout",
+     "id": 1,
+     "delay": {
+      "bits": "4024000000000000"
+     },
+     "time": {
+      "bits": "40b3880000000000"
+     }
+    },
+    {
+     "do": "timeout",
+     "id": 2,
+     "delay": {
+      "bits": "3ff0000000000000"
+     },
+     "time": {
+      "bits": "408f400000000000"
+     }
+    },
+    {
+     "do": "set",
+     "clock": {
+      "bits": "409a3c0000000000"
+     }
+    },
+    {
+     "do": "frame"
+    },
+    {
+     "do": "frame"
+    },
+    {
+     "do": "interval",
+     "id": 2,
+     "delay": {
+      "bits": "408f400000000000"
+     },
+     "time": {
+      "bits": "0000000000000000"
+     }
+    },
+    {
+     "do": "interval",
+     "id": 2,
+     "delay": {
+      "bits": "4039000000000000"
+     },
+     "time": {
+      "bits": "407f400000000000"
+     }
+    },
+    {
+     "do": "restart",
+     "id": 2,
+     "delay": {
+      "bits": "4059000000000000"
+     },
+     "time": {
+      "bits": "40b3880000000000"
+     }
+    },
+    {
+     "do": "now"
+    }
+   ],
+   "log": [
+    "flush",
+    "ask frame",
+    "timeout 1",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "timeout 2",
+    "set n:409a3c0000000000",
+    "frame",
+    "call 2 n:4085380000000000",
+    "setTimeout n:40aa060000000000",
+    "clearInterval",
+    "frame",
+    "interval 2",
+    "clearTimeout",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "interval 2",
+    "restart 2",
+    "ask frame",
+    "now n:409a3c0000000000"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "set",
+     "clock": {
+      "bits": "409a000000000000"
+     }
+    },
+    {
+     "do": "interval",
+     "id": 2,
+     "delay": {
+      "bits": "4059000000000000"
+     },
+     "time": {
+      "bits": "409f400000000000"
+     }
+    },
+    {
+     "do": "restart",
+     "id": 2,
+     "delay": {
+      "bits": "4049000000000000"
+     },
+     "time": {
+      "bits": "40b3880000000000"
+     }
+    },
+    {
+     "do": "interval",
+     "id": 0,
+     "delay": {
+      "bits": "408f400000000000"
+     },
+     "time": {
+      "bits": "407f400000000000"
+     }
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "now"
+    },
+    {
+     "do": "frame"
+    },
+    {
+     "do": "stop",
+     "id": 0
+    }
+   ],
+   "log": [
+    "set n:409a000000000000",
+    "interval 2",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "restart 2",
+    "interval 0",
+    "flush",
+    "ask frame",
+    "call 0 n:4092300000000000",
+    "flush",
+    "now n:409a000000000000",
+    "frame",
+    "setTimeout n:408a200000000000",
+    "clearInterval",
+    "stop 0",
+    "clearTimeout",
+    "setInterval n:408f400000000000",
+    "ask frame"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "advance",
+     "by": {
+      "bits": "4042000000000000"
+     }
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "interval",
+     "id": 0,
+     "delay": {
+      "bits": "4049000000000000"
+     },
+     "time": {
+      "bits": "409f400000000000"
+     }
+    },
+    {
+     "do": "now"
+    },
+    {
+     "do": "timeout",
+     "id": 2,
+     "delay": {
+      "bits": "408f400000000000"
+     },
+     "time": {
+      "bits": "409f400000000000"
+     }
+    },
+    {
+     "do": "frame"
+    }
+   ],
+   "log": [
+    "advance n:4042000000000000",
+    "flush",
+    "ask frame",
+    "flush",
+    "interval 0",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "now n:4042000000000000",
+    "timeout 2",
+    "frame",
+    "setTimeout n:409f780000000000",
+    "clearInterval"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "set",
+     "clock": {
+      "bits": "408c300000000000"
+     }
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "interval",
+     "id": 1,
+     "delay": null,
+     "time": {
+      "bits": "407f400000000000"
+     }
+    }
+   ],
+   "log": [
+    "set n:408c300000000000",
+    "flush",
+    "ask frame",
+    "interval 1",
+    "setInterval n:408f400000000000",
+    "ask frame"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "timer",
+     "id": 1,
+     "delay": {
+      "bits": "4038000000000000"
+     },
+     "time": {
+      "bits": "0000000000000000"
+     }
+    },
+    {
+     "do": "stop",
+     "id": 1
+    },
+    {
+     "do": "interval",
+     "id": 0,
+     "delay": null,
+     "time": {
+      "bits": "40b3880000000000"
+     }
+    }
+   ],
+   "log": [
+    "timer 1",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "stop 1",
+    "interval 0"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "frame"
+    },
+    {
+     "do": "timeout",
+     "id": 2,
+     "delay": {
+      "bits": "4059000000000000"
+     },
+     "time": {
+      "bits": "409f400000000000"
+     }
+    },
+    {
+     "do": "advance",
+     "by": {
+      "bits": "406f000000000000"
+     }
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "restart",
+     "id": 2,
+     "delay": {
+      "bits": "408f400000000000"
+     },
+     "time": {
+      "bits": "0000000000000000"
+     }
+    },
+    {
+     "do": "frame"
+    },
+    {
+     "do": "restart",
+     "id": 2,
+     "delay": {
+      "bits": "4024000000000000"
+     },
+     "time": {
+      "bits": "407f400000000000"
+     }
+    },
+    {
+     "do": "timeout",
+     "id": 1,
+     "delay": {
+      "bits": "408f400000000000"
+     },
+     "time": {
+      "bits": "0000000000000000"
+     }
+    },
+    {
+     "do": "stop",
+     "id": 1
+    },
+    {
+     "do": "now"
+    }
+   ],
+   "log": [
+    "frame",
+    "timeout 2",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "advance n:406f000000000000",
+    "flush",
+    "ask frame",
+    "restart 2",
+    "frame",
+    "setTimeout n:4087800000000000",
+    "clearInterval",
+    "restart 2",
+    "clearTimeout",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "timeout 1",
+    "stop 1",
+    "ask frame",
+    "now n:406f000000000000"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "flush"
+    },
+    {
+     "do": "now"
+    },
+    {
+     "do": "timeout",
+     "id": 2,
+     "delay": {
+      "bits": "4049000000000000"
+     },
+     "time": {
+      "bits": "408f400000000000"
+     }
+    },
+    {
+     "do": "interval",
+     "id": 2,
+     "delay": {
+      "bits": "4049000000000000"
+     },
+     "time": {
+      "bits": "40b3880000000000"
+     }
+    },
+    {
+     "do": "set",
+     "clock": {
+      "bits": "4077c00000000000"
+     }
+    },
+    {
+     "do": "stop",
+     "id": 2
+    },
+    {
+     "do": "frame"
+    },
+    {
+     "do": "restart",
+     "id": 2,
+     "delay": {
+      "bits": "c059000000000000"
+     },
+     "time": null,
+     "stops": 2
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "stop",
+     "id": 2
+    }
+   ],
+   "log": [
+    "flush",
+    "ask frame",
+    "ask frame",
+    "now n:0000000000000000",
+    "timeout 2",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "interval 2",
+    "set n:4077c00000000000",
+    "stop 2",
+    "frame",
+    "setTimeout n:4084f00000000000",
+    "clearInterval",
+    "restart 2",
+    "ask frame",
+    "clearTimeout",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "flush",
+    "call 2 n:4059000000000000",
+    "stop 2"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "flush"
+    },
+    {
+     "do": "advance",
+     "by": {
+      "bits": "4060e00000000000"
+     }
+    },
+    {
+     "do": "frame"
+    },
+    {
+     "do": "set",
+     "clock": {
+      "bits": "4092500000000000"
+     }
+    },
+    {
+     "do": "now"
+    },
+    {
+     "do": "set",
+     "clock": {
+      "bits": "40942c0000000000"
+     }
+    },
+    {
+     "do": "set",
+     "clock": {
+      "bits": "408c480000000000"
+     }
+    },
+    {
+     "do": "interval",
+     "id": 1,
+     "delay": {
+      "bits": "4049000000000000"
+     },
+     "time": {
+      "bits": "409f400000000000"
+     }
+    },
+    {
+     "do": "timeout",
+     "id": 2,
+     "delay": {
+      "bits": "4059000000000000"
+     },
+     "time": {
+      "bits": "408f400000000000"
+     }
+    },
+    {
+     "do": "now"
+    }
+   ],
+   "log": [
+    "flush",
+    "ask frame",
+    "advance n:4060e00000000000",
+    "frame",
+    "set n:4092500000000000",
+    "ask frame",
+    "now n:4092500000000000",
+    "set n:40942c0000000000",
+    "set n:408c480000000000",
+    "interval 1",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "timeout 2",
+    "now n:4092500000000000"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "now"
+    },
+    {
+     "do": "frame"
+    },
+    {
+     "do": "interval",
+     "id": 1,
+     "delay": {
+      "bits": "4049000000000000"
+     },
+     "time": {
+      "bits": "40b3880000000000"
+     }
+    },
+    {
+     "do": "timer",
+     "id": 0,
+     "delay": {
+      "bits": "4024000000000000"
+     },
+     "time": {
+      "bits": "409f400000000000"
+     }
+    }
+   ],
+   "log": [
+    "ask frame",
+    "now n:0000000000000000",
+    "frame",
+    "interval 1",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "timer 0"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "frame"
+    },
+    {
+     "do": "now"
+    },
+    {
+     "do": "interval",
+     "id": 0,
+     "delay": {
+      "bits": "4038000000000000"
+     },
+     "time": {
+      "bits": "407f400000000000"
+     }
+    },
+    {
+     "do": "advance",
+     "by": {
+      "bits": "406d600000000000"
+     }
+    },
+    {
+     "do": "stop",
+     "id": 0
+    },
+    {
+     "do": "stop",
+     "id": 0
+    },
+    {
+     "do": "timer",
+     "id": 2,
+     "delay": {
+      "bits": "4039000000000000"
+     },
+     "time": {
+      "bits": "40b3880000000000"
+     }
+    },
+    {
+     "do": "advance",
+     "by": {
+      "bits": "4071e00000000000"
+     }
+    },
+    {
+     "do": "frame"
+    }
+   ],
+   "log": [
+    "frame",
+    "ask frame",
+    "now n:0000000000000000",
+    "interval 0",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "advance n:406d600000000000",
+    "stop 0",
+    "stop 0",
+    "timer 2",
+    "advance n:4071e00000000000",
+    "frame",
+    "setTimeout n:40b1980000000000",
+    "clearInterval"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "interval",
+     "id": 2,
+     "delay": {
+      "bits": "0000000000000000"
+     },
+     "time": {
+      "bits": "40b3880000000000"
+     }
+    },
+    {
+     "do": "timeout",
+     "id": 0,
+     "delay": {
+      "bits": "4038000000000000"
+     },
+     "time": null
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "timeout",
+     "id": 0,
+     "delay": {
+      "bits": "3ff0000000000000"
+     },
+     "time": {
+      "bits": "40b3880000000000"
+     }
+    },
+    {
+     "do": "timeout",
+     "id": 1,
+     "delay": {
+      "bits": "3ff0000000000000"
+     },
+     "time": null
+    }
+   ],
+   "log": [
+    "interval 2",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "timeout 0",
+    "ask frame",
+    "flush",
+    "ask frame",
+    "flush",
+    "ask frame",
+    "timeout 0",
+    "timeout 1",
+    "ask frame"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "now"
+    },
+    {
+     "do": "timer",
+     "id": 1,
+     "delay": {
+      "bits": "4039000000000000"
+     },
+     "time": {
+      "bits": "408f400000000000"
+     }
+    },
+    {
+     "do": "restart",
+     "id": 1,
+     "delay": {
+      "bits": "4059000000000000"
+     },
+     "time": {
+      "bits": "0000000000000000"
+     }
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "timer",
+     "id": 2,
+     "delay": {
+      "bits": "4024000000000000"
+     },
+     "time": {
+      "bits": "408f400000000000"
+     }
+    },
+    {
+     "do": "timeout",
+     "id": 0,
+     "delay": {
+      "bits": "4059000000000000"
+     },
+     "time": null
+    },
+    {
+     "do": "timer",
+     "id": 2,
+     "delay": {
+      "bits": "4038000000000000"
+     },
+     "time": {
+      "bits": "407f400000000000"
+     }
+    },
+    {
+     "do": "flush"
+    }
+   ],
+   "log": [
+    "ask frame",
+    "now n:0000000000000000",
+    "timer 1",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "restart 1",
+    "flush",
+    "ask frame",
+    "timer 2",
+    "timeout 0",
+    "ask frame",
+    "timer 2",
+    "flush",
+    "ask frame"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "set",
+     "clock": {
+      "bits": "408ef00000000000"
+     }
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "advance",
+     "by": {
+      "bits": "4058800000000000"
+     }
+    },
+    {
+     "do": "advance",
+     "by": {
+      "bits": "4071400000000000"
+     }
+    },
+    {
+     "do": "timer",
+     "id": 2,
+     "delay": {
+      "bits": "3ff0000000000000"
+     },
+     "time": {
+      "bits": "0000000000000000"
+     }
+    },
+    {
+     "do": "timer",
+     "id": 2,
+     "delay": {
+      "bits": "4024000000000000"
+     },
+     "time": {
+      "bits": "408f400000000000"
+     }
+    },
+    {
+     "do": "frame"
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "set",
+     "clock": {
+      "bits": "4096a40000000000"
+     }
+    }
+   ],
+   "log": [
+    "set n:408ef00000000000",
+    "flush",
+    "ask frame",
+    "advance n:4058800000000000",
+    "advance n:4071400000000000",
+    "timer 2",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "timer 2",
+    "frame",
+    "call 2 n:40954c0000000000",
+    "call 2 n:4076200000000000",
+    "ask frame",
+    "flush",
+    "ask frame",
+    "call 2 n:40954c0000000000",
+    "call 2 n:4076200000000000",
+    "flush",
+    "call 2 n:40954c0000000000",
+    "call 2 n:4076200000000000",
+    "set n:4096a40000000000"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "flush"
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "timeout",
+     "id": 0,
+     "delay": {
+      "bits": "3ff0000000000000"
+     },
+     "time": {
+      "bits": "407f400000000000"
+     }
+    },
+    {
+     "do": "timer",
+     "id": 1,
+     "delay": null,
+     "time": {
+      "bits": "0000000000000000"
+     }
+    },
+    {
+     "do": "interval",
+     "id": 1,
+     "delay": null,
+     "time": {
+      "bits": "409f400000000000"
+     }
+    },
+    {
+     "do": "restart",
+     "id": 1,
+     "delay": {
+      "bits": "0000000000000000"
+     },
+     "time": {
+      "bits": "407f400000000000"
+     }
+    }
+   ],
+   "log": [
+    "flush",
+    "ask frame",
+    "flush",
+    "ask frame",
+    "timeout 0",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "timer 1",
+    "interval 1",
+    "restart 1"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "interval",
+     "id": 0,
+     "delay": {
+      "bits": "4038000000000000"
+     },
+     "time": null
+    },
+    {
+     "do": "timer",
+     "id": 0,
+     "delay": {
+      "bits": "3ff0000000000000"
+     },
+     "time": {
+      "bits": "40b3880000000000"
+     }
+    },
+    {
+     "do": "restart",
+     "id": 0,
+     "delay": null,
+     "time": {
+      "bits": "409f400000000000"
+     }
+    },
+    {
+     "do": "timer",
+     "id": 1,
+     "delay": null,
+     "time": {
+      "bits": "0000000000000000"
+     }
+    },
+    {
+     "do": "interval",
+     "id": 1,
+     "delay": {
+      "bits": "4038000000000000"
+     },
+     "time": null
+    }
+   ],
+   "log": [
+    "interval 0",
+    "ask frame",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "timer 0",
+    "restart 0",
+    "timer 1",
+    "interval 1",
+    "ask frame"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "set",
+     "clock": {
+      "bits": "4080480000000000"
+     }
+    },
+    {
+     "do": "interval",
+     "id": 0,
+     "delay": {
+      "bits": "0000000000000000"
+     },
+     "time": {
+      "bits": "408f400000000000"
+     }
+    },
+    {
+     "do": "set",
+     "clock": {
+      "bits": "4099640000000000"
+     }
+    },
+    {
+     "do": "timer",
+     "id": 2,
+     "delay": null,
+     "time": {
+      "bits": "40b3880000000000"
+     }
+    }
+   ],
+   "log": [
+    "set n:4080480000000000",
+    "interval 0",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "set n:4099640000000000",
+    "timer 2"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "interval",
+     "id": 0,
+     "delay": {
+      "bits": "4039000000000000"
+     },
+     "time": {
+      "bits": "408f400000000000"
+     }
+    },
+    {
+     "do": "timeout",
+     "id": 1,
+     "delay": {
+      "bits": "0000000000000000"
+     },
+     "time": {
+      "bits": "408f400000000000"
+     }
+    },
+    {
+     "do": "stop",
+     "id": 0
+    }
+   ],
+   "log": [
+    "interval 0",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "timeout 1",
+    "stop 0"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "advance",
+     "by": {
+      "bits": "4048800000000000"
+     }
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "flush"
+    }
+   ],
+   "log": [
+    "advance n:4048800000000000",
+    "flush",
+    "ask frame",
+    "flush"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "timeout",
+     "id": 2,
+     "delay": {
+      "bits": "408f400000000000"
+     },
+     "time": {
+      "bits": "40b3880000000000"
+     }
+    },
+    {
+     "do": "frame"
+    },
+    {
+     "do": "restart",
+     "id": 2,
+     "delay": {
+      "bits": "408f400000000000"
+     },
+     "time": {
+      "bits": "40b3880000000000"
+     }
+    },
+    {
+     "do": "stop",
+     "id": 2
+    },
+    {
+     "do": "now"
+    },
+    {
+     "do": "timer",
+     "id": 1,
+     "delay": null,
+     "time": {
+      "bits": "40b3880000000000"
+     }
+    },
+    {
+     "do": "frame"
+    }
+   ],
+   "log": [
+    "timeout 2",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "frame",
+    "ask frame",
+    "setTimeout n:40b7700000000000",
+    "clearInterval",
+    "restart 2",
+    "clearTimeout",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "stop 2",
+    "ask frame",
+    "now n:0000000000000000",
+    "timer 1",
+    "frame",
+    "ask frame",
+    "setTimeout n:40b3880000000000",
+    "clearInterval"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "timer",
+     "id": 2,
+     "delay": {
+      "bits": "408f400000000000"
+     },
+     "time": {
+      "bits": "408f400000000000"
+     }
+    },
+    {
+     "do": "now"
+    },
+    {
+     "do": "stop",
+     "id": 2
+    },
+    {
+     "do": "frame"
+    },
+    {
+     "do": "timer",
+     "id": 1,
+     "delay": {
+      "bits": "4059000000000000"
+     },
+     "time": {
+      "bits": "408f400000000000"
+     }
+    },
+    {
+     "do": "flush"
+    }
+   ],
+   "log": [
+    "timer 2",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "ask frame",
+    "now n:0000000000000000",
+    "stop 2",
+    "frame",
+    "ask frame",
+    "clearInterval",
+    "timer 1",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "flush",
+    "ask frame"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "frame"
+    },
+    {
+     "do": "set",
+     "clock": {
+      "bits": "407ce00000000000"
+     }
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "timer",
+     "id": 1,
+     "delay": {
+      "bits": "c059000000000000"
+     },
+     "time": {
+      "bits": "0000000000000000"
+     }
+    },
+    {
+     "do": "stop",
+     "id": 1
+    },
+    {
+     "do": "advance",
+     "by": {
+      "bits": "4068200000000000"
+     }
+    },
+    {
+     "do": "interval",
+     "id": 2,
+     "delay": {
+      "bits": "0000000000000000"
+     },
+     "time": null
+    },
+    {
+     "do": "restart",
+     "id": 2,
+     "delay": {
+      "bits": "4039000000000000"
+     },
+     "time": {
+      "bits": "40b3880000000000"
+     }
+    },
+    {
+     "do": "restart",
+     "id": 1,
+     "delay": {
+      "bits": "4059000000000000"
+     },
+     "time": {
+      "bits": "407f400000000000"
+     }
+    }
+   ],
+   "log": [
+    "frame",
+    "set n:407ce00000000000",
+    "flush",
+    "ask frame",
+    "flush",
+    "timer 1",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "stop 1",
+    "advance n:4068200000000000",
+    "interval 2",
+    "restart 2",
+    "restart 1"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "flush"
+    },
+    {
+     "do": "now"
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "now"
+    }
+   ],
+   "log": [
+    "flush",
+    "ask frame",
+    "ask frame",
+    "now n:0000000000000000",
+    "flush",
+    "ask frame",
+    "ask frame",
+    "now n:0000000000000000"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "now"
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "set",
+     "clock": {
+      "bits": "4087f80000000000"
+     }
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "set",
+     "clock": {
+      "bits": "4076c00000000000"
+     }
+    },
+    {
+     "do": "flush"
+    }
+   ],
+   "log": [
+    "ask frame",
+    "now n:0000000000000000",
+    "flush",
+    "ask frame",
+    "flush",
+    "ask frame",
+    "flush",
+    "ask frame",
+    "set n:4087f80000000000",
+    "flush",
+    "ask frame",
+    "flush",
+    "set n:4076c00000000000",
+    "flush"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "timeout",
+     "id": 1,
+     "delay": {
+      "bits": "4038000000000000"
+     },
+     "time": {
+      "bits": "40b3880000000000"
+     }
+    },
+    {
+     "do": "timeout",
+     "id": 2,
+     "delay": {
+      "bits": "4024000000000000"
+     },
+     "time": null
+    },
+    {
+     "do": "interval",
+     "id": 0,
+     "delay": null,
+     "time": {
+      "bits": "0000000000000000"
+     }
+    },
+    {
+     "do": "stop",
+     "id": 0
+    },
+    {
+     "do": "now"
+    },
+    {
+     "do": "advance",
+     "by": {
+      "bits": "406be00000000000"
+     }
+    },
+    {
+     "do": "timer",
+     "id": 0,
+     "delay": {
+      "bits": "4039000000000000"
+     },
+     "time": {
+      "bits": "408f400000000000"
+     }
+    },
+    {
+     "do": "flush"
+    }
+   ],
+   "log": [
+    "timeout 1",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "timeout 2",
+    "ask frame",
+    "interval 0",
+    "stop 0",
+    "ask frame",
+    "now n:0000000000000000",
+    "advance n:406be00000000000",
+    "timer 0",
+    "flush",
+    "ask frame",
+    "call 2 n:406be00000000000"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "timeout",
+     "id": 2,
+     "delay": {
+      "bits": "4049000000000000"
+     },
+     "time": {
+      "bits": "40b3880000000000"
+     }
+    },
+    {
+     "do": "stop",
+     "id": 2
+    },
+    {
+     "do": "interval",
+     "id": 2,
+     "delay": null,
+     "time": {
+      "bits": "408f400000000000"
+     }
+    },
+    {
+     "do": "restart",
+     "id": 2,
+     "delay": {
+      "bits": "3ff0000000000000"
+     },
+     "time": {
+      "bits": "40b3880000000000"
+     }
+    },
+    {
+     "do": "restart",
+     "id": 2,
+     "delay": {
+      "bits": "0000000000000000"
+     },
+     "time": {
+      "bits": "407f400000000000"
+     }
+    },
+    {
+     "do": "advance",
+     "by": {
+      "bits": "4057000000000000"
+     }
+    },
+    {
+     "do": "advance",
+     "by": {
+      "bits": "406fa00000000000"
+     }
+    },
+    {
+     "do": "restart",
+     "id": 2,
+     "delay": {
+      "bits": "4049000000000000"
+     },
+     "time": {
+      "bits": "407f400000000000"
+     },
+     "stops": 2
+    }
+   ],
+   "log": [
+    "timeout 2",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "stop 2",
+    "interval 2",
+    "restart 2",
+    "restart 2",
+    "advance n:4057000000000000",
+    "advance n:406fa00000000000",
+    "restart 2"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "interval",
+     "id": 1,
+     "delay": {
+      "bits": "3ff0000000000000"
+     },
+     "time": {
+      "bits": "0000000000000000"
+     }
+    },
+    {
+     "do": "interval",
+     "id": 2,
+     "delay": {
+      "bits": "4024000000000000"
+     },
+     "time": {
+      "bits": "408f400000000000"
+     }
+    },
+    {
+     "do": "advance",
+     "by": {
+      "bits": "4060c00000000000"
+     }
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "timer",
+     "id": 0,
+     "delay": {
+      "bits": "408f400000000000"
+     },
+     "time": {
+      "bits": "407f400000000000"
+     }
+    }
+   ],
+   "log": [
+    "interval 1",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "interval 2",
+    "advance n:4060c00000000000",
+    "flush",
+    "ask frame",
+    "call 1 n:4060c00000000000",
+    "timer 0"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "flush"
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "advance",
+     "by": {
+      "bits": "406c000000000000"
+     }
+    },
+    {
+     "do": "frame"
+    }
+   ],
+   "log": [
+    "flush",
+    "ask frame",
+    "flush",
+    "ask frame",
+    "advance n:406c000000000000",
+    "frame"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "timer",
+     "id": 0,
+     "delay": {
+      "bits": "4038000000000000"
+     },
+     "time": {
+      "bits": "409f400000000000"
+     }
+    },
+    {
+     "do": "advance",
+     "by": {
+      "bits": "4053800000000000"
+     }
+    },
+    {
+     "do": "timeout",
+     "id": 0,
+     "delay": {
+      "bits": "4024000000000000"
+     },
+     "time": {
+      "bits": "408f400000000000"
+     }
+    },
+    {
+     "do": "advance",
+     "by": {
+      "bits": "4064600000000000"
+     }
+    },
+    {
+     "do": "advance",
+     "by": {
+      "bits": "406a000000000000"
+     }
+    },
+    {
+     "do": "now"
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "timeout",
+     "id": 1,
+     "delay": {
+      "bits": "4039000000000000"
+     },
+     "time": {
+      "bits": "0000000000000000"
+     }
+    },
+    {
+     "do": "now"
+    }
+   ],
+   "log": [
+    "timer 0",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "advance n:4053800000000000",
+    "timeout 0",
+    "advance n:4064600000000000",
+    "advance n:406a000000000000",
+    "ask frame",
+    "now n:407c100000000000",
+    "flush",
+    "timeout 1",
+    "now n:407c100000000000"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "now"
+    },
+    {
+     "do": "interval",
+     "id": 0,
+     "delay": {
+      "bits": "408f400000000000"
+     },
+     "time": {
+      "bits": "407f400000000000"
+     }
+    },
+    {
+     "do": "interval",
+     "id": 2,
+     "delay": {
+      "bits": "0000000000000000"
+     },
+     "time": {
+      "bits": "407f400000000000"
+     }
+    },
+    {
+     "do": "timer",
+     "id": 2,
+     "delay": {
+      "bits": "4038000000000000"
+     },
+     "time": {
+      "bits": "40b3880000000000"
+     }
+    },
+    {
+     "do": "restart",
+     "id": 2,
+     "delay": {
+      "bits": "4059000000000000"
+     },
+     "time": {
+      "bits": "408f400000000000"
+     }
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "advance",
+     "by": {
+      "bits": "4032000000000000"
+     }
+    }
+   ],
+   "log": [
+    "ask frame",
+    "now n:0000000000000000",
+    "interval 0",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "interval 2",
+    "timer 2",
+    "restart 2",
+    "flush",
+    "ask frame",
+    "advance n:4032000000000000"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "timeout",
+     "id": 0,
+     "delay": {
+      "bits": "4038000000000000"
+     },
+     "time": {
+      "bits": "408f400000000000"
+     }
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "restart",
+     "id": 0,
+     "delay": {
+      "bits": "3ff0000000000000"
+     },
+     "time": {
+      "bits": "409f400000000000"
+     }
+    },
+    {
+     "do": "now"
+    },
+    {
+     "do": "timeout",
+     "id": 2,
+     "delay": null,
+     "time": {
+      "bits": "408f400000000000"
+     }
+    },
+    {
+     "do": "stop",
+     "id": 2
+    },
+    {
+     "do": "timer",
+     "id": 2,
+     "delay": {
+      "bits": "4024000000000000"
+     },
+     "time": {
+      "bits": "0000000000000000"
+     }
+    },
+    {
+     "do": "flush"
+    }
+   ],
+   "log": [
+    "timeout 0",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "flush",
+    "ask frame",
+    "restart 0",
+    "ask frame",
+    "now n:0000000000000000",
+    "timeout 2",
+    "stop 2",
+    "timer 2",
+    "flush",
+    "ask frame"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "now"
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "timeout",
+     "id": 1,
+     "delay": {
+      "bits": "4059000000000000"
+     },
+     "time": {
+      "bits": "0000000000000000"
+     }
+    },
+    {
+     "do": "timer",
+     "id": 1,
+     "delay": {
+      "bits": "408f400000000000"
+     },
+     "time": {
+      "bits": "409f400000000000"
+     }
+    },
+    {
+     "do": "advance",
+     "by": {
+      "bits": "4018000000000000"
+     }
+    },
+    {
+     "do": "now"
+    }
+   ],
+   "log": [
+    "ask frame",
+    "now n:0000000000000000",
+    "flush",
+    "ask frame",
+    "timeout 1",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "timer 1",
+    "advance n:4018000000000000",
+    "ask frame",
+    "now n:4018000000000000"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "now"
+    },
+    {
+     "do": "now"
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "timeout",
+     "id": 1,
+     "delay": {
+      "bits": "0000000000000000"
+     },
+     "time": {
+      "bits": "40b3880000000000"
+     }
+    }
+   ],
+   "log": [
+    "ask frame",
+    "now n:0000000000000000",
+    "ask frame",
+    "now n:0000000000000000",
+    "flush",
+    "ask frame",
+    "timeout 1",
+    "setInterval n:408f400000000000",
+    "ask frame"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "timeout",
+     "id": 1,
+     "delay": {
+      "bits": "3ff0000000000000"
+     },
+     "time": {
+      "bits": "407f400000000000"
+     }
+    },
+    {
+     "do": "stop",
+     "id": 1
+    },
+    {
+     "do": "frame"
+    },
+    {
+     "do": "set",
+     "clock": {
+      "bits": "40a6700000000000"
+     }
+    }
+   ],
+   "log": [
+    "timeout 1",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "stop 1",
+    "frame",
+    "ask frame",
+    "clearInterval",
+    "set n:40a6700000000000"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "now"
+    },
+    {
+     "do": "now"
+    },
+    {
+     "do": "interval",
+     "id": 0,
+     "delay": {
+      "bits": "0000000000000000"
+     },
+     "time": {
+      "bits": "407f400000000000"
+     }
+    }
+   ],
+   "log": [
+    "ask frame",
+    "now n:0000000000000000",
+    "ask frame",
+    "now n:0000000000000000",
+    "interval 0",
+    "setInterval n:408f400000000000",
+    "ask frame"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "now"
+    },
+    {
+     "do": "now"
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "advance",
+     "by": {
+      "bits": "406c800000000000"
+     }
+    },
+    {
+     "do": "timer",
+     "id": 2,
+     "delay": {
+      "bits": "3ff0000000000000"
+     },
+     "time": {
+      "bits": "0000000000000000"
+     }
+    },
+    {
+     "do": "set",
+     "clock": {
+      "bits": "4072000000000000"
+     }
+    }
+   ],
+   "log": [
+    "ask frame",
+    "now n:0000000000000000",
+    "ask frame",
+    "now n:0000000000000000",
+    "flush",
+    "ask frame",
+    "flush",
+    "ask frame",
+    "advance n:406c800000000000",
+    "timer 2",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "set n:4072000000000000"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "interval",
+     "id": 1,
+     "delay": {
+      "bits": "3ff0000000000000"
+     },
+     "time": {
+      "bits": "409f400000000000"
+     }
+    },
+    {
+     "do": "timeout",
+     "id": 0,
+     "delay": {
+      "bits": "4049000000000000"
+     },
+     "time": {
+      "bits": "0000000000000000"
+     }
+    },
+    {
+     "do": "timer",
+     "id": 1,
+     "delay": {
+      "bits": "4038000000000000"
+     },
+     "time": {
+      "bits": "407f400000000000"
+     }
+    },
+    {
+     "do": "interval",
+     "id": 0,
+     "delay": {
+      "bits": "c059000000000000"
+     },
+     "time": {
+      "bits": "407f400000000000"
+     }
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "timeout",
+     "id": 2,
+     "delay": {
+      "bits": "3ff0000000000000"
+     },
+     "time": {
+      "bits": "407f400000000000"
+     }
+    }
+   ],
+   "log": [
+    "interval 1",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "timeout 0",
+    "timer 1",
+    "interval 0",
+    "flush",
+    "ask frame",
+    "timeout 2"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "interval",
+     "id": 2,
+     "delay": {
+      "bits": "408f400000000000"
+     },
+     "time": {
+      "bits": "408f400000000000"
+     }
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "set",
+     "clock": {
+      "bits": "4085480000000000"
+     }
+    },
+    {
+     "do": "timeout",
+     "id": 2,
+     "delay": {
+      "bits": "4049000000000000"
+     },
+     "time": {
+      "bits": "407f400000000000"
+     }
+    },
+    {
+     "do": "timeout",
+     "id": 2,
+     "delay": {
+      "bits": "c059000000000000"
+     },
+     "time": {
+      "bits": "409f400000000000"
+     }
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "interval",
+     "id": 2,
+     "delay": null,
+     "time": {
+      "bits": "40b3880000000000"
+     }
+    },
+    {
+     "do": "frame"
+    },
+    {
+     "do": "advance",
+     "by": {
+      "bits": "4070f00000000000"
+     }
+    }
+   ],
+   "log": [
+    "interval 2",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "flush",
+    "ask frame",
+    "set n:4085480000000000",
+    "timeout 2",
+    "timeout 2",
+    "flush",
+    "ask frame",
+    "call 2 n:4066a00000000000",
+    "interval 2",
+    "frame",
+    "setTimeout n:40930c0000000000",
+    "clearInterval",
+    "advance n:4070f00000000000"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "flush"
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "timer",
+     "id": 0,
+     "delay": {
+      "bits": "4024000000000000"
+     },
+     "time": {
+      "bits": "40b3880000000000"
+     }
+    },
+    {
+     "do": "timeout",
+     "id": 2,
+     "delay": {
+      "bits": "4039000000000000"
+     },
+     "time": {
+      "bits": "0000000000000000"
+     }
+    },
+    {
+     "do": "timer",
+     "id": 0,
+     "delay": {
+      "bits": "408f400000000000"
+     },
+     "time": {
+      "bits": "407f400000000000"
+     }
+    },
+    {
+     "do": "restart",
+     "id": 2,
+     "delay": {
+      "bits": "4038000000000000"
+     },
+     "time": {
+      "bits": "409f400000000000"
+     },
+     "stops": 0
+    },
+    {
+     "do": "set",
+     "clock": {
+      "bits": "40a45e0000000000"
+     }
+    },
+    {
+     "do": "now"
+    }
+   ],
+   "log": [
+    "flush",
+    "ask frame",
+    "flush",
+    "ask frame",
+    "flush",
+    "ask frame",
+    "timer 0",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "timeout 2",
+    "timer 0",
+    "restart 2",
+    "set n:40a45e0000000000",
+    "ask frame",
+    "now n:40a45e0000000000"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "flush"
+    },
+    {
+     "do": "timeout",
+     "id": 2,
+     "delay": null,
+     "time": {
+      "bits": "408f400000000000"
+     }
+    },
+    {
+     "do": "flush"
+    }
+   ],
+   "log": [
+    "flush",
+    "ask frame",
+    "timeout 2",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "flush",
+    "ask frame"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "interval",
+     "id": 2,
+     "delay": {
+      "bits": "c059000000000000"
+     },
+     "time": {
+      "bits": "409f400000000000"
+     }
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "set",
+     "clock": {
+      "bits": "4091b00000000000"
+     }
+    },
+    {
+     "do": "interval",
+     "id": 2,
+     "delay": {
+      "bits": "4049000000000000"
+     },
+     "time": {
+      "bits": "40b3880000000000"
+     }
+    },
+    {
+     "do": "timer",
+     "id": 1,
+     "delay": {
+      "bits": "4024000000000000"
+     },
+     "time": {
+      "bits": "407f400000000000"
+     }
+    }
+   ],
+   "log": [
+    "interval 2",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "flush",
+    "ask frame",
+    "flush",
+    "ask frame",
+    "set n:4091b00000000000",
+    "interval 2",
+    "timer 1"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "flush"
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "advance",
+     "by": {
+      "bits": "406bc00000000000"
+     }
+    },
+    {
+     "do": "now"
+    },
+    {
+     "do": "frame"
+    },
+    {
+     "do": "timer",
+     "id": 2,
+     "delay": {
+      "bits": "4038000000000000"
+     },
+     "time": {
+      "bits": "409f400000000000"
+     }
+    },
+    {
+     "do": "stop",
+     "id": 2
+    },
+    {
+     "do": "stop",
+     "id": 2
+    },
+    {
+     "do": "set",
+     "clock": {
+      "bits": "4063200000000000"
+     }
+    }
+   ],
+   "log": [
+    "flush",
+    "ask frame",
+    "flush",
+    "ask frame",
+    "advance n:406bc00000000000",
+    "ask frame",
+    "now n:406bc00000000000",
+    "frame",
+    "timer 2",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "stop 2",
+    "stop 2",
+    "set n:4063200000000000"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "flush"
+    },
+    {
+     "do": "advance",
+     "by": {
+      "bits": "405dc00000000000"
+     }
+    },
+    {
+     "do": "set",
+     "clock": {
+      "bits": "4081b80000000000"
+     }
+    },
+    {
+     "do": "timeout",
+     "id": 1,
+     "delay": {
+      "bits": "4039000000000000"
+     },
+     "time": null
+    },
+    {
+     "do": "flush"
+    }
+   ],
+   "log": [
+    "flush",
+    "ask frame",
+    "advance n:405dc00000000000",
+    "set n:4081b80000000000",
+    "timeout 1",
+    "ask frame",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "flush"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "flush"
+    },
+    {
+     "do": "timer",
+     "id": 0,
+     "delay": {
+      "bits": "0000000000000000"
+     },
+     "time": {
+      "bits": "40b3880000000000"
+     }
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "restart",
+     "id": 0,
+     "delay": {
+      "bits": "4049000000000000"
+     },
+     "time": {
+      "bits": "40b3880000000000"
+     }
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "timeout",
+     "id": 2,
+     "delay": {
+      "bits": "4039000000000000"
+     },
+     "time": {
+      "bits": "407f400000000000"
+     }
+    },
+    {
+     "do": "stop",
+     "id": 0
+    },
+    {
+     "do": "set",
+     "clock": {
+      "bits": "4098880000000000"
+     }
+    }
+   ],
+   "log": [
+    "flush",
+    "ask frame",
+    "timer 0",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "flush",
+    "ask frame",
+    "restart 0",
+    "flush",
+    "ask frame",
+    "timeout 2",
+    "stop 0",
+    "set n:4098880000000000"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "now"
+    },
+    {
+     "do": "set",
+     "clock": {
+      "bits": "4051000000000000"
+     }
+    },
+    {
+     "do": "flush"
+    }
+   ],
+   "log": [
+    "ask frame",
+    "now n:0000000000000000",
+    "set n:4051000000000000",
+    "flush",
+    "ask frame"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "timer",
+     "id": 1,
+     "delay": {
+      "bits": "0000000000000000"
+     },
+     "time": {
+      "bits": "409f400000000000"
+     }
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "timer",
+     "id": 2,
+     "delay": {
+      "bits": "408f400000000000"
+     },
+     "time": {
+      "bits": "0000000000000000"
+     }
+    },
+    {
+     "do": "set",
+     "clock": {
+      "bits": "409a940000000000"
+     }
+    },
+    {
+     "do": "set",
+     "clock": {
+      "bits": "40a43e0000000000"
+     }
+    },
+    {
+     "do": "restart",
+     "id": 1,
+     "delay": {
+      "bits": "0000000000000000"
+     },
+     "time": {
+      "bits": "0000000000000000"
+     },
+     "stops": 1
+    },
+    {
+     "do": "stop",
+     "id": 2
+    },
+    {
+     "do": "restart",
+     "id": 2,
+     "delay": {
+      "bits": "c059000000000000"
+     },
+     "time": {
+      "bits": "409f400000000000"
+     },
+     "stops": 1
+    }
+   ],
+   "log": [
+    "timer 1",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "flush",
+    "ask frame",
+    "timer 2",
+    "set n:409a940000000000",
+    "set n:40a43e0000000000",
+    "restart 1",
+    "stop 2",
+    "restart 2"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "set",
+     "clock": {
+      "bits": "4099880000000000"
+     }
+    },
+    {
+     "do": "timer",
+     "id": 2,
+     "delay": {
+      "bits": "408f400000000000"
+     },
+     "time": null
+    },
+    {
+     "do": "timer",
+     "id": 0,
+     "delay": {
+      "bits": "408f400000000000"
+     },
+     "time": {
+      "bits": "407f400000000000"
+     }
+    },
+    {
+     "do": "set",
+     "clock": {
+      "bits": "40a1240000000000"
+     }
+    },
+    {
+     "do": "now"
+    },
+    {
+     "do": "interval",
+     "id": 2,
+     "delay": {
+      "bits": "4049000000000000"
+     },
+     "time": {
+      "bits": "40b3880000000000"
+     }
+    },
+    {
+     "do": "advance",
+     "by": {
+      "bits": "4000000000000000"
+     }
+    },
+    {
+     "do": "interval",
+     "id": 2,
+     "delay": {
+      "bits": "4039000000000000"
+     },
+     "time": {
+      "bits": "407f400000000000"
+     }
+    }
+   ],
+   "log": [
+    "set n:4099880000000000",
+    "timer 2",
+    "ask frame",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "timer 0",
+    "set n:40a1240000000000",
+    "now n:4099880000000000",
+    "interval 2",
+    "advance n:4000000000000000",
+    "interval 2"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "set",
+     "clock": {
+      "bits": "40a5760000000000"
+     }
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "now"
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "frame"
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "advance",
+     "by": {
+      "bits": "4069c00000000000"
+     }
+    },
+    {
+     "do": "flush"
+    }
+   ],
+   "log": [
+    "set n:40a5760000000000",
+    "flush",
+    "ask frame",
+    "now n:40a5760000000000",
+    "flush",
+    "frame",
+    "flush",
+    "ask frame",
+    "advance n:4069c00000000000",
+    "flush"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "now"
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "now"
+    },
+    {
+     "do": "set",
+     "clock": {
+      "bits": "4097300000000000"
+     }
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "set",
+     "clock": {
+      "bits": "40902c0000000000"
+     }
+    },
+    {
+     "do": "now"
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "timeout",
+     "id": 2,
+     "delay": {
+      "bits": "4049000000000000"
+     },
+     "time": {
+      "bits": "0000000000000000"
+     }
+    }
+   ],
+   "log": [
+    "ask frame",
+    "now n:0000000000000000",
+    "flush",
+    "ask frame",
+    "ask frame",
+    "now n:0000000000000000",
+    "set n:4097300000000000",
+    "flush",
+    "ask frame",
+    "set n:40902c0000000000",
+    "now n:4097300000000000",
+    "flush",
+    "timeout 2",
+    "setInterval n:408f400000000000",
+    "ask frame"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "flush"
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "frame"
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "timeout",
+     "id": 1,
+     "delay": {
+      "bits": "4039000000000000"
+     },
+     "time": {
+      "bits": "409f400000000000"
+     }
+    },
+    {
+     "do": "set",
+     "clock": {
+      "bits": "4091d80000000000"
+     }
+    }
+   ],
+   "log": [
+    "flush",
+    "ask frame",
+    "flush",
+    "ask frame",
+    "frame",
+    "flush",
+    "ask frame",
+    "timeout 1",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "set n:4091d80000000000"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "set",
+     "clock": {
+      "bits": "409e180000000000"
+     }
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "interval",
+     "id": 0,
+     "delay": {
+      "bits": "4059000000000000"
+     },
+     "time": {
+      "bits": "408f400000000000"
+     }
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "interval",
+     "id": 0,
+     "delay": {
+      "bits": "4049000000000000"
+     },
+     "time": {
+      "bits": "408f400000000000"
+     }
+    },
+    {
+     "do": "frame"
+    }
+   ],
+   "log": [
+    "set n:409e180000000000",
+    "flush",
+    "ask frame",
+    "interval 0",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "flush",
+    "call 0 n:408cf00000000000",
+    "flush",
+    "call 0 n:408cf00000000000",
+    "interval 0",
+    "frame",
+    "call 0 n:408cf00000000000",
+    "call 0 n:408cf00000000000",
+    "ask frame"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "set",
+     "clock": {
+      "bits": "40a66a0000000000"
+     }
+    },
+    {
+     "do": "set",
+     "clock": {
+      "bits": "40a2c20000000000"
+     }
+    },
+    {
+     "do": "timer",
+     "id": 0,
+     "delay": {
+      "bits": "c059000000000000"
+     },
+     "time": null
+    }
+   ],
+   "log": [
+    "set n:40a66a0000000000",
+    "set n:40a2c20000000000",
+    "timer 0",
+    "ask frame",
+    "setInterval n:408f400000000000",
+    "ask frame"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "flush"
+    },
+    {
+     "do": "timeout",
+     "id": 0,
+     "delay": {
+      "bits": "408f400000000000"
+     },
+     "time": null
+    },
+    {
+     "do": "now"
+    },
+    {
+     "do": "now"
+    },
+    {
+     "do": "advance",
+     "by": {
+      "bits": "4055000000000000"
+     }
+    },
+    {
+     "do": "restart",
+     "id": 0,
+     "delay": null,
+     "time": {
+      "bits": "407f400000000000"
+     }
+    },
+    {
+     "do": "frame"
+    },
+    {
+     "do": "interval",
+     "id": 0,
+     "delay": {
+      "bits": "408f400000000000"
+     },
+     "time": {
+      "bits": "407f400000000000"
+     }
+    },
+    {
+     "do": "set",
+     "clock": {
+      "bits": "4090c40000000000"
+     }
+    }
+   ],
+   "log": [
+    "flush",
+    "ask frame",
+    "timeout 0",
+    "ask frame",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "ask frame",
+    "now n:0000000000000000",
+    "ask frame",
+    "now n:0000000000000000",
+    "advance n:4055000000000000",
+    "restart 0",
+    "frame",
+    "setTimeout n:407a000000000000",
+    "clearInterval",
+    "interval 0",
+    "clearTimeout",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "set n:4090c40000000000"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "set",
+     "clock": {
+      "bits": "4092600000000000"
+     }
+    },
+    {
+     "do": "advance",
+     "by": {
+      "bits": "4062e00000000000"
+     }
+    },
+    {
+     "do": "now"
+    },
+    {
+     "do": "timer",
+     "id": 2,
+     "delay": {
+      "bits": "4039000000000000"
+     },
+     "time": {
+      "bits": "407f400000000000"
+     }
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "advance",
+     "by": {
+      "bits": "4063800000000000"
+     }
+    },
+    {
+     "do": "flush"
+    }
+   ],
+   "log": [
+    "set n:4092600000000000",
+    "advance n:4062e00000000000",
+    "ask frame",
+    "now n:4094bc0000000000",
+    "timer 2",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "flush",
+    "call 2 n:4089100000000000",
+    "advance n:4063800000000000",
+    "flush",
+    "call 2 n:4089100000000000"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "set",
+     "clock": {
+      "bits": "40a11e0000000000"
+     }
+    },
+    {
+     "do": "frame"
+    },
+    {
+     "do": "now"
+    }
+   ],
+   "log": [
+    "set n:40a11e0000000000",
+    "frame",
+    "ask frame",
+    "now n:40a11e0000000000"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "timer",
+     "id": 1,
+     "delay": {
+      "bits": "408f400000000000"
+     },
+     "time": null
+    },
+    {
+     "do": "set",
+     "clock": {
+      "bits": "4082e80000000000"
+     }
+    },
+    {
+     "do": "timeout",
+     "id": 1,
+     "delay": {
+      "bits": "4059000000000000"
+     },
+     "time": {
+      "bits": "0000000000000000"
+     }
+    },
+    {
+     "do": "restart",
+     "id": 1,
+     "delay": {
+      "bits": "3ff0000000000000"
+     },
+     "time": {
+      "bits": "0000000000000000"
+     },
+     "stops": 1
+    },
+    {
+     "do": "timer",
+     "id": 0,
+     "delay": {
+      "bits": "4038000000000000"
+     },
+     "time": {
+      "bits": "407f400000000000"
+     }
+    },
+    {
+     "do": "set",
+     "clock": {
+      "bits": "40a72e0000000000"
+     }
+    },
+    {
+     "do": "advance",
+     "by": {
+      "bits": "4069a00000000000"
+     }
+    },
+    {
+     "do": "advance",
+     "by": {
+      "bits": "4057800000000000"
+     }
+    },
+    {
+     "do": "timeout",
+     "id": 2,
+     "delay": {
+      "bits": "4024000000000000"
+     },
+     "time": {
+      "bits": "40b3880000000000"
+     }
+    }
+   ],
+   "log": [
+    "timer 1",
+    "ask frame",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "set n:4082e80000000000",
+    "timeout 1",
+    "restart 1",
+    "timer 0",
+    "set n:40a72e0000000000",
+    "advance n:4069a00000000000",
+    "advance n:4057800000000000",
+    "timeout 2"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "timer",
+     "id": 0,
+     "delay": {
+      "bits": "3ff0000000000000"
+     },
+     "time": {
+      "bits": "407f400000000000"
+     }
+    },
+    {
+     "do": "set",
+     "clock": {
+      "bits": "4097080000000000"
+     }
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "restart",
+     "id": 0,
+     "delay": {
+      "bits": "4024000000000000"
+     },
+     "time": {
+      "bits": "408f400000000000"
+     }
+    },
+    {
+     "do": "timeout",
+     "id": 0,
+     "delay": {
+      "bits": "4038000000000000"
+     },
+     "time": {
+      "bits": "408f400000000000"
+     }
+    }
+   ],
+   "log": [
+    "timer 0",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "set n:4097080000000000",
+    "flush",
+    "ask frame",
+    "call 0 n:408e680000000000",
+    "flush",
+    "call 0 n:408e680000000000",
+    "restart 0",
+    "timeout 0"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "now"
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "timer",
+     "id": 2,
+     "delay": {
+      "bits": "4049000000000000"
+     },
+     "time": {
+      "bits": "408f400000000000"
+     }
+    },
+    {
+     "do": "stop",
+     "id": 2
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "advance",
+     "by": {
+      "bits": "4060a00000000000"
+     }
+    },
+    {
+     "do": "timeout",
+     "id": 0,
+     "delay": {
+      "bits": "3ff0000000000000"
+     },
+     "time": {
+      "bits": "408f400000000000"
+     }
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "timeout",
+     "id": 0,
+     "delay": {
+      "bits": "4039000000000000"
+     },
+     "time": {
+      "bits": "408f400000000000"
+     }
+    },
+    {
+     "do": "flush"
+    }
+   ],
+   "log": [
+    "ask frame",
+    "now n:0000000000000000",
+    "flush",
+    "ask frame",
+    "timer 2",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "stop 2",
+    "flush",
+    "ask frame",
+    "advance n:4060a00000000000",
+    "timeout 0",
+    "flush",
+    "ask frame",
+    "timeout 0",
+    "flush"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "flush"
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "frame"
+    },
+    {
+     "do": "frame"
+    },
+    {
+     "do": "interval",
+     "id": 1,
+     "delay": {
+      "bits": "4038000000000000"
+     },
+     "time": {
+      "bits": "408f400000000000"
+     }
+    },
+    {
+     "do": "set",
+     "clock": {
+      "bits": "4055400000000000"
+     }
+    },
+    {
+     "do": "restart",
+     "id": 1,
+     "delay": {
+      "bits": "c059000000000000"
+     },
+     "time": {
+      "bits": "408f400000000000"
+     }
+    },
+    {
+     "do": "interval",
+     "id": 2,
+     "delay": {
+      "bits": "4039000000000000"
+     },
+     "time": {
+      "bits": "409f400000000000"
+     }
+    }
+   ],
+   "log": [
+    "flush",
+    "ask frame",
+    "flush",
+    "ask frame",
+    "flush",
+    "ask frame",
+    "frame",
+    "frame",
+    "interval 1",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "set n:4055400000000000",
+    "restart 1",
+    "interval 2"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "flush"
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "flush"
+    }
+   ],
+   "log": [
+    "flush",
+    "ask frame",
+    "flush",
+    "ask frame",
+    "flush",
+    "ask frame",
+    "flush",
+    "ask frame"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "interval",
+     "id": 1,
+     "delay": {
+      "bits": "0000000000000000"
+     },
+     "time": {
+      "bits": "40b3880000000000"
+     }
+    },
+    {
+     "do": "timer",
+     "id": 0,
+     "delay": {
+      "bits": "4039000000000000"
+     },
+     "time": {
+      "bits": "40b3880000000000"
+     }
+    },
+    {
+     "do": "frame"
+    }
+   ],
+   "log": [
+    "interval 1",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "timer 0",
+    "frame",
+    "ask frame",
+    "setTimeout n:40b3880000000000",
+    "clearInterval"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "flush"
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "set",
+     "clock": {
+      "bits": "40a2ba0000000000"
+     }
+    },
+    {
+     "do": "flush"
+    }
+   ],
+   "log": [
+    "flush",
+    "ask frame",
+    "flush",
+    "ask frame",
+    "set n:40a2ba0000000000",
+    "flush",
+    "ask frame"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "timer",
+     "id": 1,
+     "delay": {
+      "bits": "0000000000000000"
+     },
+     "time": {
+      "bits": "409f400000000000"
+     }
+    },
+    {
+     "do": "frame"
+    },
+    {
+     "do": "timer",
+     "id": 1,
+     "delay": null,
+     "time": {
+      "bits": "409f400000000000"
+     }
+    },
+    {
+     "do": "flush"
+    }
+   ],
+   "log": [
+    "timer 1",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "frame",
+    "ask frame",
+    "setTimeout n:409f400000000000",
+    "clearInterval",
+    "timer 1",
+    "clearTimeout",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "flush",
+    "ask frame"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "flush"
+    },
+    {
+     "do": "advance",
+     "by": {
+      "bits": "4064a00000000000"
+     }
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "interval",
+     "id": 1,
+     "delay": {
+      "bits": "0000000000000000"
+     },
+     "time": {
+      "bits": "0000000000000000"
+     }
+    },
+    {
+     "do": "timeout",
+     "id": 1,
+     "delay": {
+      "bits": "0000000000000000"
+     },
+     "time": null
+    }
+   ],
+   "log": [
+    "flush",
+    "ask frame",
+    "advance n:4064a00000000000",
+    "flush",
+    "ask frame",
+    "interval 1",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "timeout 1"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "frame"
+    },
+    {
+     "do": "timer",
+     "id": 1,
+     "delay": {
+      "bits": "0000000000000000"
+     },
+     "time": {
+      "bits": "408f400000000000"
+     }
+    },
+    {
+     "do": "stop",
+     "id": 1
+    },
+    {
+     "do": "timer",
+     "id": 1,
+     "delay": {
+      "bits": "4039000000000000"
+     },
+     "time": {
+      "bits": "408f400000000000"
+     }
+    },
+    {
+     "do": "advance",
+     "by": {
+      "bits": "405d400000000000"
+     }
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "stop",
+     "id": 1
+    },
+    {
+     "do": "restart",
+     "id": 1,
+     "delay": {
+      "bits": "4039000000000000"
+     },
+     "time": {
+      "bits": "408f400000000000"
+     }
+    },
+    {
+     "do": "set",
+     "clock": {
+      "bits": "4090280000000000"
+     }
+    }
+   ],
+   "log": [
+    "frame",
+    "timer 1",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "stop 1",
+    "timer 1",
+    "advance n:405d400000000000",
+    "flush",
+    "ask frame",
+    "flush",
+    "stop 1",
+    "restart 1",
+    "set n:4090280000000000"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "advance",
+     "by": {
+      "bits": "4068600000000000"
+     }
+    },
+    {
+     "do": "interval",
+     "id": 0,
+     "delay": {
+      "bits": "c059000000000000"
+     },
+     "time": {
+      "bits": "409f400000000000"
+     }
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "advance",
+     "by": {
+      "bits": "405a800000000000"
+     }
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "interval",
+     "id": 1,
+     "delay": {
+      "bits": "4038000000000000"
+     },
+     "time": {
+      "bits": "0000000000000000"
+     }
+    },
+    {
+     "do": "frame"
+    }
+   ],
+   "log": [
+    "advance n:4068600000000000",
+    "interval 0",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "flush",
+    "ask frame",
+    "advance n:405a800000000000",
+    "flush",
+    "interval 1",
+    "frame",
+    "call 1 n:4072d00000000000",
+    "ask frame"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "flush"
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "now"
+    },
+    {
+     "do": "advance",
+     "by": {
+      "bits": "403d000000000000"
+     }
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "set",
+     "clock": {
+      "bits": "4059000000000000"
+     }
+    }
+   ],
+   "log": [
+    "flush",
+    "ask frame",
+    "flush",
+    "ask frame",
+    "ask frame",
+    "now n:0000000000000000",
+    "advance n:403d000000000000",
+    "flush",
+    "ask frame",
+    "set n:4059000000000000"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "interval",
+     "id": 1,
+     "delay": {
+      "bits": "4049000000000000"
+     },
+     "time": {
+      "bits": "0000000000000000"
+     }
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "stop",
+     "id": 1
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "timeout",
+     "id": 0,
+     "delay": {
+      "bits": "4049000000000000"
+     },
+     "time": {
+      "bits": "0000000000000000"
+     }
+    },
+    {
+     "do": "interval",
+     "id": 2,
+     "delay": {
+      "bits": "4059000000000000"
+     },
+     "time": {
+      "bits": "0000000000000000"
+     }
+    },
+    {
+     "do": "stop",
+     "id": 2
+    },
+    {
+     "do": "restart",
+     "id": 1,
+     "delay": {
+      "bits": "3ff0000000000000"
+     },
+     "time": null,
+     "stops": 2
+    },
+    {
+     "do": "stop",
+     "id": 2
+    }
+   ],
+   "log": [
+    "interval 1",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "flush",
+    "ask frame",
+    "stop 1",
+    "flush",
+    "ask frame",
+    "timeout 0",
+    "interval 2",
+    "stop 2",
+    "restart 1",
+    "ask frame",
+    "stop 2"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "set",
+     "clock": {
+      "bits": "4062e00000000000"
+     }
+    },
+    {
+     "do": "advance",
+     "by": {
+      "bits": "4069800000000000"
+     }
+    },
+    {
+     "do": "advance",
+     "by": {
+      "bits": "4069400000000000"
+     }
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "timeout",
+     "id": 1,
+     "delay": {
+      "bits": "4059000000000000"
+     },
+     "time": {
+      "bits": "40b3880000000000"
+     }
+    },
+    {
+     "do": "restart",
+     "id": 1,
+     "delay": {
+      "bits": "4059000000000000"
+     },
+     "time": null
+    },
+    {
+     "do": "flush"
+    }
+   ],
+   "log": [
+    "set n:4062e00000000000",
+    "advance n:4069800000000000",
+    "advance n:4069400000000000",
+    "flush",
+    "ask frame",
+    "timeout 1",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "restart 1",
+    "flush"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "set",
+     "clock": {
+      "bits": "4085400000000000"
+     }
+    },
+    {
+     "do": "interval",
+     "id": 0,
+     "delay": {
+      "bits": "c059000000000000"
+     },
+     "time": {
+      "bits": "408f400000000000"
+     }
+    },
+    {
+     "do": "set",
+     "clock": {
+      "bits": "4085f00000000000"
+     }
+    },
+    {
+     "do": "frame"
+    }
+   ],
+   "log": [
+    "set n:4085400000000000",
+    "interval 0",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "set n:4085f00000000000",
+    "frame",
+    "setTimeout n:4068c00000000000",
+    "clearInterval"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "advance",
+     "by": {
+      "bits": "406e400000000000"
+     }
+    },
+    {
+     "do": "timer",
+     "id": 1,
+     "delay": {
+      "bits": "3ff0000000000000"
+     },
+     "time": {
+      "bits": "408f400000000000"
+     }
+    },
+    {
+     "do": "set",
+     "clock": {
+      "bits": "408d500000000000"
+     }
+    }
+   ],
+   "log": [
+    "advance n:406e400000000000",
+    "timer 1",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "set n:408d500000000000"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "flush"
+    },
+    {
+     "do": "advance",
+     "by": {
+      "bits": "4066600000000000"
+     }
+    },
+    {
+     "do": "timeout",
+     "id": 2,
+     "delay": null,
+     "time": {
+      "bits": "409f400000000000"
+     }
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "set",
+     "clock": {
+      "bits": "40a42e0000000000"
+     }
+    }
+   ],
+   "log": [
+    "flush",
+    "ask frame",
+    "advance n:4066600000000000",
+    "timeout 2",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "flush",
+    "ask frame",
+    "flush",
+    "set n:40a42e0000000000"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "now"
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "advance",
+     "by": {
+      "bits": "406bc00000000000"
+     }
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "set",
+     "clock": {
+      "bits": "4075500000000000"
+     }
+    },
+    {
+     "do": "timer",
+     "id": 1,
+     "delay": {
+      "bits": "4024000000000000"
+     },
+     "time": {
+      "bits": "409f400000000000"
+     }
+    },
+    {
+     "do": "timer",
+     "id": 1,
+     "delay": {
+      "bits": "4059000000000000"
+     },
+     "time": {
+      "bits": "408f400000000000"
+     }
+    },
+    {
+     "do": "now"
+    },
+    {
+     "do": "frame"
+    },
+    {
+     "do": "advance",
+     "by": {
+      "bits": "4072400000000000"
+     }
+    }
+   ],
+   "log": [
+    "ask frame",
+    "now n:0000000000000000",
+    "flush",
+    "ask frame",
+    "advance n:406bc00000000000",
+    "flush",
+    "ask frame",
+    "set n:4075500000000000",
+    "timer 1",
+    "setInterval n:408f400000000000",
+    "ask frame",
+    "timer 1",
+    "now n:406bc00000000000",
+    "frame",
+    "setTimeout n:4087b80000000000",
+    "clearInterval",
+    "advance n:4072400000000000"
+   ]
+  },
+  {
+   "steps": [
+    {
+     "do": "set",
+     "clock": {
+      "bits": "40a2400000000000"
+     }
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "frame"
+    },
+    {
+     "do": "frame"
+    },
+    {
+     "do": "flush"
+    },
+    {
+     "do": "advance",
+     "by": {
+      "bits": "404e000000000000"
+     }
+    },
+    {
+     "do": "frame"
+    },
+    {
+     "do": "frame"
+    },
+    {
+     "do": "advance",
+     "by": {
+      "bits": "4050c00000000000"
+     }
+    }
+   ],
+   "log": [
+    "set n:40a2400000000000",
+    "flush",
+    "ask frame",
+    "flush",
+    "frame",
+    "frame",
+    "flush",
+    "ask frame",
+    "advance n:404e000000000000",
+    "frame",
+    "frame",
+    "advance n:4050c00000000000"
+   ]
+  }
+ ]
+}
