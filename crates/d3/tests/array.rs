@@ -33,10 +33,7 @@ fn numbers(value: &Value) -> Vec<f64> {
 /// Whether two numbers are the same to the last bit, which is what the
 /// JavaScript's numbers are compared on.
 fn same(a: f64, b: f64) -> bool {
-    if a.is_nan() && b.is_nan() {
-        return true;
-    }
-    a == b && a.is_sign_negative() == b.is_sign_negative()
+    a.to_bits() == b.to_bits()
 }
 
 /// Whether a list of numbers is the same as the fixture's.

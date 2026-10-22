@@ -40,9 +40,13 @@ fn numbers(value: &Value) -> Vec<f64> {
 
 /// Whether two numbers are the same number.
 ///
-/// The bits are the same, except that a `NaN` is a `NaN`: the JavaScript has
-/// one `NaN`, and the sign of the port's is the sign the arithmetic
-/// happened to give it.
+/// The bits are the same, except that a `NaN` is a `NaN`.
+///
+/// This is a difference that is not yet settled: the elastic eases reach
+/// a `NaN` through the sine of a number too large, and the JavaScript's
+/// sine and the port's give the `NaN` different bits. The JavaScript's
+/// own `Math.sin` is the port's `ieee754::sin` ✓, so the difference is
+/// in the number that is given to it ✓, and it is not yet found.
 fn same(a: f64, b: f64) -> bool {
     if a.is_nan() && b.is_nan() {
         return true;
