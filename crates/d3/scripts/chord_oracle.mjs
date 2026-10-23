@@ -11,6 +11,16 @@ function d3(pkg) {
 const factory = require("/tmp/opencode/d3src/node_modules/d3-chord/build/d3-chord.js");
 const d3chord = factory.d3 || factory;
 
+function subgroupBits(subgroup) {
+  return {
+    index: subgroup.index,
+    subindex: subgroup.subindex,
+    startAngle: bits(subgroup.startAngle),
+    endAngle: bits(subgroup.endAngle),
+    value: bits(subgroup.value),
+  };
+}
+
 const buffer = new ArrayBuffer(8);
 const view = new DataView(buffer);
 
@@ -69,61 +79,62 @@ const chordsPad = chordPad(matrix);
 out.chordPad = {
   groups: chordsPad.groups.map((group) => ({
     index: group.index,
-    startAngle: group.startAngle,
-    endAngle: group.endAngle,
-    value: group.value,
+    startAngle: bits(group.startAngle),
+    endAngle: bits(group.endAngle),
+    value: bits(group.value),
   })),
   chords: chordsPad.map((chord) => ({
-    source: chord.source,
-    target: chord.target,
+    source: subgroupBits(chord.source),
+    target: subgroupBits(chord.target),
   })),
 };
 
 // The chord with the groups sorted.
-const chordSort = d3chord.chord().sortGroups(d3chord.chordDescending);
+const descending = (a, b) => b - a;
+const chordSort = d3chord.chord().sortGroups(descending);
 const chordsSort = chordSort(matrix);
 out.chordSort = {
   groups: chordsSort.groups.map((group) => ({
     index: group.index,
-    startAngle: group.startAngle,
-    endAngle: group.endAngle,
-    value: group.value,
+    startAngle: bits(group.startAngle),
+    endAngle: bits(group.endAngle),
+    value: bits(group.value),
   })),
   chords: chordsSort.map((chord) => ({
-    source: chord.source,
-    target: chord.target,
+    source: subgroupBits(chord.source),
+    target: subgroupBits(chord.target),
   })),
 };
 
 // The chord with the subgroups sorted.
-const chordSub = d3chord.chord().sortSubgroups(d3chord.chordDescending);
+const chordSub = d3chord.chord().sortSubgroups(descending);
 const chordsSub = chordSub(matrix);
 out.chordSub = {
   groups: chordsSub.groups.map((group) => ({
     index: group.index,
-    startAngle: group.startAngle,
-    endAngle: group.endAngle,
-    value: group.value,
+    startAngle: bits(group.startAngle),
+    endAngle: bits(group.endAngle),
+    value: bits(group.value),
   })),
   chords: chordsSub.map((chord) => ({
-    source: chord.source,
-    target: chord.target,
+    source: subgroupBits(chord.source),
+    target: subgroupBits(chord.target),
   })),
 };
 
 // The chord with the chords sorted.
-const chordChord = d3chord.chord().sortChords(d3chord.chordDescending);
+const chordChord = d3chord.chord().sortChords(descending);
 const chordsChord = chordChord(matrix);
 out.chordChord = {
   groups: chordsChord.groups.map((group) => ({
     index: group.index,
-    startAngle: group.startAngle,
-    endAngle: group.endAngle,
-    value: group.value,
+    startAngle: bits(group.startAngle),
+    endAngle: bits(group.endAngle),
+    value: bits(group.value),
   })),
   chords: chordsChord.map((chord) => ({
-    source: chord.source,
-    target: chord.target,
+    source: subgroupBits(chord.source),
+    target: subgroupBits(chord.target),
   })),
 };
 

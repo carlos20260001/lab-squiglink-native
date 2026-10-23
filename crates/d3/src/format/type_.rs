@@ -67,6 +67,9 @@ pub fn whole_digits(value: f64) -> String {
 /// The number is positive ✓ and the count of the significant digits is
 /// between one and twenty-one ✓.
 pub fn format_decimal_parts(value: f64, precision: Option<usize>) -> Option<(String, i32)> {
+    if !value.is_finite() || value == 0.0 {
+        return None;
+    }
     let text = match precision {
         Some(digits) if digits > 0 => to_exponential(value, digits - 1),
         _ => to_exponential(value, 16),
@@ -110,7 +113,7 @@ pub fn format_rounded(value: f64, precision: usize) -> String {
 pub fn format_prefix_auto(value: f64, precision: usize) -> String {
     let (coefficient, exponent) = match format_decimal_parts(value, Some(precision)) {
         Some(parts) => parts,
-        None => return js::number_to_string(value),
+        None => return crate::number::to_precision(value, precision),
     };
     let prefix_exponent = prefix_exponent(exponent);
     let i = exponent - prefix_exponent + 1;
@@ -188,32 +191,54 @@ pub fn format_trim(text: &str) -> String {
 pub type Group = Box<dyn Fn(&str, f64) -> String>;
 
 /// The JavaScript's `exponent`, which is the exponent of a number.
-pub fn exponent(value: f64) -> i32 {
+pub fn exponent(value: f64) -> f64 {
     match format_decimal_parts(value.abs(), None) {
-        Some((_, exponent)) => exponent,
-        None => 0,
+        Some((_, exponent)) => exponent as f64,
+        None => f64::NAN,
     }
 }
 
 /// The JavaScript's `precisionFixed`, which is the count of the digits
 /// after the point that a step needs.
-pub fn precision_fixed(step: f64) -> i32 {
-    (-exponent(step.abs())).max(0)
+pub fn precision_fixed(step: f64) -> f64 {
+    let value = -exponent(step.abs());
+    if value.is_nan() {
+        f64::NAN
+    } else if value < 0.0 {
+        0.0
+    } else {
+        value
+    }
 }
 
 /// The JavaScript's `precisionPrefix`, which is the count of the digits
 /// a prefix needs.
-pub fn precision_prefix(step: f64, value: f64) -> i32 {
-    let prefix = (exponent(value) as f64 / 3.0).floor().clamp(-8.0, 8.0) as i32;
-    (prefix * 3 - exponent(step.abs())).max(0)
+pub fn precision_prefix(step: f64, value: f64) -> f64 {
+    let prefix = (exponent(value) / 3.0).floor().clamp(-8.0, 8.0);
+    let value = prefix * 3.0 - exponent(step.abs());
+    if value.is_nan() {
+        f64::NAN
+    } else if value < 0.0 {
+        0.0
+    } else {
+        value
+    }
 }
 
 /// The JavaScript's `precisionRound`, which is the count of the digits
 /// that a step and a number need.
-pub fn precision_round(step: f64, max: f64) -> i32 {
+pub fn precision_round(step: f64, max: f64) -> f64 {
     let step = step.abs();
     let max = max.abs() - step;
-    (exponent(max) - exponent(step)).max(0) + 1
+    let value = exponent(max) - exponent(step);
+    let value = if value.is_nan() {
+        f64::NAN
+    } else if value < 0.0 {
+        0.0
+    } else {
+        value
+    };
+    value + 1.0
 }
 
 /// The JavaScript's `formatGroup`, which groups the digits of a number.

@@ -38,7 +38,7 @@ driven by `xdotool` — and the two were looked at side by side.
 | Step | The reference | The native | |
 |---|---|---|---|
 | The dB scale | Dragged: the mark moves the range, the two circles change how far it reaches, a double click puts it back. It is a shape of its own — a thin spine with a bracket in the middle and three grips within it — with the figures standing beside it and the unit `dB` written on its side at the top | The same, and the shape is now the reference's own path, with the figures plain numbers (`85`, not `+85`) in the monospaced face | ✓ — the native's scale used to be a plain line with two circles, and drew the figures with a sign; it does not now |
-| The graph's proportions | The plot is 800 by 360, and the width is two and a bit units for every unit of the window's height | The same | ✓ |
+| The graph's proportions | The plot is 800 by 360, and the width is two and a bit units for every unit of the window's height. Its coordinates use D3's logarithmic frequency scale, linear dB scale, and natural/cardinal curves | The same D3 v5.16.0 scale and curve operations are now used by the core through the checked local port | ✓ |
 | The band names | Sub bass, Mid bass, … Air, under the axis | The same | ✓ |
 | The curve labels | A swatch and a name, stacked so they do not overlap | The same | ✓ |
 | The watermark and the rig line | The wordmark in the middle, and the line that says what the rig was | The same | ✓ |

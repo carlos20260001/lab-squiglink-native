@@ -32,11 +32,11 @@ pub fn interpolate_zoom(p0: [f64; 3], p1: [f64; 3]) -> impl Fn(f64) -> [f64; 3] 
         (ieee754::log(w1 / w0) / RHO, f64::NAN, f64::NAN)
     } else {
         // The general case.
-        let d1 = d2.sqrt();
+        let d1 = ieee754::sqrt(d2);
         let b0 = (w1 * w1 - w0 * w0 + RHO4 * d2) / (2.0 * w0 * RHO2 * d1);
         let b1 = (w1 * w1 - w0 * w0 - RHO4 * d2) / (2.0 * w1 * RHO2 * d1);
-        let r0 = ieee754::log((b0 * b0 + 1.0).sqrt() - b0);
-        let r1 = ieee754::log((b1 * b1 + 1.0).sqrt() - b1);
+        let r0 = ieee754::log(ieee754::sqrt(b0 * b0 + 1.0) - b0);
+        let r1 = ieee754::log(ieee754::sqrt(b1 * b1 + 1.0) - b1);
         ((r1 - r0) / RHO, r0, d1)
     };
 

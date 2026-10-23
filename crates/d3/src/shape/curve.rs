@@ -24,6 +24,8 @@
 //! same number.
 
 use super::Context;
+use crate::arith;
+use crate::ieee754;
 use crate::js;
 use crate::js::truthy;
 
@@ -253,27 +255,27 @@ pub fn control_points(x: &[f64]) -> (Vec<f64>, Vec<f64>) {
     let mut r = vec![0.0; n];
     a[0] = 0.0;
     b[0] = 2.0;
-    r[0] = x[0] + 2.0 * x[1];
+    r[0] = arith::add(x[0], arith::multiply(2.0, x[1]));
     for i in 1..n.saturating_sub(1) {
         a[i] = 1.0;
         b[i] = 4.0;
-        r[i] = 4.0 * x[i] + 2.0 * x[i + 1];
+        r[i] = arith::add(arith::multiply(4.0, x[i]), arith::multiply(2.0, x[i + 1]));
     }
     a[n - 1] = 2.0;
     b[n - 1] = 7.0;
-    r[n - 1] = 8.0 * x[n - 1] + x[n];
+    r[n - 1] = arith::add(arith::multiply(8.0, x[n - 1]), x[n]);
     for i in 1..n {
-        let m = a[i] / b[i - 1];
-        b[i] -= m;
-        r[i] -= m * r[i - 1];
+        let m = arith::divide(a[i], b[i - 1]);
+        b[i] = arith::subtract(b[i], m);
+        r[i] = arith::subtract(r[i], arith::multiply(m, r[i - 1]));
     }
-    a[n - 1] = r[n - 1] / b[n - 1];
+    a[n - 1] = arith::divide(r[n - 1], b[n - 1]);
     for i in (0..n - 1).rev() {
-        a[i] = (r[i] - a[i + 1]) / b[i];
+        a[i] = arith::divide(arith::subtract(r[i], a[i + 1]), b[i]);
     }
-    b[n - 1] = (x[n] + a[n - 1]) / 2.0;
+    b[n - 1] = arith::divide(arith::add(x[n], a[n - 1]), 2.0);
     for i in 0..n - 1 {
-        b[i] = 2.0 * x[i + 1] - a[i + 1];
+        b[i] = arith::subtract(arith::multiply(2.0, x[i + 1]), a[i + 1]);
     }
     (a, b)
 }
@@ -300,7 +302,7 @@ impl Cardinal {
     pub fn new(tension: f64) -> Self {
         Self {
             line: f64::NAN,
-            k: (1.0 - tension) / 6.0,
+            k: arith::divide(arith::subtract(1.0, tension), 6.0),
             x0: f64::NAN,
             x1: f64::NAN,
             x2: f64::NAN,
@@ -346,10 +348,10 @@ fn cardinal_point(
     y: f64,
 ) {
     context.bezier_curve_to(
-        x1 + k * (x2 - x0),
-        y1 + k * (y2 - y0),
-        x2 + k * (x1 - x),
-        y2 + k * (y1 - y),
+        arith::add(x1, arith::multiply(k, arith::subtract(x2, x0))),
+        arith::add(y1, arith::multiply(k, arith::subtract(y2, y0))),
+        arith::add(x2, arith::multiply(k, arith::subtract(x1, x))),
+        arith::add(y2, arith::multiply(k, arith::subtract(y1, y))),
         x2,
         y2,
     );
@@ -441,7 +443,7 @@ impl CardinalOpen {
     pub fn new(tension: f64) -> Self {
         Self {
             line: f64::NAN,
-            k: (1.0 - tension) / 6.0,
+            k: arith::divide(arith::subtract(1.0, tension), 6.0),
             x0: f64::NAN,
             x1: f64::NAN,
             x2: f64::NAN,
@@ -538,7 +540,7 @@ impl CardinalClosed {
     /// The JavaScript's `cardinalClosed.tension`.
     pub fn new(tension: f64) -> Self {
         Self {
-            k: (1.0 - tension) / 6.0,
+            k: arith::divide(arith::subtract(1.0, tension), 6.0),
             x0: f64::NAN,
             x1: f64::NAN,
             x2: f64::NAN,
@@ -1146,7 +1148,7 @@ impl Curve for CatmullRom {
         if self.point != 0 {
             let x23 = self.x2 - x;
             let y23 = self.y2 - y;
-            self.l23_2a = (x23 * x23 + y23 * y23).powf(self.alpha);
+            self.l23_2a = ieee754::pow(x23 * x23 + y23 * y23, self.alpha);
             self.l23_a = self.l23_2a.sqrt();
         }
         match self.point {
@@ -1679,7 +1681,7 @@ impl Curve for CatmullRomOpen {
         if self.point != 0 {
             let x23 = self.x2 - x;
             let y23 = self.y2 - y;
-            self.l23_2a = (x23 * x23 + y23 * y23).powf(self.alpha);
+            self.l23_2a = ieee754::pow(x23 * x23 + y23 * y23, self.alpha);
             self.l23_a = self.l23_2a.sqrt();
         }
         match self.point {
@@ -1855,7 +1857,7 @@ impl Curve for CatmullRomClosed {
         if self.point != 0 {
             let x23 = self.x2 - x;
             let y23 = self.y2 - y;
-            self.l23_2a = (x23 * x23 + y23 * y23).powf(self.alpha);
+            self.l23_2a = ieee754::pow(x23 * x23 + y23 * y23, self.alpha);
             self.l23_a = self.l23_2a.sqrt();
         }
         match self.point {

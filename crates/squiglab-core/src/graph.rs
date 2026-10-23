@@ -6,6 +6,8 @@
 //! without any of this changing.
 use crate::color::Rgb;
 use crate::data::FRPoint;
+use d3::scale::{scale_linear, scale_log, ScaleLinear, ScaleLog};
+use d3::shape::{curve_cardinal, curve_natural, Context};
 use emath::{Pos2, Rect, Vec2};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -213,91 +215,89 @@ pub fn curve_control_points(points: &[Pos2], natural: bool) -> Vec<[Pos2; 4]> {
     if points.len() < 3 {
         return Vec::new();
     }
-    let (first_x, second_x, first_y, second_y) = if natural {
-        let (first_x, second_x) =
-            natural_control_points(&points.iter().map(|p| p.x).collect::<Vec<_>>());
-        let (first_y, second_y) =
-            natural_control_points(&points.iter().map(|p| p.y).collect::<Vec<_>>());
-        (first_x, second_x, first_y, second_y)
+
+    // `graphtool.js` switches between curveNatural and
+    // curveCardinal.tension(0.5). Giving d3 a small recording context keeps
+    // its endpoint handling and operation order, while the interface remains
+    // free to tessellate the resulting Beziers for egui.
+    let mut context = BezierControls::default();
+    let mut curve = if natural {
+        curve_natural()
     } else {
-        let tension = 1.0 / 12.0;
-        let mut first_x = Vec::with_capacity(points.len() - 1);
-        let mut second_x = Vec::with_capacity(points.len() - 1);
-        let mut first_y = Vec::with_capacity(points.len() - 1);
-        let mut second_y = Vec::with_capacity(points.len() - 1);
-        for index in 0..points.len() - 1 {
-            let start = points[index];
-            let end = points[index + 1];
-            let previous = points[index.saturating_sub(1)];
-            let next = points[(index + 2).min(points.len() - 1)];
-            first_x.push(if index == 0 {
-                start.x
-            } else {
-                start.x + tension * (end.x - previous.x)
-            });
-            first_y.push(if index == 0 {
-                start.y
-            } else {
-                start.y + tension * (end.y - previous.y)
-            });
-            second_x.push(if index + 1 == points.len() - 1 {
-                end.x
-            } else {
-                end.x + tension * (start.x - next.x)
-            });
-            second_y.push(if index + 1 == points.len() - 1 {
-                end.y
-            } else {
-                end.y + tension * (start.y - next.y)
-            });
-        }
-        (first_x, second_x, first_y, second_y)
+        curve_cardinal(0.5)
     };
-
-    (0..points.len() - 1)
-        .map(|index| {
-            [
-                points[index],
-                Pos2::new(first_x[index], first_y[index]),
-                Pos2::new(second_x[index], second_y[index]),
-                points[index + 1],
-            ]
-        })
-        .collect()
+    curve.line_start(&mut context);
+    for point in points {
+        curve.point(&mut context, f64::from(point.x), f64::from(point.y));
+    }
+    curve.line_end(&mut context);
+    context.controls
 }
-pub fn natural_control_points(values: &[f32]) -> (Vec<f32>, Vec<f32>) {
-    let segments = values.len() - 1;
-    let mut lower = vec![0.0; segments];
-    let mut diagonal = vec![0.0; segments];
-    let mut rhs = vec![0.0; segments];
-    lower[0] = 0.0;
-    diagonal[0] = 2.0;
-    rhs[0] = values[0] + 2.0 * values[1];
-    for index in 1..segments - 1 {
-        lower[index] = 1.0;
-        diagonal[index] = 4.0;
-        rhs[index] = 4.0 * values[index] + 2.0 * values[index + 1];
-    }
-    lower[segments - 1] = 2.0;
-    diagonal[segments - 1] = 7.0;
-    rhs[segments - 1] = 8.0 * values[segments - 1] + values[segments];
-    for index in 1..segments {
-        let multiplier = lower[index] / diagonal[index - 1];
-        diagonal[index] -= multiplier;
-        rhs[index] -= multiplier * rhs[index - 1];
+
+/// The parts of a d3 path that egui's tessellated line needs.
+///
+/// d3-shape writes through a context instead of returning control points. The
+/// graph only asks the two line curves for moves and cubic Beziers, so this
+/// recorder deliberately preserves just those operations.
+#[derive(Default)]
+struct BezierControls {
+    current: Option<Pos2>,
+    controls: Vec<[Pos2; 4]>,
+}
+
+impl Context for BezierControls {
+    fn move_to(&mut self, x: f64, y: f64) {
+        self.current = Some(Pos2::new(x as f32, y as f32));
     }
 
-    let mut first = vec![0.0; segments];
-    let mut second = vec![0.0; segments];
-    first[segments - 1] = rhs[segments - 1] / diagonal[segments - 1];
-    for index in (0..segments - 1).rev() {
-        first[index] = (rhs[index] - first[index + 1]) / diagonal[index];
+    fn line_to(&mut self, x: f64, y: f64) {
+        self.current = Some(Pos2::new(x as f32, y as f32));
     }
-    second[segments - 1] = (values[segments] + first[segments - 1]) / 2.0;
-    for index in 0..segments - 1 {
-        second[index] = 2.0 * values[index + 1] - first[index + 1];
+
+    fn close_path(&mut self) {}
+
+    fn quadratic_curve_to(&mut self, _x1: f64, _y1: f64, x: f64, y: f64) {
+        self.current = Some(Pos2::new(x as f32, y as f32));
     }
-    (first, second)
+
+    fn bezier_curve_to(&mut self, x1: f64, y1: f64, x2: f64, y2: f64, x: f64, y: f64) {
+        let end = Pos2::new(x as f32, y as f32);
+        let start = self.current.unwrap_or(end);
+        self.controls.push([
+            start,
+            Pos2::new(x1 as f32, y1 as f32),
+            Pos2::new(x2 as f32, y2 as f32),
+            end,
+        ]);
+        self.current = Some(end);
+    }
+
+    fn arc(
+        &mut self,
+        _x: f64,
+        _y: f64,
+        _r: f64,
+        _a0: f64,
+        _a1: f64,
+        _ccw: bool,
+    ) -> Result<(), d3::path::PathError> {
+        // Neither d3 curve used above emits arcs. The trait requires this
+        // method because it is also shared by the shape generators that do.
+        Ok(())
+    }
+
+    fn rect(&mut self, x: f64, y: f64, _width: f64, _height: f64) {
+        self.current = Some(Pos2::new(x as f32, y as f32));
+    }
+}
+
+pub fn natural_control_points(values: &[f32]) -> (Vec<f32>, Vec<f32>) {
+    let values: Vec<f64> = values.iter().map(|value| f64::from(*value)).collect();
+    let (first, second) = d3::shape::curve::control_points(&values);
+    (
+        first.into_iter().map(|value| value as f32).collect(),
+        second.into_iter().map(|value| value as f32).collect(),
+    )
 }
 pub fn cubic_bezier(start: Pos2, control1: Pos2, control2: Pos2, end: Pos2, t: f32) -> Pos2 {
     let inverse = 1.0 - t;
@@ -455,41 +455,99 @@ pub fn nearest_curve_index(curves: &[Vec<Pos2>], position: Pos2, threshold: f32)
         .min_by(|left, right| left.1.total_cmp(&right.1))
         .map(|(index, _)| index)
 }
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub struct Transform {
     pub rect: Rect,
     pub x_range: (f32, f32),
     pub y_range: (f32, f32),
+    x_scale: ScaleLog,
+    y_scale: ScaleLinear,
 }
 
 impl Transform {
     pub fn new(rect: Rect, x_range: (f32, f32), y_range: (f32, f32)) -> Self {
+        let mut x_scale = scale_log();
+        x_scale
+            .set_domain(&[f64::from(x_range.0), f64::from(x_range.1)])
+            .set_range(&[f64::from(rect.left()), f64::from(rect.right())]);
+        let mut y_scale = scale_linear();
+        y_scale
+            .set_domain(&[f64::from(y_range.0), f64::from(y_range.1)])
+            .set_range(&[f64::from(rect.bottom()), f64::from(rect.top())]);
         Self {
             rect,
             x_range,
             y_range,
+            x_scale,
+            y_scale,
         }
     }
 
-    pub fn hz_to_x(self, hz: f32) -> f32 {
-        let min = self.x_range.0.ln();
-        let t = (hz.ln() - min) / (self.x_range.1.ln() - min);
-        self.rect.left() + t * self.rect.width()
+    pub fn hz_to_x(&self, hz: f32) -> f32 {
+        self.x_scale.call(f64::from(hz)) as f32
     }
 
-    pub fn x_at(self, x: f32) -> f32 {
-        let t = (x - self.rect.left()) / self.rect.width();
-        (self.x_range.0.ln() + t * (self.x_range.1.ln() - self.x_range.0.ln())).exp()
+    pub fn x_at(&self, x: f32) -> f32 {
+        self.x_scale.invert(f64::from(x)) as f32
     }
 
-    pub fn db_to_y(self, db: f32) -> f32 {
-        self.rect.bottom()
-            - (db - self.y_range.0) / (self.y_range.1 - self.y_range.0) * self.rect.height()
+    pub fn db_to_y(&self, db: f32) -> f32 {
+        self.y_scale.call(f64::from(db)) as f32
     }
 
     /// The level at a place on the plot, the other way about.
-    pub fn y_at(self, y: f32) -> f32 {
-        self.y_range.0
-            + (self.rect.bottom() - y) / self.rect.height() * (self.y_range.1 - self.y_range.0)
+    pub fn y_at(&self, y: f32) -> f32 {
+        self.y_scale.invert(f64::from(y)) as f32
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{curve_control_points, Transform};
+    use emath::{Pos2, Rect};
+
+    fn assert_near(actual: f32, expected: f32) {
+        assert!(
+            (actual - expected).abs() <= 0.001,
+            "expected {expected}, got {actual}"
+        );
+    }
+
+    #[test]
+    fn transform_uses_the_reference_d3_scales() {
+        let transform = Transform::new(
+            Rect::from_min_max(Pos2::new(15.0, 10.0), Pos2::new(785.0, 370.0)),
+            (20.0, 20_000.0),
+            (30.0, 90.0),
+        );
+
+        assert_near(transform.hz_to_x(20.0), 15.0);
+        assert_near(transform.hz_to_x(200.0), 271.666_66);
+        assert_near(transform.hz_to_x(2_000.0), 528.333_3);
+        assert_near(transform.hz_to_x(20_000.0), 785.0);
+        assert_near(transform.x_at(528.333_3), 2_000.0);
+        assert_near(transform.db_to_y(30.0), 370.0);
+        assert_near(transform.db_to_y(60.0), 190.0);
+        assert_near(transform.db_to_y(90.0), 10.0);
+        assert_near(transform.y_at(190.0), 60.0);
+    }
+
+    #[test]
+    fn unsmoothed_curve_uses_d3_cardinal_tension_one_half() {
+        let points = [
+            Pos2::new(0.0, 0.0),
+            Pos2::new(6.0, 12.0),
+            Pos2::new(14.0, 4.0),
+            Pos2::new(22.0, 10.0),
+        ];
+
+        let controls = curve_control_points(&points, false);
+        assert_eq!(controls.len(), 3);
+        assert_near(controls[0][1].x, 0.0);
+        assert_near(controls[0][2].x, 4.833_333_5);
+        assert_near(controls[1][1].y, 12.333_333);
+        assert_near(controls[1][2].x, 12.666_667);
+        assert_near(controls[2][1].x, 15.333_333);
+        assert_near(controls[2][2].y, 10.0);
     }
 }

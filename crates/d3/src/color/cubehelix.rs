@@ -3,6 +3,7 @@
 //! Translated from `d3-color/src/cubehelix.js`, version 1.4.1, of d3
 //! 5.16.0.
 
+use crate::arith;
 use crate::color::{Color, Cubehelix, Rgb};
 use crate::ieee754;
 
@@ -26,22 +27,28 @@ const BC_DA: f64 = B * C - D * A;
 impl Cubehelix {
     /// The colour a little brighter.
     pub fn brighter(&self, k: Option<f64>) -> Cubehelix {
-        let k = k.unwrap_or(crate::color::BRIGHTER);
+        let k = match k {
+            None => crate::color::BRIGHTER,
+            Some(k) => ieee754::pow(crate::color::BRIGHTER, k),
+        };
         Cubehelix {
             h: self.h,
             s: self.s,
-            l: self.l * k,
+            l: arith::multiply(self.l, k),
             opacity: self.opacity,
         }
     }
 
     /// The colour a little darker.
     pub fn darker(&self, k: Option<f64>) -> Cubehelix {
-        let k = k.unwrap_or(crate::color::DARKER);
+        let k = match k {
+            None => crate::color::DARKER,
+            Some(k) => ieee754::pow(crate::color::DARKER, k),
+        };
         Cubehelix {
             h: self.h,
             s: self.s,
-            l: self.l * k,
+            l: arith::multiply(self.l, k),
             opacity: self.opacity,
         }
     }
@@ -51,20 +58,44 @@ impl Cubehelix {
         let h = if self.h.is_nan() {
             0.0
         } else {
-            (self.h + 120.0) * std::f64::consts::PI / 180.0
+            arith::divide(
+                arith::multiply(arith::add(self.h, 120.0), std::f64::consts::PI),
+                180.0,
+            )
         };
         let l = self.l;
         let a = if self.s.is_nan() {
             0.0
         } else {
-            self.s * l * (1.0 - l)
+            arith::multiply(arith::multiply(self.s, l), arith::subtract(1.0, l))
         };
         let cosh = ieee754::cos(h);
         let sinh = ieee754::sin(h);
         Rgb {
-            r: 255.0 * (l + a * (A * cosh + B * sinh)),
-            g: 255.0 * (l + a * (C * cosh + D * sinh)),
-            b: 255.0 * (l + a * (E * cosh)),
+            r: arith::multiply(
+                255.0,
+                arith::add(
+                    l,
+                    arith::multiply(
+                        a,
+                        arith::add(arith::multiply(A, cosh), arith::multiply(B, sinh)),
+                    ),
+                ),
+            ),
+            g: arith::multiply(
+                255.0,
+                arith::add(
+                    l,
+                    arith::multiply(
+                        a,
+                        arith::add(arith::multiply(C, cosh), arith::multiply(D, sinh)),
+                    ),
+                ),
+            ),
+            b: arith::multiply(
+                255.0,
+                arith::add(l, arith::multiply(a, arith::multiply(E, cosh))),
+            ),
             opacity: self.opacity,
         }
     }
@@ -88,20 +119,41 @@ pub fn cubehelix_convert(color: Color) -> Cubehelix {
         return cubehelix;
     }
     let o = color.rgb();
-    let r = o.r / 255.0;
-    let g = o.g / 255.0;
-    let b = o.b / 255.0;
-    let l = (BC_DA * b + ED * r - EB * g) / (BC_DA + ED - EB);
-    let bl = b - l;
-    let k = (E * (g - l) - C * bl) / D;
-    let s = (k * k + bl * bl).sqrt() / (E * l * (1.0 - l));
+    let r = arith::divide(o.r, 255.0);
+    let g = arith::divide(o.g, 255.0);
+    let b = arith::divide(o.b, 255.0);
+    let l = arith::divide(
+        arith::subtract(
+            arith::add(arith::multiply(BC_DA, b), arith::multiply(ED, r)),
+            arith::multiply(EB, g),
+        ),
+        arith::add(arith::subtract(BC_DA, EB), ED),
+    );
+    let bl = arith::subtract(b, l);
+    let k = arith::divide(
+        arith::subtract(
+            arith::multiply(E, arith::subtract(g, l)),
+            arith::multiply(C, bl),
+        ),
+        D,
+    );
+    let s = arith::divide(
+        arith::add(arith::multiply(k, k), arith::multiply(bl, bl)).sqrt(),
+        arith::multiply(arith::multiply(E, l), arith::subtract(1.0, l)),
+    );
     let h = if s != 0.0 {
-        ieee754::atan2(k, bl) * 180.0 / std::f64::consts::PI - 120.0
+        arith::subtract(
+            arith::divide(
+                arith::multiply(ieee754::atan2(k, bl), 180.0),
+                std::f64::consts::PI,
+            ),
+            120.0,
+        )
     } else {
         f64::NAN
     };
     Cubehelix {
-        h: if h < 0.0 { h + 360.0 } else { h },
+        h: if h < 0.0 { arith::add(h, 360.0) } else { h },
         s,
         l,
         opacity: o.opacity,

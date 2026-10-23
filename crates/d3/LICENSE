@@ -17,6 +17,7 @@ the two might be read differently the JavaScript wins.
 
     Copyright 2010-2016 Mike Bostock
     Copyright 2001 Robert Penner (d3-ease only)
+    Copyright (c) Carlos (port to Rust, with AI assistance)
 
     All rights reserved.
 

@@ -3,6 +3,9 @@
 //! Translated from `d3-shape/src/pie.js`, version 1.3.7, of d3 5.16.0.
 //! The JavaScript is the authority.
 
+use crate::arith;
+use crate::js;
+
 /// Twice pi, which is a whole turn.
 const TAU: f64 = std::f64::consts::PI * 2.0;
 
@@ -178,13 +181,16 @@ impl<T> Pie<T> {
         let mut index: Vec<usize> = (0..n).collect();
         for v in &values {
             if *v > 0.0 {
-                sum += *v;
+                sum = arith::add(sum, *v);
             }
         }
         let a0 = (self.start_angle)(&values);
-        let da = TAU.min((-TAU).max((self.end_angle)(&values) - a0));
-        let p = (da.abs() / n as f64).min((self.pad_angle)(&values));
-        let pa = p * if da < 0.0 { -1.0 } else { 1.0 };
+        let da = js_min(
+            TAU,
+            js_max(-TAU, arith::subtract((self.end_angle)(&values), a0)),
+        );
+        let p = js_min(arith::divide(da.abs(), n as f64), (self.pad_angle)(&values));
+        let pa = arith::multiply(p, if da < 0.0 { -1.0 } else { 1.0 });
 
         // Optionally sort the arcs by previously-computed values or by data.
         if let Some(sort_values) = &self.sort_values {
@@ -219,14 +225,17 @@ impl<T> Pie<T> {
         // came from, and says which order it is drawn in.
         let mut arcs: Vec<Option<ArcDatum<T>>> = vec![None; n];
         let mut a0 = a0;
-        let k = if sum != 0.0 {
-            (da - n as f64 * pa) / sum
+        let k = if js::truthy(sum) {
+            arith::divide(arith::subtract(da, arith::multiply(n as f64, pa)), sum)
         } else {
             0.0
         };
         for (i, &j) in index.iter().enumerate() {
             let v = values[j];
-            let a1 = a0 + (if v > 0.0 { v * k } else { 0.0 }) + pa;
+            let a1 = arith::add(
+                arith::add(a0, if v > 0.0 { arith::multiply(v, k) } else { 0.0 }),
+                pa,
+            );
             arcs[j] = Some(ArcDatum {
                 data: data[j].clone(),
                 index: i,
@@ -240,5 +249,29 @@ impl<T> Pie<T> {
         arcs.into_iter()
             .map(|arc| arc.expect("every datum has an arc"))
             .collect()
+    }
+}
+
+/// The JavaScript's `Math.min`, which gives a number that is not a
+/// number when either of its arguments is one.
+fn js_min(a: f64, b: f64) -> f64 {
+    if a.is_nan() || b.is_nan() {
+        f64::NAN
+    } else if a < b {
+        a
+    } else {
+        b
+    }
+}
+
+/// The JavaScript's `Math.max`, which gives a number that is not a
+/// number when either of its arguments is one.
+fn js_max(a: f64, b: f64) -> f64 {
+    if a.is_nan() || b.is_nan() {
+        f64::NAN
+    } else if a > b {
+        a
+    } else {
+        b
     }
 }

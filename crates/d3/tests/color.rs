@@ -260,6 +260,32 @@ fn the_colours_are_brighter_and_darker_the_javascripts_way() {
 }
 
 #[test]
+fn a_cubehelix_is_raised_to_a_power_of_its_own() {
+    let fixture = fixture();
+    let expected = fixture.get("cubehelixK").expect("the cubehelix");
+    let cube = match cubehelix(120.0, 0.5, 0.5, None) {
+        Color::Cubehelix(cube) => cube,
+        _ => panic!("a cubehelix"),
+    };
+    assert_eq!(
+        cube.brighter(Some(0.0)).rgb().format_rgb(),
+        expected["brighter0"]
+    );
+    assert_eq!(
+        cube.brighter(Some(2.0)).rgb().format_rgb(),
+        expected["brighter2"]
+    );
+    assert_eq!(
+        cube.darker(Some(0.0)).rgb().format_rgb(),
+        expected["darker0"]
+    );
+    assert_eq!(
+        cube.darker(Some(2.0)).rgb().format_rgb(),
+        expected["darker2"]
+    );
+}
+
+#[test]
 fn the_colours_have_their_own_kinds() {
     // The kinds are the JavaScript's own, and a colour of one kind is
     // not a colour of another.

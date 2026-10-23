@@ -392,7 +392,7 @@ pub fn ease_circle(t: f64) -> f64 {
 /// }
 /// ```
 pub fn ease_circle_in(t: f64) -> f64 {
-    1.0 - (1.0 - t * t).sqrt()
+    1.0 - ieee754::sqrt(1.0 - t * t)
 }
 
 /// d3-ease's `easeCircleOut`, which is the JavaScript's `circleOut`.
@@ -406,7 +406,7 @@ pub fn ease_circle_in(t: f64) -> f64 {
 /// ```
 pub fn ease_circle_out(t: f64) -> f64 {
     let t = t - 1.0;
-    (1.0 - t * t).sqrt()
+    ieee754::sqrt(1.0 - t * t)
 }
 
 /// d3-ease's `easeCircleInOut`, which is the JavaScript's `circleInOut`.
@@ -421,10 +421,10 @@ pub fn ease_circle_out(t: f64) -> f64 {
 pub fn ease_circle_in_out(t: f64) -> f64 {
     let mut t = t * 2.0;
     let value = if t <= 1.0 {
-        1.0 - (1.0 - t * t).sqrt()
+        1.0 - ieee754::sqrt(1.0 - t * t)
     } else {
         t -= 2.0;
-        (1.0 - t * t).sqrt() + 1.0
+        ieee754::sqrt(1.0 - t * t) + 1.0
     };
     value / 2.0
 }

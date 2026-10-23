@@ -347,6 +347,12 @@
    "hsla(0, 0%, 0%, 0)"
   ]
  ],
+ "cubehelixK": {
+  "brighter0": "rgb(81, 157, 96)",
+  "brighter2": "rgb(255, 255, 255)",
+  "darker0": "rgb(81, 157, 96)",
+  "darker2": "rgb(28, 84, 39)"
+ },
  "made": {
   "rgb": "rgb(1, 2, 3)",
   "rgbOpacity": "rgba(1, 2, 3, 0.5)",

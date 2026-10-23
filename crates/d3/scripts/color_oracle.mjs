@@ -104,6 +104,15 @@ for (const format of ["steelblue", "#ff0000", "hsl(120, 50%, 50%)", "transparent
   out.darker.push([darker.formatRgb(), darker.formatHex(), darker.formatHsl()]);
 }
 
+// The cubehelix raised to a power of its own.
+const cube = d3color.cubehelix(120, 0.5, 0.5);
+out.cubehelixK = {
+  brighter0: cube.brighter(0).formatRgb(),
+  brighter2: cube.brighter(2).formatRgb(),
+  darker0: cube.darker(0).formatRgb(),
+  darker2: cube.darker(2).formatRgb(),
+};
+
 // The colours the JavaScript makes itself.
 out.made = {
   rgb: d3color.rgb(1, 2, 3).formatRgb(),

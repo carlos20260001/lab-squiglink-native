@@ -40,7 +40,7 @@ pub fn default_definition() -> LocaleDefinition {
         grouping: Some(vec![3]),
         currency: Some(["$".to_owned(), String::new()]),
         percent: Some("%".to_owned()),
-        minus: Some("-".to_owned()),
+        minus: Some("−".to_owned()),
         numerals: None,
         nan: Some("NaN".to_owned()),
     }
@@ -396,7 +396,7 @@ pub fn format_locale(definition: &LocaleDefinition) -> Locale {
         grouping,
         currency,
         percent: definition.percent.clone().unwrap_or_else(|| "%".to_owned()),
-        minus: definition.minus.clone().unwrap_or_else(|| "-".to_owned()),
+        minus: definition.minus.clone().unwrap_or_else(|| "−".to_owned()),
         numerals: definition.numerals.clone(),
         nan: definition.nan.clone().unwrap_or_else(|| "NaN".to_owned()),
     }

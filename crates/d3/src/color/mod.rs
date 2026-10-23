@@ -20,6 +20,7 @@ pub mod lab;
 pub use cubehelix::cubehelix;
 pub use lab::{gray, hcl, lab, lch};
 
+use crate::arith;
 use crate::js;
 
 /// The darker a colour is made by `darker`.
@@ -211,9 +212,9 @@ impl Rgb {
     pub fn brighter(&self, k: Option<f64>) -> Rgb {
         let k = k.unwrap_or(BRIGHTER);
         Rgb {
-            r: self.r * k,
-            g: self.g * k,
-            b: self.b * k,
+            r: arith::multiply(self.r, k),
+            g: arith::multiply(self.g, k),
+            b: arith::multiply(self.b, k),
             opacity: self.opacity,
         }
     }
@@ -222,9 +223,9 @@ impl Rgb {
     pub fn darker(&self, k: Option<f64>) -> Rgb {
         let k = k.unwrap_or(DARKER);
         Rgb {
-            r: self.r * k,
-            g: self.g * k,
-            b: self.b * k,
+            r: arith::multiply(self.r, k),
+            g: arith::multiply(self.g, k),
+            b: arith::multiply(self.b, k),
             opacity: self.opacity,
         }
     }
@@ -278,7 +279,7 @@ impl Hsl {
         Hsl {
             h: self.h,
             s: self.s,
-            l: self.l * k,
+            l: arith::multiply(self.l, k),
             opacity: self.opacity,
         }
     }
@@ -289,26 +290,45 @@ impl Hsl {
         Hsl {
             h: self.h,
             s: self.s,
-            l: self.l * k,
+            l: arith::multiply(self.l, k),
             opacity: self.opacity,
         }
     }
 
     /// The colour as an `Rgb`.
     pub fn rgb(&self) -> Rgb {
-        let h = self.h % 360.0 + if self.h < 0.0 { 360.0 } else { 0.0 };
+        let h = arith::add(self.h % 360.0, if self.h < 0.0 { 360.0 } else { 0.0 });
         let s = if h.is_nan() || self.s.is_nan() {
             0.0
         } else {
             self.s
         };
         let l = self.l;
-        let m2 = l + (if l < 0.5 { l } else { 1.0 - l }) * s;
-        let m1 = 2.0 * l - m2;
+        let m2 = arith::add(
+            l,
+            arith::multiply(if l < 0.5 { l } else { arith::subtract(1.0, l) }, s),
+        );
+        let m1 = arith::subtract(arith::multiply(2.0, l), m2);
         Rgb {
-            r: hsl2rgb(if h >= 240.0 { h - 240.0 } else { h + 120.0 }, m1, m2),
+            r: hsl2rgb(
+                if h >= 240.0 {
+                    arith::subtract(h, 240.0)
+                } else {
+                    arith::add(h, 120.0)
+                },
+                m1,
+                m2,
+            ),
             g: hsl2rgb(h, m1, m2),
-            b: hsl2rgb(if h < 120.0 { h + 240.0 } else { h - 120.0 }, m1, m2),
+            b: hsl2rgb(
+                if h < 120.0 {
+                    arith::add(h, 240.0)
+                } else {
+                    arith::subtract(h, 120.0)
+                },
+                m1,
+                m2,
+            ),
             opacity: self.opacity,
         }
     }
@@ -342,13 +362,15 @@ impl Hsl {
             0.0
         }));
         out.push_str(", ");
-        out.push_str(&js::number_to_string(
-            (if js::truthy(self.s) { self.s } else { 0.0 }) * 100.0,
-        ));
+        out.push_str(&js::number_to_string(arith::multiply(
+            if js::truthy(self.s) { self.s } else { 0.0 },
+            100.0,
+        )));
         out.push_str("%, ");
-        out.push_str(&js::number_to_string(
-            (if js::truthy(self.l) { self.l } else { 0.0 }) * 100.0,
-        ));
+        out.push_str(&js::number_to_string(arith::multiply(
+            if js::truthy(self.l) { self.l } else { 0.0 },
+            100.0,
+        )));
         out.push('%');
         if a != 1.0 {
             out.push_str(", ");
@@ -469,24 +491,34 @@ pub fn hsl_convert(color: Color) -> Hsl {
         return hsl;
     }
     let rgb = color.rgb();
-    let r = rgb.r / 255.0;
-    let g = rgb.g / 255.0;
-    let b = rgb.b / 255.0;
-    let min = r.min(g).min(b);
-    let max = r.max(g).max(b);
+    let r = arith::divide(rgb.r, 255.0);
+    let g = arith::divide(rgb.g, 255.0);
+    let b = arith::divide(rgb.b, 255.0);
+    let min = js_min(js_min(r, g), b);
+    let max = js_max(js_max(r, g), b);
     let mut h = f64::NAN;
-    let mut s = max - min;
-    let l = (max + min) / 2.0;
+    let mut s = arith::subtract(max, min);
+    let l = arith::divide(arith::add(max, min), 2.0);
     if s != 0.0 {
         if r == max {
-            h = (g - b) / s + if g < b { 6.0 } else { 0.0 };
+            h = arith::add(
+                arith::divide(arith::subtract(g, b), s),
+                if g < b { 6.0 } else { 0.0 },
+            );
         } else if g == max {
-            h = (b - r) / s + 2.0;
+            h = arith::add(arith::divide(arith::subtract(b, r), s), 2.0);
         } else {
-            h = (r - g) / s + 4.0;
+            h = arith::add(arith::divide(arith::subtract(r, g), s), 4.0);
         }
-        s /= if l < 0.5 { max + min } else { 2.0 - max - min };
-        h *= 60.0;
+        s = arith::divide(
+            s,
+            if l < 0.5 {
+                arith::add(max, min)
+            } else {
+                arith::subtract(arith::subtract(2.0, max), min)
+            },
+        );
+        h = arith::multiply(h, 60.0);
     } else {
         s = if l > 0.0 && l < 1.0 { 0.0 } else { h };
     }
@@ -576,15 +608,48 @@ fn channel(value: f64) -> f64 {
 /// The JavaScript's `hsl2rgb`, which is from the CSS Color Module.
 fn hsl2rgb(h: f64, m1: f64, m2: f64) -> f64 {
     let value = if h < 60.0 {
-        m1 + (m2 - m1) * h / 60.0
+        arith::add(
+            m1,
+            arith::divide(arith::multiply(arith::subtract(m2, m1), h), 60.0),
+        )
     } else if h < 180.0 {
         m2
     } else if h < 240.0 {
-        m1 + (m2 - m1) * (240.0 - h) / 60.0
+        arith::add(
+            m1,
+            arith::divide(
+                arith::multiply(arith::subtract(m2, m1), arith::subtract(240.0, h)),
+                60.0,
+            ),
+        )
     } else {
         m1
     };
-    value * 255.0
+    arith::multiply(value, 255.0)
+}
+
+/// The JavaScript's `Math.min`, which gives a number that is not a
+/// number when either of its arguments is one.
+fn js_min(a: f64, b: f64) -> f64 {
+    if a.is_nan() || b.is_nan() {
+        f64::NAN
+    } else if a < b {
+        a
+    } else {
+        b
+    }
+}
+
+/// The JavaScript's `Math.max`, which gives a number that is not a
+/// number when either of its arguments is one.
+fn js_max(a: f64, b: f64) -> f64 {
+    if a.is_nan() || b.is_nan() {
+        f64::NAN
+    } else if a > b {
+        a
+    } else {
+        b
+    }
 }
 
 /// The hexadecimal form, which the JavaScript reads with its own
@@ -636,7 +701,11 @@ fn channels(r: &str, g: &str, b: &str) -> Option<(f64, f64, f64)> {
         return Some((r, g, b));
     }
     if let (Some(r), Some(g), Some(b)) = (parse_percent(r), parse_percent(g), parse_percent(b)) {
-        return Some((r * 255.0 / 100.0, g * 255.0 / 100.0, b * 255.0 / 100.0));
+        return Some((
+            arith::divide(arith::multiply(r, 255.0), 100.0),
+            arith::divide(arith::multiply(g, 255.0), 100.0),
+            arith::divide(arith::multiply(b, 255.0), 100.0),
+        ));
     }
     None
 }

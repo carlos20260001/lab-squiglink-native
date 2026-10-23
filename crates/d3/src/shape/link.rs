@@ -3,6 +3,7 @@
 //! Translated from `d3-shape/src/link/index.js` and the files beside it,
 //! version 1.3.7, of d3 5.16.0. The JavaScript is the authority.
 
+use crate::arith;
 use crate::ieee754;
 
 use super::curve::CurveFactory;
@@ -142,22 +143,23 @@ impl<D, E: Clone> Link<D, E> {
 /// The JavaScript's `curveHorizontal`.
 fn curve_horizontal(context: &mut dyn Context, x0: f64, y0: f64, x1: f64, y1: f64) {
     context.move_to(x0, y0);
-    let x0 = (x0 + x1) / 2.0;
+    let x0 = arith::divide(arith::add(x0, x1), 2.0);
     context.bezier_curve_to(x0, y0, x0, y1, x1, y1);
 }
 
 /// The JavaScript's `curveVertical`.
 fn curve_vertical(context: &mut dyn Context, x0: f64, y0: f64, x1: f64, y1: f64) {
     context.move_to(x0, y0);
-    let y0 = (y0 + y1) / 2.0;
+    let y0 = arith::divide(arith::add(y0, y1), 2.0);
     context.bezier_curve_to(x0, y0, x1, y0, x1, y1);
 }
 
 /// The JavaScript's `curveRadial`.
 fn curve_radial(context: &mut dyn Context, x0: f64, y0: f64, x1: f64, y1: f64) {
     let p0 = point_radial(x0, y0);
-    let p1 = point_radial(x0, (y0 + y1) / 2.0);
-    let p2 = point_radial(x1, (y0 + y1) / 2.0);
+    let middle = arith::divide(arith::add(y0, y1), 2.0);
+    let p1 = point_radial(x0, middle);
+    let p2 = point_radial(x1, middle);
     let p3 = point_radial(x1, y1);
     context.move_to(p0.0, p0.1);
     context.bezier_curve_to(p1.0, p1.1, p2.0, p2.1, p3.0, p3.1);
@@ -177,8 +179,11 @@ fn curve_radial(context: &mut dyn Context, x0: f64, y0: f64, x1: f64, y1: f64) {
 /// The angle is turned by a quarter turn before the sine and the cosine
 /// are taken, and the port keeps that.
 pub fn point_radial(angle: f64, radius: f64) -> (f64, f64) {
-    let angle = angle - std::f64::consts::PI / 2.0;
-    (radius * ieee754::cos(angle), radius * ieee754::sin(angle))
+    let angle = arith::subtract(angle, std::f64::consts::PI / 2.0);
+    (
+        arith::multiply(radius, ieee754::cos(angle)),
+        arith::multiply(radius, ieee754::sin(angle)),
+    )
 }
 
 /// d3-shape's `linkHorizontal`.

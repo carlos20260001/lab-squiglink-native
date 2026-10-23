@@ -3860,6 +3860,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "cpal",
+ "d3",
  "dirs",
  "emath",
  "libspa-sys",

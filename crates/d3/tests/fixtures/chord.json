@@ -285,39 +285,39 @@
   "groups": [
    {
     "index": 0,
-    "startAngle": 0,
-    "endAngle": 0.931513880159696,
-    "value": 26
+    "startAngle": "0000000000000000",
+    "endAngle": "3fedcef63261ca68",
+    "value": "403a000000000000"
    },
    {
     "index": 1,
-    "startAngle": 0.9815138801596961,
-    "endAngle": 2.0205101311070495,
-    "value": 29
+    "startAngle": "3fef688fcbfb6402",
+    "endAngle": "40002a013732bb4a",
+    "value": "403d000000000000"
    },
    {
     "index": 2,
-    "startAngle": 2.0705101311070493,
-    "endAngle": 3.0736789251251837,
-    "value": 28
+    "startAngle": "400090679d9921b0",
+    "endAngle": "400896e4f9ee896a",
+    "value": "403c000000000000"
    },
    {
     "index": 3,
-    "startAngle": 3.1236789251251835,
-    "endAngle": 4.126847719143318,
-    "value": 28
+    "startAngle": "4008fd4b6054efd0",
+    "endAngle": "401081e45e552bc5",
+    "value": "403c000000000000"
    },
    {
     "index": 4,
-    "startAngle": 4.176847719143318,
-    "endAngle": 5.180016513161451,
-    "value": 28
+    "startAngle": "4010b51791885ef8",
+    "endAngle": "4014b8563fb312d4",
+    "value": "403c000000000000"
    },
    {
     "index": 5,
-    "startAngle": 5.230016513161451,
-    "endAngle": 6.233185307179585,
-    "value": 28
+    "startAngle": "4014eb8972e64607",
+    "endAngle": "4018eec82110f9e3",
+    "value": "403c000000000000"
    }
   ],
   "chords": [
@@ -325,240 +325,240 @@
     "source": {
      "index": 1,
      "subindex": 0,
-     "startAngle": 0.9815138801596961,
-     "endAngle": 1.2323060786642297,
-     "value": 7
+     "startAngle": "3fef688fcbfb6402",
+     "endAngle": "3ff3b786942865de",
+     "value": "401c000000000000"
     },
     "target": {
      "index": 0,
      "subindex": 1,
-     "startAngle": 0,
-     "endAngle": 0.17913728464609538,
-     "value": 5
+     "startAngle": "0000000000000000",
+     "endAngle": "3fc6edf875864ced",
+     "value": "4014000000000000"
     }
    },
    {
     "source": {
      "index": 0,
      "subindex": 2,
-     "startAngle": 0.17913728464609538,
-     "endAngle": 0.3941020262214099,
-     "value": 6
+     "startAngle": "3fc6edf875864ced",
+     "endAngle": "3fd938f7b47a216c",
+     "value": "4018000000000000"
     },
     "target": {
      "index": 2,
      "subindex": 0,
-     "startAngle": 2.0705101311070493,
-     "endAngle": 2.285474872682364,
-     "value": 6
+     "startAngle": "400090679d9921b0",
+     "endAngle": "400248a70cd0010f",
+     "value": "4018000000000000"
     }
    },
    {
     "source": {
      "index": 0,
      "subindex": 3,
-     "startAngle": 0.3941020262214099,
-     "endAngle": 0.5374118539382862,
-     "value": 4
+     "startAngle": "3fd938f7b47a216c",
+     "endAngle": "3fe1327a5824b9b2",
+     "value": "4010000000000000"
     },
     "target": {
      "index": 3,
      "subindex": 0,
-     "startAngle": 3.1236789251251835,
-     "endAngle": 3.26698875284206,
-     "value": 4
+     "startAngle": "4008fd4b6054efd0",
+     "endAngle": "400a22caffceda0f",
+     "value": "4010000000000000"
     }
    },
    {
     "source": {
      "index": 0,
      "subindex": 4,
-     "startAngle": 0.5374118539382862,
-     "endAngle": 0.7882040524428198,
-     "value": 7
+     "startAngle": "3fe1327a5824b9b2",
+     "endAngle": "3fe938f7b47a216c",
+     "value": "401c000000000000"
     },
     "target": {
      "index": 4,
      "subindex": 0,
-     "startAngle": 4.176847719143318,
-     "endAngle": 4.391812460718632,
-     "value": 6
+     "startAngle": "4010b51791885ef8",
+     "endAngle": "401191374923cea7",
+     "value": "4018000000000000"
     }
    },
    {
     "source": {
      "index": 5,
      "subindex": 0,
-     "startAngle": 5.230016513161451,
-     "endAngle": 5.409153797807546,
-     "value": 5
+     "startAngle": "4014eb8972e64607",
+     "endAngle": "4015a2f93692786e",
+     "value": "4014000000000000"
     },
     "target": {
      "index": 0,
      "subindex": 5,
-     "startAngle": 0.7882040524428198,
-     "endAngle": 0.931513880159696,
-     "value": 4
+     "startAngle": "3fe938f7b47a216c",
+     "endAngle": "3fedcef63261ca68",
+     "value": "4010000000000000"
     }
    },
    {
     "source": {
      "index": 2,
      "subindex": 1,
-     "startAngle": 2.285474872682364,
-     "endAngle": 2.5362670711868973,
-     "value": 7
+     "startAngle": "400248a70cd0010f",
+     "endAngle": "40044a4663e55afd",
+     "value": "401c000000000000"
     },
     "target": {
      "index": 1,
      "subindex": 2,
-     "startAngle": 1.2323060786642297,
-     "endAngle": 1.4114433633103252,
-     "value": 5
-    }
-   },
-   {
-    "source": {
-     "index": 1,
-     "subindex": 3,
-     "startAngle": 1.4114433633103252,
-     "endAngle": 1.6264081048856396,
-     "value": 6
-    },
-    "target": {
-     "index": 3,
-     "subindex": 1,
-     "startAngle": 3.26698875284206,
-     "endAngle": 3.4819534944173745,
-     "value": 6
+     "startAngle": "3ff3b786942865de",
+     "endAngle": "3ff69545a2d92f7c",
+     "value": "4014000000000000"
     }
    },
    {
     "source": {
      "index": 1,
+     "subindex": 3,
+     "startAngle": "3ff69545a2d92f7c",
+     "endAngle": "3ffa05c48146ee39",
+     "value": "4018000000000000"
+    },
+    "target": {
+     "index": 3,
+     "subindex": 1,
+     "startAngle": "400a22caffceda0f",
+     "endAngle": "400bdb0a6f05b96e",
+     "value": "4018000000000000"
+    }
+   },
+   {
+    "source": {
+     "index": 1,
      "subindex": 4,
-     "startAngle": 1.6264081048856396,
-     "endAngle": 1.7697179326025159,
-     "value": 4
+     "startAngle": "3ffa05c48146ee39",
+     "endAngle": "3ffc50c3c03ac2b7",
+     "value": "4010000000000000"
     },
     "target": {
      "index": 4,
      "subindex": 1,
-     "startAngle": 4.391812460718632,
-     "endAngle": 4.535122288435509,
-     "value": 4
+     "startAngle": "401191374923cea7",
+     "endAngle": "401223f718e0c3c7",
+     "value": "4010000000000000"
     }
    },
    {
     "source": {
      "index": 1,
      "subindex": 5,
-     "startAngle": 1.7697179326025159,
-     "endAngle": 2.0205101311070495,
-     "value": 7
+     "startAngle": "3ffc50c3c03ac2b7",
+     "endAngle": "40002a013732bb4a",
+     "value": "401c000000000000"
     },
     "target": {
      "index": 5,
      "subindex": 1,
-     "startAngle": 5.409153797807546,
-     "endAngle": 5.62411853938286,
-     "value": 6
+     "startAngle": "4015a2f93692786e",
+     "endAngle": "40167f18ee2de81d",
+     "value": "4018000000000000"
     }
    },
    {
     "source": {
      "index": 3,
      "subindex": 2,
-     "startAngle": 3.4819534944173745,
-     "endAngle": 3.732745692921908,
-     "value": 7
+     "startAngle": "400bdb0a6f05b96e",
+     "endAngle": "400ddca9c61b135c",
+     "value": "401c000000000000"
     },
     "target": {
      "index": 2,
      "subindex": 3,
-     "startAngle": 2.5362670711868973,
-     "endAngle": 2.7154043558329928,
-     "value": 5
+     "startAngle": "40044a4663e55afd",
+     "endAngle": "4005b925eb3dbfcc",
+     "value": "4014000000000000"
     }
    },
    {
     "source": {
      "index": 2,
      "subindex": 4,
-     "startAngle": 2.7154043558329928,
-     "endAngle": 2.9303690974083074,
-     "value": 6
+     "startAngle": "4005b925eb3dbfcc",
+     "endAngle": "400771655a749f2b",
+     "value": "4018000000000000"
     },
     "target": {
      "index": 4,
      "subindex": 2,
-     "startAngle": 4.535122288435509,
-     "endAngle": 4.750087030010823,
-     "value": 6
+     "startAngle": "401223f718e0c3c7",
+     "endAngle": "40130016d07c3376",
+     "value": "4018000000000000"
     }
    },
    {
     "source": {
      "index": 2,
      "subindex": 5,
-     "startAngle": 2.9303690974083074,
-     "endAngle": 3.0736789251251837,
-     "value": 4
+     "startAngle": "400771655a749f2b",
+     "endAngle": "400896e4f9ee896a",
+     "value": "4010000000000000"
     },
     "target": {
      "index": 5,
      "subindex": 2,
-     "startAngle": 5.62411853938286,
-     "endAngle": 5.767428367099737,
-     "value": 4
+     "startAngle": "40167f18ee2de81d",
+     "endAngle": "401711d8bdeadd3d",
+     "value": "4010000000000000"
     }
    },
    {
     "source": {
      "index": 4,
      "subindex": 3,
-     "startAngle": 4.750087030010823,
-     "endAngle": 5.000879228515356,
-     "value": 7
+     "startAngle": "40130016d07c3376",
+     "endAngle": "401400e67c06e06d",
+     "value": "401c000000000000"
     },
     "target": {
      "index": 3,
      "subindex": 4,
-     "startAngle": 3.732745692921908,
-     "endAngle": 3.9118829775680033,
-     "value": 5
+     "startAngle": "400ddca9c61b135c",
+     "endAngle": "400f4b894d73782b",
+     "value": "4014000000000000"
     }
    },
    {
     "source": {
      "index": 3,
      "subindex": 5,
-     "startAngle": 3.9118829775680033,
-     "endAngle": 4.126847719143318,
-     "value": 6
+     "startAngle": "400f4b894d73782b",
+     "endAngle": "401081e45e552bc5",
+     "value": "4018000000000000"
     },
     "target": {
      "index": 5,
      "subindex": 3,
-     "startAngle": 5.767428367099737,
-     "endAngle": 5.982393108675051,
-     "value": 6
+     "startAngle": "401711d8bdeadd3d",
+     "endAngle": "4017edf875864cec",
+     "value": "4018000000000000"
     }
    },
    {
     "source": {
      "index": 5,
      "subindex": 4,
-     "startAngle": 5.982393108675051,
-     "endAngle": 6.233185307179585,
-     "value": 7
+     "startAngle": "4017edf875864cec",
+     "endAngle": "4018eec82110f9e3",
+     "value": "401c000000000000"
     },
     "target": {
      "index": 4,
      "subindex": 5,
-     "startAngle": 5.000879228515356,
-     "endAngle": 5.180016513161451,
-     "value": 5
+     "startAngle": "401400e67c06e06d",
+     "endAngle": "4014b8563fb312d4",
+     "value": "4014000000000000"
     }
    }
   ]
@@ -567,39 +567,39 @@
   "groups": [
    {
     "index": 0,
-    "startAngle": 0,
-    "endAngle": 0.9782204669860433,
-    "value": 26
+    "startAngle": "40153848b3fc3e9a",
+    "endAngle": "401921fb54442d19",
+    "value": "403a000000000000"
    },
    {
     "index": 1,
-    "startAngle": 0.9782204669860433,
-    "endAngle": 2.06931252631663,
-    "value": 29
+    "startAngle": "0000000000000000",
+    "endAngle": "3ff1751cf27c00aa",
+    "value": "403d000000000000"
    },
    {
     "index": 2,
-    "startAngle": 2.06931252631663,
-    "endAngle": 3.1227807215323686,
-    "value": 28
+    "startAngle": "3ff1751cf27c00aa",
+    "endAngle": "4001280f34ec9f8d",
+    "value": "403c000000000000"
    },
    {
     "index": 3,
-    "startAngle": 3.1227807215323686,
-    "endAngle": 4.176248916748108,
-    "value": 28
+    "startAngle": "4001280f34ec9f8d",
+    "endAngle": "4009958ff09b3ec4",
+    "value": "403c000000000000"
    },
    {
     "index": 4,
-    "startAngle": 4.176248916748108,
-    "endAngle": 5.229717111963847,
-    "value": 28
+    "startAngle": "4009958ff09b3ec4",
+    "endAngle": "401101885624eefe",
+    "value": "403c000000000000"
    },
    {
     "index": 5,
-    "startAngle": 5.229717111963847,
-    "endAngle": 6.283185307179586,
-    "value": 28
+    "startAngle": "401101885624eefe",
+    "endAngle": "40153848b3fc3e9a",
+    "value": "403c000000000000"
    }
   ],
   "chords": [
@@ -607,240 +607,240 @@
     "source": {
      "index": 1,
      "subindex": 0,
-     "startAngle": 0.9782204669860433,
-     "endAngle": 1.241587515789978,
-     "value": 7
+     "startAngle": "0000000000000000",
+     "endAngle": "3fd0db01775d3e6f",
+     "value": "401c000000000000"
     },
     "target": {
      "index": 0,
      "subindex": 1,
-     "startAngle": 0,
-     "endAngle": 0.18811932057423908,
-     "value": 5
+     "startAngle": "40153848b3fc3e9a",
+     "endAngle": "4015f8eb0de2b164",
+     "value": "4014000000000000"
     }
    },
    {
     "source": {
      "index": 0,
      "subindex": 2,
-     "startAngle": 0.18811932057423908,
-     "endAngle": 0.413862505263326,
-     "value": 6
+     "startAngle": "4015f8eb0de2b164",
+     "endAngle": "4016e0144690d4bc",
+     "value": "4018000000000000"
     },
     "target": {
      "index": 2,
      "subindex": 0,
-     "startAngle": 2.06931252631663,
-     "endAngle": 2.2950557110057166,
-     "value": 6
+     "startAngle": "3ff1751cf27c00aa",
+     "endAngle": "3ff511c1d5348e0b",
+     "value": "4018000000000000"
     }
    },
    {
     "source": {
      "index": 0,
      "subindex": 3,
-     "startAngle": 0.413862505263326,
-     "endAngle": 0.5643579617227172,
-     "value": 4
+     "startAngle": "4016e0144690d4bc",
+     "endAngle": "40177a2fc1af96f7",
+     "value": "4010000000000000"
     },
     "target": {
      "index": 3,
      "subindex": 0,
-     "startAngle": 3.1227807215323686,
-     "endAngle": 3.27327617799176,
-     "value": 4
+     "startAngle": "4001280f34ec9f8d",
+     "endAngle": "40025c462b2a2403",
+     "value": "4010000000000000"
     }
    },
    {
     "source": {
      "index": 0,
      "subindex": 4,
-     "startAngle": 0.5643579617227172,
-     "endAngle": 0.827725010526652,
-     "value": 7
+     "startAngle": "40177a2fc1af96f7",
+     "endAngle": "401887dfd9256ade",
+     "value": "401c000000000000"
     },
     "target": {
      "index": 4,
      "subindex": 0,
-     "startAngle": 4.176248916748108,
-     "endAngle": 4.4019921014371945,
-     "value": 6
+     "startAngle": "4009958ff09b3ec4",
+     "endAngle": "400b63e261f78574",
+     "value": "4018000000000000"
     }
    },
    {
     "source": {
      "index": 5,
      "subindex": 0,
-     "startAngle": 5.229717111963847,
-     "endAngle": 5.4178364325380866,
-     "value": 5
+     "startAngle": "401101885624eefe",
+     "endAngle": "4011c22ab00b61c8",
+     "value": "4014000000000000"
     },
     "target": {
      "index": 0,
      "subindex": 5,
-     "startAngle": 0.827725010526652,
-     "endAngle": 0.9782204669860433,
-     "value": 4
+     "startAngle": "401887dfd9256ade",
+     "endAngle": "401921fb54442d19",
+     "value": "4010000000000000"
     }
    },
    {
     "source": {
      "index": 2,
      "subindex": 1,
-     "startAngle": 2.2950557110057166,
-     "endAngle": 2.5584227598096514,
-     "value": 7
+     "startAngle": "3ff511c1d5348e0b",
+     "endAngle": "3ff94882330bdda7",
+     "value": "401c000000000000"
     },
     "target": {
      "index": 1,
      "subindex": 2,
-     "startAngle": 1.241587515789978,
-     "endAngle": 1.4297068363642171,
-     "value": 5
-    }
-   },
-   {
-    "source": {
-     "index": 1,
-     "subindex": 3,
-     "startAngle": 1.4297068363642171,
-     "endAngle": 1.655450021053304,
-     "value": 6
-    },
-    "target": {
-     "index": 3,
-     "subindex": 1,
-     "startAngle": 3.27327617799176,
-     "endAngle": 3.499019362680847,
-     "value": 6
+     "startAngle": "3fd0db01775d3e6f",
+     "endAngle": "3fdce52715c46b07",
+     "value": "4014000000000000"
     }
    },
    {
     "source": {
      "index": 1,
+     "subindex": 3,
+     "startAngle": "3fdce52715c46b07",
+     "endAngle": "3fe5abdd50535045",
+     "value": "4018000000000000"
+    },
+    "target": {
+     "index": 3,
+     "subindex": 1,
+     "startAngle": "40025c462b2a2403",
+     "endAngle": "40042a989c866ab3",
+     "value": "4018000000000000"
+    }
+   },
+   {
+    "source": {
+     "index": 1,
      "subindex": 4,
-     "startAngle": 1.655450021053304,
-     "endAngle": 1.8059454775126953,
-     "value": 4
+     "startAngle": "3fe5abdd50535045",
+     "endAngle": "3fea7cb92949621c",
+     "value": "4010000000000000"
     },
     "target": {
      "index": 4,
      "subindex": 1,
-     "startAngle": 4.4019921014371945,
-     "endAngle": 4.552487557896586,
-     "value": 4
+     "startAngle": "400b63e261f78574",
+     "endAngle": "400c9819583509ea",
+     "value": "4010000000000000"
     }
    },
    {
     "source": {
      "index": 1,
      "subindex": 5,
-     "startAngle": 1.8059454775126953,
-     "endAngle": 2.06931252631663,
-     "value": 7
+     "startAngle": "3fea7cb92949621c",
+     "endAngle": "3ff1751cf27c00aa",
+     "value": "401c000000000000"
     },
     "target": {
      "index": 5,
      "subindex": 1,
-     "startAngle": 5.4178364325380866,
-     "endAngle": 5.643579617227173,
-     "value": 6
+     "startAngle": "4011c22ab00b61c8",
+     "endAngle": "4012a953e8b98520",
+     "value": "4018000000000000"
     }
    },
    {
     "source": {
      "index": 3,
      "subindex": 2,
-     "startAngle": 3.499019362680847,
-     "endAngle": 3.7623864114847816,
-     "value": 7
+     "startAngle": "40042a989c866ab3",
+     "endAngle": "400645f8cb721281",
+     "value": "401c000000000000"
     },
     "target": {
      "index": 2,
      "subindex": 3,
-     "startAngle": 2.5584227598096514,
-     "endAngle": 2.7465420803838905,
-     "value": 5
+     "startAngle": "3ff94882330bdda7",
+     "endAngle": "3ffc4b0b9aa5a8cd",
+     "value": "4014000000000000"
     }
    },
    {
     "source": {
      "index": 2,
      "subindex": 4,
-     "startAngle": 2.7465420803838905,
-     "endAngle": 2.972285265072977,
-     "value": 6
+     "startAngle": "3ffc4b0b9aa5a8cd",
+     "endAngle": "3fffe7b07d5e362e",
+     "value": "4018000000000000"
     },
     "target": {
      "index": 4,
      "subindex": 2,
-     "startAngle": 4.552487557896586,
-     "endAngle": 4.778230742585673,
-     "value": 6
+     "startAngle": "400c9819583509ea",
+     "endAngle": "400e666bc991509a",
+     "value": "4018000000000000"
     }
    },
    {
     "source": {
      "index": 2,
      "subindex": 5,
-     "startAngle": 2.972285265072977,
-     "endAngle": 3.1227807215323686,
-     "value": 4
+     "startAngle": "3fffe7b07d5e362e",
+     "endAngle": "4001280f34ec9f8d",
+     "value": "4010000000000000"
     },
     "target": {
      "index": 5,
      "subindex": 2,
-     "startAngle": 5.643579617227173,
-     "endAngle": 5.794075073686565,
-     "value": 4
+     "startAngle": "4012a953e8b98520",
+     "endAngle": "4013436f63d8475b",
+     "value": "4010000000000000"
     }
    },
    {
     "source": {
      "index": 4,
      "subindex": 3,
-     "startAngle": 4.778230742585673,
-     "endAngle": 5.0415977913896075,
-     "value": 7
+     "startAngle": "400e666bc991509a",
+     "endAngle": "401040e5fc3e7c34",
+     "value": "401c000000000000"
     },
     "target": {
      "index": 3,
      "subindex": 4,
-     "startAngle": 3.7623864114847816,
-     "endAngle": 3.9505057320590207,
-     "value": 5
+     "startAngle": "400645f8cb721281",
+     "endAngle": "4007c73d7f3ef814",
+     "value": "4014000000000000"
     }
    },
    {
     "source": {
      "index": 3,
      "subindex": 5,
-     "startAngle": 3.9505057320590207,
-     "endAngle": 4.176248916748108,
-     "value": 6
+     "startAngle": "4007c73d7f3ef814",
+     "endAngle": "4009958ff09b3ec4",
+     "value": "4018000000000000"
     },
     "target": {
      "index": 5,
      "subindex": 3,
-     "startAngle": 5.794075073686565,
-     "endAngle": 6.019818258375651,
-     "value": 6
+     "startAngle": "4013436f63d8475b",
+     "endAngle": "40142a989c866ab3",
+     "value": "4018000000000000"
     }
    },
    {
     "source": {
      "index": 5,
      "subindex": 4,
-     "startAngle": 6.019818258375651,
-     "endAngle": 6.283185307179586,
-     "value": 7
+     "startAngle": "40142a989c866ab3",
+     "endAngle": "40153848b3fc3e9a",
+     "value": "401c000000000000"
     },
     "target": {
      "index": 4,
      "subindex": 5,
-     "startAngle": 5.0415977913896075,
-     "endAngle": 5.229717111963847,
-     "value": 5
+     "startAngle": "401040e5fc3e7c34",
+     "endAngle": "401101885624eefe",
+     "value": "4014000000000000"
     }
    }
   ]
@@ -849,39 +849,39 @@
   "groups": [
    {
     "index": 0,
-    "startAngle": 0,
-    "endAngle": 0.9782204669860433,
-    "value": 26
+    "startAngle": "0000000000000000",
+    "endAngle": "3fef4d95023f73f2",
+    "value": "403a000000000000"
    },
    {
     "index": 1,
-    "startAngle": 0.9782204669860433,
-    "endAngle": 2.06931252631663,
-    "value": 29
+    "startAngle": "3fef4d95023f73f2",
+    "endAngle": "40008df3b9cddd52",
+    "value": "403d000000000000"
    },
    {
     "index": 2,
-    "startAngle": 2.06931252631663,
-    "endAngle": 3.1227807215323686,
-    "value": 28
+    "startAngle": "40008df3b9cddd52",
+    "endAngle": "4008fb74757c7c89",
+    "value": "403c000000000000"
    },
    {
     "index": 3,
-    "startAngle": 3.1227807215323686,
-    "endAngle": 4.176248916748108,
-    "value": 28
+    "startAngle": "4008fb74757c7c89",
+    "endAngle": "4010b47a98958de0",
+    "value": "403c000000000000"
    },
    {
     "index": 4,
-    "startAngle": 4.176248916748108,
-    "endAngle": 5.229717111963847,
-    "value": 28
+    "startAngle": "4010b47a98958de0",
+    "endAngle": "4014eb3af66cdd7b",
+    "value": "403c000000000000"
    },
    {
     "index": 5,
-    "startAngle": 5.229717111963847,
-    "endAngle": 6.283185307179586,
-    "value": 28
+    "startAngle": "4014eb3af66cdd7b",
+    "endAngle": "401921fb54442d17",
+    "value": "403c000000000000"
    }
   ],
   "chords": [
@@ -889,240 +889,240 @@
     "source": {
      "index": 1,
      "subindex": 0,
-     "startAngle": 0.9782204669860433,
-     "endAngle": 1.241587515789978,
-     "value": 7
+     "startAngle": "3fef4d95023f73f2",
+     "endAngle": "3ff3dd8adef70995",
+     "value": "401c000000000000"
     },
     "target": {
      "index": 0,
      "subindex": 1,
-     "startAngle": 0,
-     "endAngle": 0.18811932057423908,
-     "value": 5
+     "startAngle": "3fdf4d95023f73f2",
+     "endAngle": "3fe5abdd50535045",
+     "value": "4014000000000000"
     }
    },
    {
     "source": {
      "index": 0,
      "subindex": 2,
-     "startAngle": 0.18811932057423908,
-     "endAngle": 0.413862505263326,
-     "value": 6
+     "startAngle": "3fd0db01775d3e6f",
+     "endAngle": "3fdf4d95023f73f2",
+     "value": "4018000000000000"
     },
     "target": {
      "index": 2,
      "subindex": 0,
-     "startAngle": 2.06931252631663,
-     "endAngle": 2.2950557110057166,
-     "value": 6
+     "startAngle": "4002a953e8b98520",
+     "endAngle": "400477a65a15cbd0",
+     "value": "4018000000000000"
     }
    },
    {
     "source": {
      "index": 0,
      "subindex": 3,
-     "startAngle": 0.413862505263326,
-     "endAngle": 0.5643579617227172,
-     "value": 4
+     "startAngle": "3fe5abdd50535045",
+     "endAngle": "3fea7cb92949621c",
+     "value": "4010000000000000"
     },
     "target": {
      "index": 3,
      "subindex": 0,
-     "startAngle": 3.1227807215323686,
-     "endAngle": 3.27327617799176,
-     "value": 4
+     "startAngle": "40101a5f1d76cba5",
+     "endAngle": "4010b47a98958de0",
+     "value": "4010000000000000"
     }
    },
    {
     "source": {
      "index": 0,
      "subindex": 4,
-     "startAngle": 0.5643579617227172,
-     "endAngle": 0.827725010526652,
-     "value": 7
+     "startAngle": "0000000000000000",
+     "endAngle": "3fd0db01775d3e6f",
+     "value": "401c000000000000"
     },
     "target": {
      "index": 4,
      "subindex": 0,
-     "startAngle": 4.176248916748108,
-     "endAngle": 4.4019921014371945,
-     "value": 6
+     "startAngle": "4011c22ab00b61c7",
+     "endAngle": "4012a953e8b9851f",
+     "value": "4018000000000000"
     }
    },
    {
     "source": {
      "index": 5,
      "subindex": 0,
-     "startAngle": 5.229717111963847,
-     "endAngle": 5.4178364325380866,
-     "value": 5
+     "startAngle": "4017c73d7f3ef812",
+     "endAngle": "401887dfd9256adc",
+     "value": "4014000000000000"
     },
     "target": {
      "index": 0,
      "subindex": 5,
-     "startAngle": 0.827725010526652,
-     "endAngle": 0.9782204669860433,
-     "value": 4
+     "startAngle": "3fea7cb92949621c",
+     "endAngle": "3fef4d95023f73f2",
+     "value": "4010000000000000"
     }
    },
    {
     "source": {
      "index": 2,
      "subindex": 1,
-     "startAngle": 2.2950557110057166,
-     "endAngle": 2.5584227598096514,
-     "value": 7
+     "startAngle": "40008df3b9cddd52",
+     "endAngle": "4002a953e8b98520",
+     "value": "401c000000000000"
     },
     "target": {
      "index": 1,
      "subindex": 2,
-     "startAngle": 1.241587515789978,
-     "endAngle": 1.4297068363642171,
-     "value": 5
-    }
-   },
-   {
-    "source": {
-     "index": 1,
-     "subindex": 3,
-     "startAngle": 1.4297068363642171,
-     "endAngle": 1.655450021053304,
-     "value": 6
-    },
-    "target": {
-     "index": 3,
-     "subindex": 1,
-     "startAngle": 3.27327617799176,
-     "endAngle": 3.499019362680847,
-     "value": 6
+     "startAngle": "3ffbb0f01f86e692",
+     "endAngle": "3ffeb3798720b1b8",
+     "value": "4014000000000000"
     }
    },
    {
     "source": {
      "index": 1,
+     "subindex": 3,
+     "startAngle": "3ff8144b3cce5931",
+     "endAngle": "3ffbb0f01f86e692",
+     "value": "4018000000000000"
+    },
+    "target": {
+     "index": 3,
+     "subindex": 1,
+     "startAngle": "400b16d4a4682457",
+     "endAngle": "400ce52715c46b07",
+     "value": "4018000000000000"
+    }
+   },
+   {
+    "source": {
+     "index": 1,
      "subindex": 4,
-     "startAngle": 1.655450021053304,
-     "endAngle": 1.8059454775126953,
-     "value": 4
+     "startAngle": "3ffeb3798720b1b8",
+     "endAngle": "40008df3b9cddd52",
+     "value": "4010000000000000"
     },
     "target": {
      "index": 4,
      "subindex": 1,
-     "startAngle": 4.4019921014371945,
-     "endAngle": 4.552487557896586,
-     "value": 4
+     "startAngle": "4014511f7b4e1b40",
+     "endAngle": "4014eb3af66cdd7b",
+     "value": "4010000000000000"
     }
    },
    {
     "source": {
      "index": 1,
      "subindex": 5,
-     "startAngle": 1.8059454775126953,
-     "endAngle": 2.06931252631663,
-     "value": 7
+     "startAngle": "3ff3dd8adef70995",
+     "endAngle": "3ff8144b3cce5931",
+     "value": "401c000000000000"
     },
     "target": {
      "index": 5,
      "subindex": 1,
-     "startAngle": 5.4178364325380866,
-     "endAngle": 5.643579617227173,
-     "value": 6
+     "startAngle": "4015f8eb0de2b162",
+     "endAngle": "4016e0144690d4ba",
+     "value": "4018000000000000"
     }
    },
    {
     "source": {
      "index": 3,
      "subindex": 2,
-     "startAngle": 3.499019362680847,
-     "endAngle": 3.7623864114847816,
-     "value": 7
+     "startAngle": "4008fb74757c7c89",
+     "endAngle": "400b16d4a4682457",
+     "value": "401c000000000000"
     },
     "target": {
      "index": 2,
      "subindex": 3,
-     "startAngle": 2.5584227598096514,
-     "endAngle": 2.7465420803838905,
-     "value": 5
+     "startAngle": "400645f8cb721280",
+     "endAngle": "4007c73d7f3ef813",
+     "value": "4014000000000000"
     }
    },
    {
     "source": {
      "index": 2,
      "subindex": 4,
-     "startAngle": 2.7465420803838905,
-     "endAngle": 2.972285265072977,
-     "value": 6
+     "startAngle": "400477a65a15cbd0",
+     "endAngle": "400645f8cb721280",
+     "value": "4018000000000000"
     },
     "target": {
      "index": 4,
      "subindex": 2,
-     "startAngle": 4.552487557896586,
-     "endAngle": 4.778230742585673,
-     "value": 6
+     "startAngle": "4012a953e8b9851f",
+     "endAngle": "4013907d2167a877",
+     "value": "4018000000000000"
     }
    },
    {
     "source": {
      "index": 2,
      "subindex": 5,
-     "startAngle": 2.972285265072977,
-     "endAngle": 3.1227807215323686,
-     "value": 4
+     "startAngle": "4007c73d7f3ef813",
+     "endAngle": "4008fb74757c7c89",
+     "value": "4010000000000000"
     },
     "target": {
      "index": 5,
      "subindex": 2,
-     "startAngle": 5.643579617227173,
-     "endAngle": 5.794075073686565,
-     "value": 4
+     "startAngle": "401887dfd9256adc",
+     "endAngle": "401921fb54442d17",
+     "value": "4010000000000000"
     }
    },
    {
     "source": {
      "index": 4,
      "subindex": 3,
-     "startAngle": 4.778230742585673,
-     "endAngle": 5.0415977913896075,
-     "value": 7
+     "startAngle": "4010b47a98958de0",
+     "endAngle": "4011c22ab00b61c7",
+     "value": "401c000000000000"
     },
     "target": {
      "index": 3,
      "subindex": 4,
-     "startAngle": 3.7623864114847816,
-     "endAngle": 3.9505057320590207,
-     "value": 5
+     "startAngle": "400eb3798720b1b7",
+     "endAngle": "40101a5f1d76cba5",
+     "value": "4014000000000000"
     }
    },
    {
     "source": {
      "index": 3,
      "subindex": 5,
-     "startAngle": 3.9505057320590207,
-     "endAngle": 4.176248916748108,
-     "value": 6
+     "startAngle": "400ce52715c46b07",
+     "endAngle": "400eb3798720b1b7",
+     "value": "4018000000000000"
     },
     "target": {
      "index": 5,
      "subindex": 3,
-     "startAngle": 5.794075073686565,
-     "endAngle": 6.019818258375651,
-     "value": 6
+     "startAngle": "4016e0144690d4ba",
+     "endAngle": "4017c73d7f3ef812",
+     "value": "4018000000000000"
     }
    },
    {
     "source": {
      "index": 5,
      "subindex": 4,
-     "startAngle": 6.019818258375651,
-     "endAngle": 6.283185307179586,
-     "value": 7
+     "startAngle": "4014eb3af66cdd7b",
+     "endAngle": "4015f8eb0de2b162",
+     "value": "401c000000000000"
     },
     "target": {
      "index": 4,
      "subindex": 5,
-     "startAngle": 5.0415977913896075,
-     "endAngle": 5.229717111963847,
-     "value": 5
+     "startAngle": "4013907d2167a877",
+     "endAngle": "4014511f7b4e1b40",
+     "value": "4014000000000000"
     }
    }
   ]
@@ -1131,280 +1131,280 @@
   "groups": [
    {
     "index": 0,
-    "startAngle": 0,
-    "endAngle": 0.9782204669860433,
-    "value": 26
+    "startAngle": "0000000000000000",
+    "endAngle": "3fef4d95023f73f2",
+    "value": "403a000000000000"
    },
    {
     "index": 1,
-    "startAngle": 0.9782204669860433,
-    "endAngle": 2.06931252631663,
-    "value": 29
+    "startAngle": "3fef4d95023f73f2",
+    "endAngle": "40008df3b9cddd51",
+    "value": "403d000000000000"
    },
    {
     "index": 2,
-    "startAngle": 2.06931252631663,
-    "endAngle": 3.1227807215323686,
-    "value": 28
+    "startAngle": "40008df3b9cddd51",
+    "endAngle": "4008fb74757c7c88",
+    "value": "403c000000000000"
    },
    {
     "index": 3,
-    "startAngle": 3.1227807215323686,
-    "endAngle": 4.176248916748108,
-    "value": 28
+    "startAngle": "4008fb74757c7c88",
+    "endAngle": "4010b47a98958de0",
+    "value": "403c000000000000"
    },
    {
     "index": 4,
-    "startAngle": 4.176248916748108,
-    "endAngle": 5.229717111963847,
-    "value": 28
+    "startAngle": "4010b47a98958de0",
+    "endAngle": "4014eb3af66cdd7c",
+    "value": "403c000000000000"
    },
    {
     "index": 5,
-    "startAngle": 5.229717111963847,
-    "endAngle": 6.283185307179586,
-    "value": 28
+    "startAngle": "4014eb3af66cdd7c",
+    "endAngle": "401921fb54442d18",
+    "value": "403c000000000000"
    }
   ],
   "chords": [
    {
     "source": {
-     "index": 1,
-     "subindex": 0,
-     "startAngle": 0.9782204669860433,
-     "endAngle": 1.241587515789978,
-     "value": 7
-    },
-    "target": {
-     "index": 0,
-     "subindex": 1,
-     "startAngle": 0,
-     "endAngle": 0.18811932057423908,
-     "value": 5
-    }
-   },
-   {
-    "source": {
-     "index": 0,
-     "subindex": 2,
-     "startAngle": 0.18811932057423908,
-     "endAngle": 0.413862505263326,
-     "value": 6
-    },
-    "target": {
-     "index": 2,
-     "subindex": 0,
-     "startAngle": 2.06931252631663,
-     "endAngle": 2.2950557110057166,
-     "value": 6
-    }
-   },
-   {
-    "source": {
-     "index": 0,
-     "subindex": 3,
-     "startAngle": 0.413862505263326,
-     "endAngle": 0.5643579617227172,
-     "value": 4
-    },
-    "target": {
-     "index": 3,
-     "subindex": 0,
-     "startAngle": 3.1227807215323686,
-     "endAngle": 3.27327617799176,
-     "value": 4
-    }
-   },
-   {
-    "source": {
      "index": 0,
      "subindex": 4,
-     "startAngle": 0.5643579617227172,
-     "endAngle": 0.827725010526652,
-     "value": 7
+     "startAngle": "3fe20f386d9ac2e4",
+     "endAngle": "3fea7cb92949621c",
+     "value": "401c000000000000"
     },
     "target": {
      "index": 4,
      "subindex": 0,
-     "startAngle": 4.176248916748108,
-     "endAngle": 4.4019921014371945,
-     "value": 6
-    }
-   },
-   {
-    "source": {
-     "index": 5,
-     "subindex": 0,
-     "startAngle": 5.229717111963847,
-     "endAngle": 5.4178364325380866,
-     "value": 5
-    },
-    "target": {
-     "index": 0,
-     "subindex": 5,
-     "startAngle": 0.827725010526652,
-     "endAngle": 0.9782204669860433,
-     "value": 4
-    }
-   },
-   {
-    "source": {
-     "index": 2,
-     "subindex": 1,
-     "startAngle": 2.2950557110057166,
-     "endAngle": 2.5584227598096514,
-     "value": 7
-    },
-    "target": {
-     "index": 1,
-     "subindex": 2,
-     "startAngle": 1.241587515789978,
-     "endAngle": 1.4297068363642171,
-     "value": 5
-    }
-   },
-   {
-    "source": {
-     "index": 1,
-     "subindex": 3,
-     "startAngle": 1.4297068363642171,
-     "endAngle": 1.655450021053304,
-     "value": 6
-    },
-    "target": {
-     "index": 3,
-     "subindex": 1,
-     "startAngle": 3.27327617799176,
-     "endAngle": 3.499019362680847,
-     "value": 6
-    }
-   },
-   {
-    "source": {
-     "index": 1,
-     "subindex": 4,
-     "startAngle": 1.655450021053304,
-     "endAngle": 1.8059454775126953,
-     "value": 4
-    },
-    "target": {
-     "index": 4,
-     "subindex": 1,
-     "startAngle": 4.4019921014371945,
-     "endAngle": 4.552487557896586,
-     "value": 4
+     "startAngle": "4010b47a98958de0",
+     "endAngle": "40119ba3d143b138",
+     "value": "4018000000000000"
     }
    },
    {
     "source": {
      "index": 1,
      "subindex": 5,
-     "startAngle": 1.8059454775126953,
-     "endAngle": 2.06931252631663,
-     "value": 7
+     "startAngle": "3ffce52715c46b07",
+     "endAngle": "40008df3b9cddd51",
+     "value": "401c000000000000"
     },
     "target": {
      "index": 5,
      "subindex": 1,
-     "startAngle": 5.4178364325380866,
-     "endAngle": 5.643579617227173,
-     "value": 6
+     "startAngle": "4015abdd50535046",
+     "endAngle": "401693068901739e",
+     "value": "4018000000000000"
+    }
+   },
+   {
+    "source": {
+     "index": 1,
+     "subindex": 0,
+     "startAngle": "3fef4d95023f73f2",
+     "endAngle": "3ff3dd8adef70995",
+     "value": "401c000000000000"
+    },
+    "target": {
+     "index": 0,
+     "subindex": 1,
+     "startAngle": "0000000000000000",
+     "endAngle": "3fc8144b3cce5930",
+     "value": "4014000000000000"
+    }
+   },
+   {
+    "source": {
+     "index": 0,
+     "subindex": 2,
+     "startAngle": "3fc8144b3cce5930",
+     "endAngle": "3fda7cb92949621c",
+     "value": "4018000000000000"
+    },
+    "target": {
+     "index": 2,
+     "subindex": 0,
+     "startAngle": "40008df3b9cddd51",
+     "endAngle": "40025c462b2a2401",
+     "value": "4018000000000000"
+    }
+   },
+   {
+    "source": {
+     "index": 2,
+     "subindex": 1,
+     "startAngle": "40025c462b2a2401",
+     "endAngle": "400477a65a15cbcf",
+     "value": "401c000000000000"
+    },
+    "target": {
+     "index": 1,
+     "subindex": 2,
+     "startAngle": "3ff3dd8adef70995",
+     "endAngle": "3ff6e0144690d4bb",
+     "value": "4014000000000000"
+    }
+   },
+   {
+    "source": {
+     "index": 1,
+     "subindex": 3,
+     "startAngle": "3ff6e0144690d4bb",
+     "endAngle": "3ffa7cb92949621c",
+     "value": "4018000000000000"
+    },
+    "target": {
+     "index": 3,
+     "subindex": 1,
+     "startAngle": "400a2fab6bba00fe",
+     "endAngle": "400bfdfddd1647ae",
+     "value": "4018000000000000"
     }
    },
    {
     "source": {
      "index": 3,
      "subindex": 2,
-     "startAngle": 3.499019362680847,
-     "endAngle": 3.7623864114847816,
-     "value": 7
+     "startAngle": "400bfdfddd1647ae",
+     "endAngle": "400e195e0c01ef7c",
+     "value": "401c000000000000"
     },
     "target": {
      "index": 2,
      "subindex": 3,
-     "startAngle": 2.5584227598096514,
-     "endAngle": 2.7465420803838905,
-     "value": 5
+     "startAngle": "400477a65a15cbcf",
+     "endAngle": "4005f8eb0de2b162",
+     "value": "4014000000000000"
     }
    },
    {
     "source": {
      "index": 2,
      "subindex": 4,
-     "startAngle": 2.7465420803838905,
-     "endAngle": 2.972285265072977,
-     "value": 6
+     "startAngle": "4005f8eb0de2b162",
+     "endAngle": "4007c73d7f3ef812",
+     "value": "4018000000000000"
     },
     "target": {
      "index": 4,
      "subindex": 2,
-     "startAngle": 4.552487557896586,
-     "endAngle": 4.778230742585673,
-     "value": 6
-    }
-   },
-   {
-    "source": {
-     "index": 2,
-     "subindex": 5,
-     "startAngle": 2.972285265072977,
-     "endAngle": 3.1227807215323686,
-     "value": 4
-    },
-    "target": {
-     "index": 5,
-     "subindex": 2,
-     "startAngle": 5.643579617227173,
-     "endAngle": 5.794075073686565,
-     "value": 4
+     "startAngle": "401235bf4c627373",
+     "endAngle": "40131ce8851096cb",
+     "value": "4018000000000000"
     }
    },
    {
     "source": {
      "index": 4,
      "subindex": 3,
-     "startAngle": 4.778230742585673,
-     "endAngle": 5.0415977913896075,
-     "value": 7
+     "startAngle": "40131ce8851096cb",
+     "endAngle": "40142a989c866ab2",
+     "value": "401c000000000000"
     },
     "target": {
      "index": 3,
      "subindex": 4,
-     "startAngle": 3.7623864114847816,
-     "endAngle": 3.9505057320590207,
-     "value": 5
+     "startAngle": "400e195e0c01ef7c",
+     "endAngle": "400f9aa2bfced50f",
+     "value": "4014000000000000"
     }
    },
    {
     "source": {
      "index": 3,
      "subindex": 5,
-     "startAngle": 3.9505057320590207,
-     "endAngle": 4.176248916748108,
-     "value": 6
+     "startAngle": "400f9aa2bfced50f",
+     "endAngle": "4010b47a98958de0",
+     "value": "4018000000000000"
     },
     "target": {
      "index": 5,
      "subindex": 3,
-     "startAngle": 5.794075073686565,
-     "endAngle": 6.019818258375651,
-     "value": 6
+     "startAngle": "40172d22042035d9",
+     "endAngle": "4018144b3cce5931",
+     "value": "4018000000000000"
     }
    },
    {
     "source": {
      "index": 5,
      "subindex": 4,
-     "startAngle": 6.019818258375651,
-     "endAngle": 6.283185307179586,
-     "value": 7
+     "startAngle": "4018144b3cce5931",
+     "endAngle": "401921fb54442d18",
+     "value": "401c000000000000"
     },
     "target": {
      "index": 4,
      "subindex": 5,
-     "startAngle": 5.0415977913896075,
-     "endAngle": 5.229717111963847,
-     "value": 5
+     "startAngle": "40142a989c866ab2",
+     "endAngle": "4014eb3af66cdd7c",
+     "value": "4014000000000000"
+    }
+   },
+   {
+    "source": {
+     "index": 5,
+     "subindex": 0,
+     "startAngle": "4014eb3af66cdd7c",
+     "endAngle": "4015abdd50535046",
+     "value": "4014000000000000"
+    },
+    "target": {
+     "index": 0,
+     "subindex": 5,
+     "startAngle": "3fea7cb92949621c",
+     "endAngle": "3fef4d95023f73f2",
+     "value": "4010000000000000"
+    }
+   },
+   {
+    "source": {
+     "index": 0,
+     "subindex": 3,
+     "startAngle": "3fda7cb92949621c",
+     "endAngle": "3fe20f386d9ac2e4",
+     "value": "4010000000000000"
+    },
+    "target": {
+     "index": 3,
+     "subindex": 0,
+     "startAngle": "4008fb74757c7c88",
+     "endAngle": "400a2fab6bba00fe",
+     "value": "4010000000000000"
+    }
+   },
+   {
+    "source": {
+     "index": 1,
+     "subindex": 4,
+     "startAngle": "3ffa7cb92949621c",
+     "endAngle": "3ffce52715c46b07",
+     "value": "4010000000000000"
+    },
+    "target": {
+     "index": 4,
+     "subindex": 1,
+     "startAngle": "40119ba3d143b138",
+     "endAngle": "401235bf4c627373",
+     "value": "4010000000000000"
+    }
+   },
+   {
+    "source": {
+     "index": 2,
+     "subindex": 5,
+     "startAngle": "4007c73d7f3ef812",
+     "endAngle": "4008fb74757c7c88",
+     "value": "4010000000000000"
+    },
+    "target": {
+     "index": 5,
+     "subindex": 2,
+     "startAngle": "401693068901739e",
+     "endAngle": "40172d22042035d9",
+     "value": "4010000000000000"
     }
    }
   ]

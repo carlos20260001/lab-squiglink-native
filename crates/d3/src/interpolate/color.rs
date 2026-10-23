@@ -3,9 +3,11 @@
 //! Translated from `d3-interpolate/src/color.js` and the colour
 //! interpolators beside it, version 1.4.0, of d3 5.16.0.
 
+use crate::arith;
 use crate::color::{Color, Cubehelix, Hcl, Hsl, Lab, Rgb};
 use crate::ieee754;
 use crate::interpolate::{interpolate_number, interpolate_number_array};
+use crate::js;
 
 /// A function that draws between two numbers.
 pub type Draw = Box<dyn Fn(f64) -> f64 + 'static>;
@@ -18,30 +20,34 @@ pub type Gamma = fn(f64) -> Box<dyn Fn(f64, f64) -> Draw + 'static>;
 
 /// The JavaScript's `linear`, which draws between two numbers.
 fn linear(a: f64, d: f64) -> impl Fn(f64) -> f64 {
-    move |t| a + t * d
+    move |t| arith::add(a, arith::multiply(t, d))
 }
 
 /// The JavaScript's `exponential`, which draws between two numbers in
 /// the power of a third.
 fn exponential(a: f64, b: f64, y: f64) -> impl Fn(f64) -> f64 {
     let a = ieee754::pow(a, y);
-    let b = ieee754::pow(b, y) - a;
-    let y = 1.0 / y;
-    move |t| ieee754::pow(a + t * b, y)
+    let b = arith::subtract(ieee754::pow(b, y), a);
+    let y = arith::divide(1.0, y);
+    move |t| ieee754::pow(arith::add(a, arith::multiply(t, b)), y)
 }
 
 /// The JavaScript's `hue`, which draws between two hues the short way
 /// round.
 pub fn hue(a: f64, b: f64) -> Draw {
-    let d = b - a;
-    if d != 0.0 {
+    let d = arith::subtract(b, a);
+    if js::truthy(d) {
         let d = if d > 180.0 || d < -180.0 {
-            d - 360.0 * js_round(d / 360.0)
+            arith::subtract(
+                d,
+                arith::multiply(360.0, js::round(arith::divide(d, 360.0))),
+            )
         } else {
             d
         };
         Box::new(linear(a, d))
     } else {
+        // The JavaScript's `isNaN(a) ? b : a`.
         let value = if a.is_nan() { b } else { a };
         Box::new(move |_| value)
     }
@@ -49,8 +55,8 @@ pub fn hue(a: f64, b: f64) -> Draw {
 
 /// The JavaScript's `nogamma`, which draws between two numbers.
 pub fn nogamma(a: f64, b: f64) -> Draw {
-    let d = b - a;
-    if d != 0.0 {
+    let d = arith::subtract(b, a);
+    if js::truthy(d) {
         Box::new(linear(a, d))
     } else {
         let value = if a.is_nan() { b } else { a };
@@ -65,7 +71,7 @@ pub fn gamma(y: f64) -> Box<dyn Fn(f64, f64) -> Draw + 'static> {
         return Box::new(|a, b| nogamma(a, b));
     }
     Box::new(move |a, b| {
-        if b - a != 0.0 {
+        if js::truthy(arith::subtract(b, a)) {
             Box::new(exponential(a, b, y))
         } else {
             let value = if a.is_nan() { b } else { a };
@@ -282,12 +288,6 @@ pub fn interpolate_rgb_basis(colours: &[Color]) -> impl Fn(f64) -> String {
 /// colours along the JavaScript's own closed basis curve.
 pub fn interpolate_rgb_basis_closed(colours: &[Color]) -> impl Fn(f64) -> String {
     rgb_spline(crate::interpolate::curve::basis_closed, colours)
-}
-
-/// The JavaScript's own rounding of a number, which is the JavaScript's
-/// `Math.round`.
-fn js_round(value: f64) -> f64 {
-    crate::js::round(value)
 }
 
 /// The numbers of a list of colours, which the JavaScript's `rgbSpline`

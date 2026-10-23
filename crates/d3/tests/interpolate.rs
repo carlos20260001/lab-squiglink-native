@@ -106,6 +106,40 @@ fn point(index: usize, count: usize) -> f64 {
 }
 
 #[test]
+fn a_number_that_is_not_a_number_is_drawn_the_javascripts_way() {
+    let fixture = fixture();
+    let nan_table = table(&fixture, "numberNaN");
+    assert!(!nan_table.is_empty());
+    for (key, expected) in nan_table {
+        let (a, b) = key.split_once('/').expect("two numbers");
+        let a = js_number(a);
+        let b = js_number(b);
+        let got = interpolate_number(a, b)(0.5);
+        assert_eq!(got.to_bits(), bits(expected), "{}", key);
+    }
+    let hue_table = table(&fixture, "hueNaN");
+    assert!(!hue_table.is_empty());
+    for (key, expected) in hue_table {
+        let (a, b) = key.split_once('/').expect("two numbers");
+        let a = js_number(a);
+        let b = js_number(b);
+        let got = interpolate_hue(a, b)(0.5);
+        assert_eq!(got.to_bits(), bits(expected), "{}", key);
+    }
+}
+
+/// A number written the JavaScript's way, which is `NaN` or `Infinity`
+/// as well as a decimal.
+fn js_number(text: &str) -> f64 {
+    match text {
+        "NaN" => f64::NAN,
+        "Infinity" => f64::INFINITY,
+        "-Infinity" => f64::NEG_INFINITY,
+        other => other.parse::<f64>().expect("a number"),
+    }
+}
+
+#[test]
 fn the_lists_are_drawn_the_javascripts_way() {
     let fixture = fixture();
     let table = table(&fixture, "numberArray");

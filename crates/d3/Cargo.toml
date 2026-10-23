@@ -3,6 +3,7 @@ name = "d3"
 version = "0.1.0"
 edition = "2021"
 description = "A faithful port of d3, the JavaScript data visualisation library, to Rust"
+authors = ["Mike Bostock", "Carlos"]
 license = "BSD-3-Clause"
 repository = "https://github.com/squiglink/lab-squiglink-native"
 keywords = ["d3", "visualization", "chart", "graph", "svg"]

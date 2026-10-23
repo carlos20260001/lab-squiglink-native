@@ -92,30 +92,30 @@ pub mod number;
 pub mod chord;
 // pub mod collection;  // not yet written.
 // pub mod color;  // not yet written.
-// pub mod contour;  // not yet written.
+pub mod contour;
 // pub mod dispatch;  // not yet written.
-// pub mod dom;  // not yet written.
-// pub mod drag;  // not yet written.
+pub mod dom;
+pub mod drag;
 // pub mod dsv;  // not yet written.
 // pub mod ease;  // not yet written.
 // pub mod fetch;  // not yet written.
-// pub mod force;  // not yet written.
+pub mod force;
 // pub mod format;  // not yet written.
-// pub mod geo;  // not yet written.
-// pub mod hierarchy;  // not yet written.
+pub mod geo;
+pub mod hierarchy;
 // pub mod interpolate;  // not yet written.
 pub mod path;
 pub mod polygon;
-// pub mod quadtree;  // not yet written.
+pub mod quadtree;
 pub mod random;
-// pub mod scale;  // not yet written.
-// pub mod scale_chromatic;  // not yet written.
-// pub mod selection;  // not yet written.
+pub mod scale;
+pub mod scale_chromatic;
+pub mod selection;
 pub mod shape;
 pub mod time;
 // pub mod time;  // not yet written.
 pub mod time_format;
 pub mod timer;
-// pub mod transition;  // not yet written.
-// pub mod voronoi;  // not yet written.
+pub mod transition;
+pub mod voronoi;
 // pub mod zoom;  // not yet written.

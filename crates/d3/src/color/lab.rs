@@ -2,6 +2,7 @@
 //!
 //! Translated from `d3-color/src/lab.js`, version 1.4.1, of d3 5.16.0.
 
+use crate::arith;
 use crate::color::{Color, Hcl, Lab, Rgb};
 use crate::ieee754;
 
@@ -26,7 +27,7 @@ impl Lab {
     /// The colour a little brighter.
     pub fn brighter(&self, k: Option<f64>) -> Lab {
         Lab {
-            l: self.l + K * k.unwrap_or(1.0),
+            l: arith::add(self.l, arith::multiply(K, k.unwrap_or(1.0))),
             a: self.a,
             b: self.b,
             opacity: self.opacity,
@@ -36,7 +37,7 @@ impl Lab {
     /// The colour a little darker.
     pub fn darker(&self, k: Option<f64>) -> Lab {
         Lab {
-            l: self.l - K * k.unwrap_or(1.0),
+            l: arith::subtract(self.l, arith::multiply(K, k.unwrap_or(1.0))),
             a: self.a,
             b: self.b,
             opacity: self.opacity,
@@ -45,24 +46,36 @@ impl Lab {
 
     /// The colour as an `Rgb`.
     pub fn rgb(&self) -> Rgb {
-        let y = (self.l + 16.0) / 116.0;
+        let y = arith::divide(arith::add(self.l, 16.0), 116.0);
         let x = if self.a.is_nan() {
             y
         } else {
-            y + self.a / 500.0
+            arith::add(y, arith::divide(self.a, 500.0))
         };
         let z = if self.b.is_nan() {
             y
         } else {
-            y - self.b / 200.0
+            arith::subtract(y, arith::divide(self.b, 200.0))
         };
-        let x = XN * lab2xyz(x);
-        let y = YN * lab2xyz(y);
-        let z = ZN * lab2xyz(z);
+        let x = arith::multiply(XN, lab2xyz(x));
+        let y = arith::multiply(YN, lab2xyz(y));
+        let z = arith::multiply(ZN, lab2xyz(z));
         Rgb {
-            r: lrgb2rgb(3.1338561 * x - 1.6168667 * y - 0.4906146 * z),
-            g: lrgb2rgb(-0.9787684 * x + 1.9161415 * y + 0.0334540 * z),
-            b: lrgb2rgb(0.0719453 * x - 0.2289914 * y + 1.4052427 * z),
+            r: lrgb2rgb(arith::subtract(
+                arith::subtract(arith::multiply(3.1338561, x), arith::multiply(1.6168667, y)),
+                arith::multiply(0.4906146, z),
+            )),
+            g: lrgb2rgb(arith::add(
+                arith::add(
+                    arith::multiply(-0.9787684, x),
+                    arith::multiply(1.9161415, y),
+                ),
+                arith::multiply(0.0334540, z),
+            )),
+            b: lrgb2rgb(arith::add(
+                arith::subtract(arith::multiply(0.0719453, x), arith::multiply(0.2289914, y)),
+                arith::multiply(1.4052427, z),
+            )),
             opacity: self.opacity,
         }
     }
@@ -74,7 +87,7 @@ impl Hcl {
         Hcl {
             h: self.h,
             c: self.c,
-            l: self.l + K * k.unwrap_or(1.0),
+            l: arith::add(self.l, arith::multiply(K, k.unwrap_or(1.0))),
             opacity: self.opacity,
         }
     }
@@ -84,7 +97,7 @@ impl Hcl {
         Hcl {
             h: self.h,
             c: self.c,
-            l: self.l - K * k.unwrap_or(1.0),
+            l: arith::subtract(self.l, arith::multiply(K, k.unwrap_or(1.0))),
             opacity: self.opacity,
         }
     }
@@ -118,19 +131,37 @@ pub fn lab_convert(color: Color) -> Lab {
     let r = rgb2lrgb(o.r);
     let g = rgb2lrgb(o.g);
     let b = rgb2lrgb(o.b);
-    let y = xyz2lab((0.2225045 * r + 0.7168786 * g + 0.0606169 * b) / YN);
+    let y = xyz2lab(arith::divide(
+        arith::add(
+            arith::add(arith::multiply(0.2225045, r), arith::multiply(0.7168786, g)),
+            arith::multiply(0.0606169, b),
+        ),
+        YN,
+    ));
     let (x, z) = if r == g && g == b {
         (y, y)
     } else {
         (
-            xyz2lab((0.4360747 * r + 0.3850649 * g + 0.1430804 * b) / XN),
-            xyz2lab((0.0139322 * r + 0.0971045 * g + 0.7141733 * b) / ZN),
+            xyz2lab(arith::divide(
+                arith::add(
+                    arith::add(arith::multiply(0.4360747, r), arith::multiply(0.3850649, g)),
+                    arith::multiply(0.1430804, b),
+                ),
+                XN,
+            )),
+            xyz2lab(arith::divide(
+                arith::add(
+                    arith::add(arith::multiply(0.0139322, r), arith::multiply(0.0971045, g)),
+                    arith::multiply(0.7141733, b),
+                ),
+                ZN,
+            )),
         )
     };
     Lab {
-        l: 116.0 * y - 16.0,
-        a: 500.0 * (x - y),
-        b: 200.0 * (y - z),
+        l: arith::subtract(arith::multiply(116.0, y), 16.0),
+        a: arith::multiply(500.0, arith::subtract(x, y)),
+        b: arith::multiply(200.0, arith::subtract(y, z)),
         opacity: o.opacity,
     }
 }
@@ -185,10 +216,13 @@ pub fn hcl_convert(color: Color) -> Hcl {
             opacity: o.opacity,
         };
     }
-    let h = ieee754::atan2(o.b, o.a) * 180.0 / std::f64::consts::PI;
+    let h = arith::divide(
+        arith::multiply(ieee754::atan2(o.b, o.a), 180.0),
+        std::f64::consts::PI,
+    );
     Hcl {
-        h: if h < 0.0 { h + 360.0 } else { h },
-        c: (o.a * o.a + o.b * o.b).sqrt(),
+        h: if h < 0.0 { arith::add(h, 360.0) } else { h },
+        c: arith::add(arith::multiply(o.a, o.a), arith::multiply(o.b, o.b)).sqrt(),
         l: o.l,
         opacity: o.opacity,
     }
@@ -204,11 +238,11 @@ fn hcl2lab(o: Hcl) -> Lab {
             opacity: o.opacity,
         };
     }
-    let h = o.h * std::f64::consts::PI / 180.0;
+    let h = arith::divide(arith::multiply(o.h, std::f64::consts::PI), 180.0);
     Lab {
         l: o.l,
-        a: ieee754::cos(h) * o.c,
-        b: ieee754::sin(h) * o.c,
+        a: arith::multiply(ieee754::cos(h), o.c),
+        b: arith::multiply(ieee754::sin(h), o.c),
         opacity: o.opacity,
     }
 }
@@ -216,36 +250,42 @@ fn hcl2lab(o: Hcl) -> Lab {
 /// The JavaScript's `xyz2lab`.
 fn xyz2lab(t: f64) -> f64 {
     if t > T3 {
-        ieee754::pow(t, 1.0 / 3.0)
+        ieee754::pow(t, arith::divide(1.0, 3.0))
     } else {
-        t / T2 + T0
+        arith::add(arith::divide(t, T2), T0)
     }
 }
 
 /// The JavaScript's `lab2xyz`.
 fn lab2xyz(t: f64) -> f64 {
     if t > T1 {
-        t * t * t
+        arith::multiply(arith::multiply(t, t), t)
     } else {
-        T2 * (t - T0)
+        arith::multiply(T2, arith::subtract(t, T0))
     }
 }
 
 /// The JavaScript's `lrgb2rgb`.
 fn lrgb2rgb(x: f64) -> f64 {
     if x <= 0.0031308 {
-        255.0 * (12.92 * x)
+        arith::multiply(255.0, arith::multiply(12.92, x))
     } else {
-        255.0 * (1.055 * ieee754::pow(x, 1.0 / 2.4) - 0.055)
+        arith::multiply(
+            255.0,
+            arith::subtract(
+                arith::multiply(1.055, ieee754::pow(x, arith::divide(1.0, 2.4))),
+                0.055,
+            ),
+        )
     }
 }
 
 /// The JavaScript's `rgb2lrgb`.
 fn rgb2lrgb(x: f64) -> f64 {
-    let x = x / 255.0;
+    let x = arith::divide(x, 255.0);
     if x <= 0.04045 {
-        x / 12.92
+        arith::divide(x, 12.92)
     } else {
-        ieee754::pow((x + 0.055) / 1.055, 2.4)
+        ieee754::pow(arith::divide(arith::add(x, 0.055), 1.055), 2.4)
     }
 }

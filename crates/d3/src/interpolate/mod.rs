@@ -184,7 +184,10 @@ pub fn interpolate_number_array(a: &[f64], b: &[f64]) -> impl Fn(f64) -> Vec<f64
     move |t| {
         let mut c = b.clone();
         for i in 0..n {
-            c[i] = a[i] * (1.0 - t) + b[i] * t;
+            c[i] = arith::add(
+                arith::multiply(a[i], arith::subtract(1.0, t)),
+                arith::multiply(b[i], t),
+            );
         }
         c
     }
@@ -265,9 +268,9 @@ pub fn piecewise(interpolate: fn(f64, f64) -> Draw, values: &[f64]) -> impl Fn(f
     move |t| {
         // The JavaScript multiplies the number by the number of the
         // intervals, and gives what is left of it to the interval.
-        let scaled = t * n as f64;
+        let scaled = arith::multiply(t, n as f64);
         let index = (scaled.floor() as i64).clamp(0, n as i64 - 1) as usize;
-        i[index](scaled - index as f64)
+        i[index](arith::subtract(scaled, index as f64))
     }
 }
 
@@ -285,7 +288,7 @@ pub fn interpolate_hue(a: f64, b: f64) -> impl Fn(f64) -> f64 {
     let inner = color::hue(a, b);
     move |t| {
         let x = inner(t);
-        x - 360.0 * (x / 360.0).floor()
+        arith::subtract(x, arith::multiply(360.0, arith::divide(x, 360.0).floor()))
     }
 }
 

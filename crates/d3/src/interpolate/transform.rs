@@ -65,7 +65,7 @@ pub fn decompose(a: f64, b: f64, c: f64, d: f64, e: f64, f: f64) -> Transform {
     let mut b = b;
     let mut c = c;
     let mut d = d;
-    let mut scale_x = (a * a + b * b).sqrt();
+    let mut scale_x = ieee754::sqrt(a * a + b * b);
     if scale_x != 0.0 {
         a /= scale_x;
         b /= scale_x;
@@ -73,7 +73,7 @@ pub fn decompose(a: f64, b: f64, c: f64, d: f64, e: f64, f: f64) -> Transform {
     let mut skew_x = a * c + b * d;
     c -= a * skew_x;
     d -= b * skew_x;
-    let scale_y = (c * c + d * d).sqrt();
+    let scale_y = ieee754::sqrt(c * c + d * d);
     if scale_y != 0.0 {
         c /= scale_y;
         d /= scale_y;

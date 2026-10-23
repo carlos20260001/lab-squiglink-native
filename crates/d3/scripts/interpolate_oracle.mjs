@@ -47,6 +47,20 @@ for (const a of [0, 1, -1, 2.5, 100]) {
   }
 }
 
+// The numbers with a number that is not a number in them.
+out.numberNaN = {};
+for (const [a, b] of [[NaN, NaN], [NaN, 1], [1, NaN], [NaN, Infinity], [Infinity, NaN]]) {
+  const i = d3interpolate.interpolateNumber(a, b);
+  out.numberNaN[`${a}/${b}`] = bits(i(0.5));
+}
+
+// The hue with a number that is not a number in it.
+out.hueNaN = {};
+for (const [a, b] of [[NaN, 120], [120, NaN], [NaN, NaN]]) {
+  const i = d3interpolate.interpolateHue(a, b);
+  out.hueNaN[`${a}/${b}`] = bits(i(0.5));
+}
+
 // The numbers, rounded.
 out.round = {};
 for (const a of [0, 1, -1, 2.5, 100]) {

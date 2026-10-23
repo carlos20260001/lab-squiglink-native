@@ -18,6 +18,10 @@ toml = "0.8"
 
 [dependencies]
 anyhow = "1.0"
+# The graph in the web reference is built with d3 v5.16.0.  Keep the
+# coordinate scales and curve geometry on the same implementation rather than
+# maintaining lookalike formulae here.
+d3 = { path = "../d3" }
 # The maths egui draws with, without the interface: the same types egui
 # re-exports, so a rule of the program can place a curve without a window.
 emath = "0.36"

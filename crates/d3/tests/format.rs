@@ -142,21 +142,24 @@ fn the_counts_of_the_digits_are_the_javascripts_way() {
     let prefix = expected["prefix"].as_array().expect("a list of numbers");
     let round = expected["round"].as_array().expect("a list of numbers");
     for (index, value) in values.iter().enumerate() {
-        assert_eq!(
-            d3::format::precision_fixed(step),
-            fixed[index].as_i64().expect("a number") as i32,
+        let expected_fixed = fixed[index].as_f64().unwrap_or(f64::NAN);
+        let expected_prefix = prefix[index].as_f64().unwrap_or(f64::NAN);
+        let expected_round = round[index].as_f64().unwrap_or(f64::NAN);
+        let got_fixed = d3::format::precision_fixed(step);
+        let got_prefix = d3::format::precision_prefix(step, *value);
+        let got_round = d3::format::precision_round(step, *value);
+        assert!(
+            (got_fixed.is_nan() && expected_fixed.is_nan()) || got_fixed == expected_fixed,
             "the fixed count for {}",
             value
         );
-        assert_eq!(
-            d3::format::precision_prefix(step, *value),
-            prefix[index].as_i64().expect("a number") as i32,
+        assert!(
+            (got_prefix.is_nan() && expected_prefix.is_nan()) || got_prefix == expected_prefix,
             "the prefix count for {}",
             value
         );
-        assert_eq!(
-            d3::format::precision_round(step, *value),
-            round[index].as_i64().expect("a number") as i32,
+        assert!(
+            (got_round.is_nan() && expected_round.is_nan()) || got_round == expected_round,
             "the round count for {}",
             value
         );

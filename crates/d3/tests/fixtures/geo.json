@@ -1,0 +1,37 @@
+{
+ "distance": "3f994640c400ae39",
+ "length": "3fc657184ae74487",
+ "area": "4029126d144193d2",
+ "centroid": [
+  "c065dfffffffffff",
+  "c014061a0520a30f"
+ ],
+ "bounds": [
+  [
+   "c066800000000000",
+   "c056800000000000"
+  ],
+  [
+   "4066800000000000",
+   "4056800000000000"
+  ]
+ ],
+ "contains": false,
+ "circleType": "Polygon",
+ "circleCoordsLen": 61,
+ "graticuleType": "MultiLineString",
+ "interpolate": [
+  "4013d8b5db35ff9e",
+  "40141374eb3fa8c1"
+ ],
+ "rotation": [
+  "bff1db5c26248625",
+  "40363dff91717eb0"
+ ],
+ "transformDefined": true,
+ "identityScale": "3ff0000000000000",
+ "identityTranslate": [
+  "0000000000000000",
+  "0000000000000000"
+ ]
+}

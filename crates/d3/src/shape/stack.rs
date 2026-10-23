@@ -4,6 +4,9 @@
 //! `d3-shape/src/order/*.js`, version 1.3.7, of d3 5.16.0. The JavaScript
 //! is the authority.
 
+use crate::arith;
+use crate::js;
+
 /// A band of a stack: the space one key takes in one place.
 #[derive(Clone, Debug, PartialEq)]
 pub struct SeriesPoint<T> {
@@ -184,7 +187,7 @@ pub fn stack_offset_none<T>(series: &mut [Series<T>], order: &[usize]) {
                 previous
             };
             series[s1].points[j].y0 = base;
-            series[s1].points[j].y1 += base;
+            series[s1].points[j].y1 = arith::add(series[s1].points[j].y1, base);
         }
         s0 = s1;
     }
@@ -201,14 +204,14 @@ pub fn stack_offset_diverging<T>(series: &mut [Series<T>], order: &[usize]) {
         let mut yp = 0.0;
         let mut yn = 0.0;
         for &index in order.iter() {
-            let dy = series[index].points[j].y1 - series[index].points[j].y0;
+            let dy = arith::subtract(series[index].points[j].y1, series[index].points[j].y0);
             if dy > 0.0 {
                 series[index].points[j].y0 = yp;
-                yp += dy;
+                yp = arith::add(yp, dy);
                 series[index].points[j].y1 = yp;
             } else if dy < 0.0 {
                 series[index].points[j].y1 = yn;
-                yn += dy;
+                yn = arith::add(yn, dy);
                 series[index].points[j].y0 = yn;
             } else {
                 series[index].points[j].y0 = 0.0;
@@ -229,15 +232,11 @@ pub fn stack_offset_expand<T>(series: &mut [Series<T>], order: &[usize]) {
         let mut y = 0.0;
         for i in 0..n {
             let value = series[i].points[j].y1;
-            y += if value == 0.0 || value.is_nan() {
-                0.0
-            } else {
-                value
-            };
+            y = arith::add(y, if js::truthy(value) { value } else { 0.0 });
         }
-        if y != 0.0 {
+        if js::truthy(y) {
             for i in 0..n {
-                series[i].points[j].y1 /= y;
+                series[i].points[j].y1 = arith::divide(series[i].points[j].y1, y);
             }
         }
     }
@@ -256,14 +255,10 @@ pub fn stack_offset_silhouette<T>(series: &mut [Series<T>], order: &[usize]) {
         let mut y = 0.0;
         for i in 0..n {
             let value = series[i].points[j].y1;
-            y += if value == 0.0 || value.is_nan() {
-                0.0
-            } else {
-                value
-            };
+            y = arith::add(y, if js::truthy(value) { value } else { 0.0 });
         }
-        series[s0].points[j].y0 = -y / 2.0;
-        series[s0].points[j].y1 += series[s0].points[j].y0;
+        series[s0].points[j].y0 = arith::divide(-y, 2.0);
+        series[s0].points[j].y1 = arith::add(series[s0].points[j].y1, series[s0].points[j].y0);
     }
     stack_offset_none(series, order);
 }
@@ -286,44 +281,28 @@ pub fn stack_offset_wiggle<T>(series: &mut [Series<T>], order: &[usize]) {
         for (i, &index) in order.iter().enumerate() {
             let raw0 = series[index].points[j].y1;
             let raw1 = series[index].points[j - 1].y1;
-            let sij0 = if raw0 == 0.0 || raw0.is_nan() {
-                0.0
-            } else {
-                raw0
-            };
-            let sij1 = if raw1 == 0.0 || raw1.is_nan() {
-                0.0
-            } else {
-                raw1
-            };
-            let mut s3 = (sij0 - sij1) / 2.0;
+            let sij0 = if js::truthy(raw0) { raw0 } else { 0.0 };
+            let sij1 = if js::truthy(raw1) { raw1 } else { 0.0 };
+            let mut s3 = arith::divide(arith::subtract(sij0, sij1), 2.0);
             for k in 0..i {
                 let sk = order[k];
                 let raw0 = series[sk].points[j].y1;
                 let raw1 = series[sk].points[j - 1].y1;
-                let skj0 = if raw0 == 0.0 || raw0.is_nan() {
-                    0.0
-                } else {
-                    raw0
-                };
-                let skj1 = if raw1 == 0.0 || raw1.is_nan() {
-                    0.0
-                } else {
-                    raw1
-                };
-                s3 += skj0 - skj1;
+                let skj0 = if js::truthy(raw0) { raw0 } else { 0.0 };
+                let skj1 = if js::truthy(raw1) { raw1 } else { 0.0 };
+                s3 = arith::add(s3, arith::subtract(skj0, skj1));
             }
-            s1 += sij0;
-            s2 += s3 * sij0;
+            s1 = arith::add(s1, sij0);
+            s2 = arith::add(s2, arith::multiply(s3, sij0));
         }
         series[s0].points[j - 1].y0 = y;
-        series[s0].points[j - 1].y1 += y;
-        if s1 != 0.0 {
-            y -= s2 / s1;
+        series[s0].points[j - 1].y1 = arith::add(series[s0].points[j - 1].y1, y);
+        if js::truthy(s1) {
+            y = arith::subtract(y, arith::divide(s2, s1));
         }
     }
     series[s0].points[m - 1].y0 = y;
-    series[s0].points[m - 1].y1 += y;
+    series[s0].points[m - 1].y1 = arith::add(series[s0].points[m - 1].y1, y);
     stack_offset_none(series, order);
 }
 
@@ -346,9 +325,14 @@ pub fn stack_order_ascending<T>(series: &[Series<T>]) -> Vec<usize> {
     let sums: Vec<f64> = series.iter().map(stack_sum).collect();
     let mut order = stack_order_none(series);
     order.sort_by(|&a, &b| {
-        sums[a]
-            .partial_cmp(&sums[b])
-            .unwrap_or(std::cmp::Ordering::Equal)
+        let difference = arith::subtract(sums[a], sums[b]);
+        if difference.is_nan() || difference == 0.0 {
+            std::cmp::Ordering::Equal
+        } else if difference < 0.0 {
+            std::cmp::Ordering::Less
+        } else {
+            std::cmp::Ordering::Greater
+        }
     });
     order
 }
@@ -358,8 +342,8 @@ fn stack_sum<T>(series: &Series<T>) -> f64 {
     let mut s = 0.0;
     for point in &series.points {
         let v = point.y1;
-        if v != 0.0 && !v.is_nan() {
-            s += v;
+        if js::truthy(v) {
+            s = arith::add(s, v);
         }
     }
     s
@@ -407,10 +391,10 @@ pub fn stack_order_inside_out<T>(series: &[Series<T>]) -> Vec<usize> {
     for i in 0..n {
         let j = order[i];
         if top < bottom {
-            top += sums[j];
+            top = arith::add(top, sums[j]);
             tops.push(j);
         } else {
-            bottom += sums[j];
+            bottom = arith::add(bottom, sums[j]);
             bottoms.push(j);
         }
     }
