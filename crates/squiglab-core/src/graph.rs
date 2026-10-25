@@ -300,11 +300,24 @@ pub fn natural_control_points(values: &[f32]) -> (Vec<f32>, Vec<f32>) {
     )
 }
 pub fn cubic_bezier(start: Pos2, control1: Pos2, control2: Pos2, end: Pos2, t: f32) -> Pos2 {
+    // The reference evaluates the cubic in the browser's own numbers (IEEE 754
+    // binary64 through V8). Run the same arithmetic here, via the port's own
+    // ieee754, so the sampled curve agrees with the reference to the last bit.
+    let t = f64::from(t);
     let inverse = 1.0 - t;
-    start * inverse.powi(3)
-        + control1.to_vec2() * (3.0 * inverse.powi(2) * t)
-        + control2.to_vec2() * (3.0 * inverse * t.powi(2))
-        + end.to_vec2() * t.powi(3)
+    let inv2 = d3::ieee754::pow(inverse, 2.0);
+    let inv3 = d3::ieee754::pow(inverse, 3.0);
+    let t2 = d3::ieee754::pow(t, 2.0);
+    let t3 = d3::ieee754::pow(t, 3.0);
+    let x = f64::from(start.x) * inv3
+        + f64::from(control1.x) * (3.0 * inv2 * t)
+        + f64::from(control2.x) * (3.0 * inverse * t2)
+        + f64::from(end.x) * t3;
+    let y = f64::from(start.y) * inv3
+        + f64::from(control1.y) * (3.0 * inv2 * t)
+        + f64::from(control2.y) * (3.0 * inverse * t2)
+        + f64::from(end.y) * t3;
+    Pos2::new(x as f32, y as f32)
 }
 
 pub fn nice_limit(peak: f32) -> f32 {
@@ -432,13 +445,25 @@ pub fn sample_curve_path(points: &[Pos2], smooth: bool) -> Vec<Pos2> {
 }
 
 pub fn point_segment_distance(point: Pos2, start: Pos2, end: Pos2) -> f32 {
-    let segment = end - start;
-    let length_squared = segment.length_sq();
+    // Route the square root through the port's ieee754 so the hit-testing
+    // distance agrees with the reference's own arithmetic.
+    let sx = f64::from(end.x - start.x);
+    let sy = f64::from(end.y - start.y);
+    let length_squared = sx * sx + sy * sy;
     if length_squared == 0.0 {
-        return point.distance(start);
+        let dx = f64::from(point.x - start.x);
+        let dy = f64::from(point.y - start.y);
+        return d3::ieee754::sqrt(dx * dx + dy * dy) as f32;
     }
-    let projection = ((point - start).dot(segment) / length_squared).clamp(0.0, 1.0);
-    point.distance(start + segment * projection)
+    let px = f64::from(point.x - start.x);
+    let py = f64::from(point.y - start.y);
+    let projection = (px * sx + py * sy) / length_squared;
+    let projection = projection.clamp(0.0, 1.0);
+    let rx = f64::from(start.x) + sx * projection;
+    let ry = f64::from(start.y) + sy * projection;
+    let dx = f64::from(point.x) - rx;
+    let dy = f64::from(point.y) - ry;
+    d3::ieee754::sqrt(dx * dx + dy * dy) as f32
 }
 
 pub fn nearest_curve_index(curves: &[Vec<Pos2>], position: Pos2, threshold: f32) -> Option<usize> {
