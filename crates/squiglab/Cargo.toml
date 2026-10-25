@@ -25,6 +25,7 @@ path = "tools/app_bundle.rs"
 
 [dependencies]
 squiglab-core = { path = "../squiglab-core" }
+d3 = { path = "../d3" }
 eframe = "0.36"
 egui = "0.36"
 egui_extras = { version = "0.36", features = ["image", "svg"] }

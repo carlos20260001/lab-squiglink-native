@@ -16,11 +16,22 @@ use squiglab_core::graph::{
 use crate::app::App;
 use crate::theme::{self, metrics, TypeStep};
 
-/// The frequencies the axis is marked at.
-const X_TICKS: [f32; 22] = [
-    20.0, 30.0, 40.0, 50.0, 60.0, 80.0, 100.0, 200.0, 300.0, 400.0, 500.0, 600.0, 800.0, 1000.0,
-    2000.0, 3000.0, 4000.0, 5000.0, 6000.0, 8000.0, 10000.0, 20000.0,
-];
+
+/// The frequencies the axis is marked at, taken from the reference's own
+/// `d3.merge([1,2,3].map(e => xvals.map(m => m * Math.pow(10, e)))).concat([20000])`
+/// with `xvals = [2,3,4,5,6,8,10,15]`, so the native's grid agrees with the
+/// reference's down to the last tick.
+fn x_tick_frequencies() -> Vec<f32> {
+    let xvals = [2.0_f64, 3.0, 4.0, 5.0, 6.0, 8.0, 10.0, 15.0];
+    let mut lists: Vec<Vec<f64>> = Vec::new();
+    for e in [1_i32, 2, 3] {
+        let e = e as f64;
+        lists.push(xvals.iter().map(|m| m * d3::ieee754::pow(10.0, e)).collect());
+    }
+    let mut ticks = d3::array::merge(&lists);
+    ticks.push(20000.0);
+    ticks.into_iter().map(|v| v as f32).collect()
+}
 
 /// The graph, in the middle of the window.
 pub fn show(ui: &mut egui::Ui, app: &mut App) {
@@ -729,7 +740,7 @@ fn grid(painter: &egui::Painter, plot: Rect, transform: &Transform, minimum: &f3
     );
 
     // The vertical lines: the marked frequencies.
-    for frequency in X_TICKS {
+    for frequency in x_tick_frequencies() {
         if frequency < transform.x_range.0 || frequency > transform.x_range.1 {
             continue;
         }
@@ -1091,7 +1102,7 @@ pub fn export_svg(app: &App, width: f32, height: f32) -> String {
         }
         db += 5.0;
     }
-    for frequency in X_TICKS {
+    for frequency in x_tick_frequencies() {
         if frequency < transform.x_range.0 || frequency > transform.x_range.1 {
             continue;
         }
