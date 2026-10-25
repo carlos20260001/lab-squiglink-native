@@ -244,7 +244,10 @@ impl<N: Dom> Selection<N> {
 
     /// Create a selection wrapping an array of DOM nodes.
     pub fn from_nodes(nodes: Vec<N>) -> Self {
-        let group = nodes.into_iter().map(|n| Some(SelectedNode::Node(n))).collect();
+        let group = nodes
+            .into_iter()
+            .map(|n| Some(SelectedNode::Node(n)))
+            .collect();
         Selection::new(vec![group], vec![None])
     }
 
@@ -441,10 +444,10 @@ impl<N: Dom> Selection<N> {
                     let d = node.get_data::<D>();
                     let k = key(&Some(node.clone()), d.as_ref(), i);
                     key_values.push(k.clone());
-                    if node_by_key.contains_key(&k) {
-                        exit_group.push(Some(node.clone()));
+                    if let std::collections::hash_map::Entry::Vacant(e) = node_by_key.entry(k) {
+                        e.insert(node.clone());
                     } else {
-                        node_by_key.insert(k, node.clone());
+                        exit_group.push(Some(node.clone()));
                     }
                 } else {
                     key_values.push(String::new());
@@ -513,11 +516,7 @@ impl<N: Dom> Selection<N> {
                         .collect()
                 })
                 .collect(),
-            None => self
-                ._groups
-                .iter()
-                .map(|g| vec![None; g.len()])
-                .collect(),
+            None => self._groups.iter().map(|g| vec![None; g.len()]).collect(),
         };
         Selection::new(enter_groups, self._parents.clone())
     }
@@ -533,11 +532,7 @@ impl<N: Dom> Selection<N> {
                         .collect()
                 })
                 .collect(),
-            None => self
-                ._groups
-                .iter()
-                .map(|g| vec![None; g.len()])
-                .collect(),
+            None => self._groups.iter().map(|g| vec![None; g.len()]).collect(),
         };
         Selection::new(exit_groups, self._parents.clone())
     }
@@ -563,7 +558,11 @@ impl<N: Dom> Selection<N> {
             let n = g0.len();
             let mut merge_group = Vec::with_capacity(n);
             for i in 0..n {
-                let node = g0.get(i).cloned().flatten().or_else(|| g1.get(i).cloned().flatten());
+                let node = g0
+                    .get(i)
+                    .cloned()
+                    .flatten()
+                    .or_else(|| g1.get(i).cloned().flatten());
                 merge_group.push(node);
             }
             merges.push(merge_group);
@@ -576,7 +575,7 @@ impl<N: Dom> Selection<N> {
     }
 
     /// The JavaScript's `selection.order()`.
-    pub fn order(mut self) -> Self {
+    pub fn order(self) -> Self {
         for group in &self._groups {
             if group.is_empty() {
                 continue;
@@ -703,7 +702,7 @@ impl<N: Dom> Selection<N> {
     }
 
     /// Set an attribute using a typed datum accessor `fn(&D, usize) -> value`.
-    pub fn attr_data<D: Clone + 'static, R, F>(mut self, name: &str, mut f: F) -> Self
+    pub fn attr_data<D: Clone + 'static, R, F>(self, name: &str, mut f: F) -> Self
     where
         F: FnMut(&D, usize) -> R,
         R: IntoOptionString,
@@ -826,7 +825,9 @@ impl<N: Dom> Selection<N> {
 
     /// The JavaScript's `selection.style(name)` getter.
     pub fn get_style(&self, name: &str) -> String {
-        self.node().map(|n| n.get_style_property(name)).unwrap_or_default()
+        self.node()
+            .map(|n| n.get_style_property(name))
+            .unwrap_or_default()
     }
 
     /// The JavaScript's `selection.property(name, value)`, consuming form.
@@ -888,8 +889,12 @@ impl<N: Dom> Selection<N> {
 
     /// The JavaScript's `selection.classed(names)` getter.
     pub fn get_classed(&self, names: &str) -> bool {
-        let Some(node) = self.node() else { return false };
-        names.split_whitespace().all(|cls| node.class_list_contains(cls))
+        let Some(node) = self.node() else {
+            return false;
+        };
+        names
+            .split_whitespace()
+            .all(|cls| node.class_list_contains(cls))
     }
 
     /// The JavaScript's `selection.text(value)`, consuming form.
@@ -1476,7 +1481,10 @@ impl<T: Clone + 'static> Local<T> {
     pub fn get<N: Dom>(&self, node: &N) -> Option<T> {
         let mut curr = Some(node.clone());
         while let Some(n) = curr {
-            if let Some(val) = n.get_any(&self.id).and_then(|a| a.downcast_ref::<T>().cloned()) {
+            if let Some(val) = n
+                .get_any(&self.id)
+                .and_then(|a| a.downcast_ref::<T>().cloned())
+            {
                 return Some(val);
             }
             curr = n.parent_node();
@@ -1522,7 +1530,10 @@ pub fn select_all(selector: &str) -> Selection<SimpleNode> {
     let doc = create_document();
     let root = doc.document_element().unwrap_or_else(|| doc.clone());
     let matches = root.query_selector_all(selector);
-    let group = matches.into_iter().map(|n| Some(SelectedNode::Node(n))).collect();
+    let group = matches
+        .into_iter()
+        .map(|n| Some(SelectedNode::Node(n)))
+        .collect();
     Selection::new(vec![group], vec![Some(root)])
 }
 
@@ -1590,7 +1601,10 @@ pub fn touch<N: Dom>(node: &N, identifier: i32) -> Option<[f64; 2]> {
 /// The JavaScript's `d3.touches(node)`.
 pub fn touches<N: Dom>(node: &N) -> Vec<[f64; 2]> {
     let ev = source_event().unwrap_or_default();
-    ev.touches.iter().map(|t| client_point(node, t.client_x, t.client_y)).collect()
+    ev.touches
+        .iter()
+        .map(|t| client_point(node, t.client_x, t.client_y))
+        .collect()
 }
 
 /// The JavaScript's `style(node, name)`.

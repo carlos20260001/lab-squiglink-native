@@ -310,7 +310,8 @@ pub trait Dom: Clone + 'static {
 
     /// The JavaScript's `node.__data__`, read.
     fn get_data<D: Clone + 'static>(&self) -> Option<D> {
-        self.get_any("__data__").and_then(|a| a.downcast_ref::<D>().cloned())
+        self.get_any("__data__")
+            .and_then(|a| a.downcast_ref::<D>().cloned())
     }
 
     /// The JavaScript's `node.__data__ = data`, written.
@@ -725,7 +726,12 @@ fn collect_descendants(node: &Node, selector: &str, results: &mut Vec<Node>) {
 
 impl Dom for Node {
     fn parent_node(&self) -> Option<Self> {
-        self.0.borrow().parent.as_ref().and_then(|w| w.upgrade()).map(Node)
+        self.0
+            .borrow()
+            .parent
+            .as_ref()
+            .and_then(|w| w.upgrade())
+            .map(Node)
     }
 
     fn first_child(&self) -> Option<Self> {
@@ -872,7 +878,10 @@ impl Dom for Node {
     fn document_element(&self) -> Option<Self> {
         let b = self.0.borrow();
         if b.node_type == 9 {
-            b.children.iter().find(|c| c.0.borrow().node_type == 1).cloned()
+            b.children
+                .iter()
+                .find(|c| c.0.borrow().node_type == 1)
+                .cloned()
         } else {
             self.owner_document().and_then(|d| d.document_element())
         }
@@ -918,7 +927,10 @@ impl Dom for Node {
 
     fn get_attribute(&self, name: &str) -> Option<String> {
         let b = self.0.borrow();
-        b.attributes.iter().find(|(k, _, _)| k == name).map(|(_, _, v)| v.clone())
+        b.attributes
+            .iter()
+            .find(|(k, _, _)| k == name)
+            .map(|(_, _, v)| v.clone())
     }
 
     fn get_attribute_ns(&self, namespace: Option<&str>, local_name: &str) -> Option<String> {
@@ -934,12 +946,16 @@ impl Dom for Node {
         if let Some(entry) = b.attributes.iter_mut().find(|(k, _, _)| k == name) {
             entry.2 = value.to_string();
         } else {
-            b.attributes.push((name.to_string(), None, value.to_string()));
+            b.attributes
+                .push((name.to_string(), None, value.to_string()));
         }
     }
 
     fn set_attribute_ns(&self, namespace: Option<&str>, qualified_name: &str, value: &str) {
-        let local_name = qualified_name.split(':').last().unwrap_or(qualified_name);
+        let local_name = qualified_name
+            .split(':')
+            .next_back()
+            .unwrap_or(qualified_name);
         let mut b = self.0.borrow_mut();
         if let Some(entry) = b
             .attributes
@@ -994,7 +1010,8 @@ impl Dom for Node {
             entry.1 = value.to_string();
             entry.2 = priority.to_string();
         } else {
-            b.styles.push((name.to_string(), value.to_string(), priority.to_string()));
+            b.styles
+                .push((name.to_string(), value.to_string(), priority.to_string()));
         }
     }
 
@@ -1108,9 +1125,10 @@ impl Dom for Node {
     }
 
     fn remove_event_listener(&self, event_type: &str, use_capture: bool) {
-        self.0.borrow_mut().event_listeners.retain(|l| {
-            !(l.event_type == event_type && l.capture == use_capture)
-        });
+        self.0
+            .borrow_mut()
+            .event_listeners
+            .retain(|l| !(l.event_type == event_type && l.capture == use_capture));
     }
 
     fn dispatch_event(&self, event_type: &str) {
@@ -1201,7 +1219,10 @@ impl Dom for Node {
     }
 
     fn set_property(&self, name: &str, value: &str) {
-        self.0.borrow_mut().properties.insert(name.to_string(), value.to_string());
+        self.0
+            .borrow_mut()
+            .properties
+            .insert(name.to_string(), value.to_string());
     }
 
     fn remove_property(&self, name: &str) {
@@ -1213,7 +1234,10 @@ impl Dom for Node {
     }
 
     fn set_any(&self, key: &str, value: Rc<dyn Any>) {
-        self.0.borrow_mut().any_properties.insert(key.to_string(), value);
+        self.0
+            .borrow_mut()
+            .any_properties
+            .insert(key.to_string(), value);
     }
 
     fn remove_any(&self, key: &str) {

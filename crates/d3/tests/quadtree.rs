@@ -22,7 +22,11 @@ fn bits(value: &Value) -> u64 {
 }
 
 fn same_number(a: f64, b: f64) -> bool {
-    if a.is_nan() && b.is_nan() { true } else { a.to_bits() == b.to_bits() }
+    if a.is_nan() && b.is_nan() {
+        true
+    } else {
+        a.to_bits() == b.to_bits()
+    }
 }
 
 fn same_point(a: [f64; 2], b: &Value) -> bool {
@@ -35,7 +39,15 @@ fn same_point(a: [f64; 2], b: &Value) -> bool {
 #[test]
 fn the_size_is_the_javascripts() {
     let f = fixture();
-    let pts: Vec<[f64; 2]> = vec![[0.0,0.0],[1.0,1.0],[2.0,2.0],[0.5,0.5],[3.0,3.0],[1.0,0.0],[0.0,1.0]];
+    let pts: Vec<[f64; 2]> = vec![
+        [0.0, 0.0],
+        [1.0, 1.0],
+        [2.0, 2.0],
+        [0.5, 0.5],
+        [3.0, 3.0],
+        [1.0, 0.0],
+        [0.0, 1.0],
+    ];
     let q = quadtree(&pts);
     assert_eq!(q.size(), f["size"].as_u64().unwrap() as usize);
 }
@@ -43,7 +55,15 @@ fn the_size_is_the_javascripts() {
 #[test]
 fn the_data_is_the_javascripts() {
     let f = fixture();
-    let pts: Vec<[f64; 2]> = vec![[0.0,0.0],[1.0,1.0],[2.0,2.0],[0.5,0.5],[3.0,3.0],[1.0,0.0],[0.0,1.0]];
+    let pts: Vec<[f64; 2]> = vec![
+        [0.0, 0.0],
+        [1.0, 1.0],
+        [2.0, 2.0],
+        [0.5, 0.5],
+        [3.0, 3.0],
+        [1.0, 0.0],
+        [0.0, 1.0],
+    ];
     let q = quadtree(&pts);
     let data = q.data();
     let expected = f["data"].as_array().unwrap();
@@ -56,23 +76,39 @@ fn the_data_is_the_javascripts() {
 #[test]
 fn the_extent_is_the_javascripts() {
     let f = fixture();
-    let pts: Vec<[f64; 2]> = vec![[0.0,0.0],[1.0,1.0],[2.0,2.0],[0.5,0.5],[3.0,3.0],[1.0,0.0],[0.0,1.0]];
+    let pts: Vec<[f64; 2]> = vec![
+        [0.0, 0.0],
+        [1.0, 1.0],
+        [2.0, 2.0],
+        [0.5, 0.5],
+        [3.0, 3.0],
+        [1.0, 0.0],
+        [0.0, 1.0],
+    ];
     let q = quadtree(&pts);
     let ext = q.extent().unwrap();
     let e = f["extent"].as_array().unwrap();
     // extent is [[x0,y0],[x1,y1]]
     let e0 = e[0].as_array().unwrap();
     let e1 = e[1].as_array().unwrap();
-    assert!(same_number(ext.0.0, f64::from_bits(bits(&e0[0]))));
-    assert!(same_number(ext.0.1, f64::from_bits(bits(&e0[1]))));
-    assert!(same_number(ext.1.0, f64::from_bits(bits(&e1[0]))));
-    assert!(same_number(ext.1.1, f64::from_bits(bits(&e1[1]))));
+    assert!(same_number(ext.0 .0, f64::from_bits(bits(&e0[0]))));
+    assert!(same_number(ext.0 .1, f64::from_bits(bits(&e0[1]))));
+    assert!(same_number(ext.1 .0, f64::from_bits(bits(&e1[0]))));
+    assert!(same_number(ext.1 .1, f64::from_bits(bits(&e1[1]))));
 }
 
 #[test]
 fn the_find_is_the_javascripts() {
     let f = fixture();
-    let pts: Vec<[f64; 2]> = vec![[0.0,0.0],[1.0,1.0],[2.0,2.0],[0.5,0.5],[3.0,3.0],[1.0,0.0],[0.0,1.0]];
+    let pts: Vec<[f64; 2]> = vec![
+        [0.0, 0.0],
+        [1.0, 1.0],
+        [2.0, 2.0],
+        [0.5, 0.5],
+        [3.0, 3.0],
+        [1.0, 0.0],
+        [0.0, 1.0],
+    ];
     let q = quadtree(&pts);
     // find(0,0)
     let r = q.find(0.0, 0.0, None).copied();
@@ -92,22 +128,30 @@ fn the_find_is_the_javascripts() {
 #[test]
 fn the_cover_is_the_javascripts() {
     let f = fixture();
-    let mut q = d3::quadtree::Quadtree::<[f64;2]>::new();
-    q.cover(5.0,5.0).cover(-1.0,-1.0);
+    let mut q = d3::quadtree::Quadtree::<[f64; 2]>::new();
+    q.cover(5.0, 5.0).cover(-1.0, -1.0);
     let ext = q.extent().unwrap();
     let e = f["coverExtent"].as_array().unwrap();
     let e0 = e[0].as_array().unwrap();
     let e1 = e[1].as_array().unwrap();
-    assert!(same_number(ext.0.0, f64::from_bits(bits(&e0[0]))));
-    assert!(same_number(ext.0.1, f64::from_bits(bits(&e0[1]))));
-    assert!(same_number(ext.1.0, f64::from_bits(bits(&e1[0]))));
-    assert!(same_number(ext.1.1, f64::from_bits(bits(&e1[1]))));
+    assert!(same_number(ext.0 .0, f64::from_bits(bits(&e0[0]))));
+    assert!(same_number(ext.0 .1, f64::from_bits(bits(&e0[1]))));
+    assert!(same_number(ext.1 .0, f64::from_bits(bits(&e1[0]))));
+    assert!(same_number(ext.1 .1, f64::from_bits(bits(&e1[1]))));
 }
 
 #[test]
 fn the_remove_is_the_javascripts() {
     let f = fixture();
-    let pts2: Vec<[f64; 2]> = vec![[0.0,0.0],[1.0,1.0],[2.0,2.0],[0.5,0.5],[3.0,3.0],[1.0,0.0],[0.0,1.0]];
+    let pts2: Vec<[f64; 2]> = vec![
+        [0.0, 0.0],
+        [1.0, 1.0],
+        [2.0, 2.0],
+        [0.5, 0.5],
+        [3.0, 3.0],
+        [1.0, 0.0],
+        [0.0, 1.0],
+    ];
     let mut q = quadtree(&pts2);
     q.remove(&pts2[1]);
     assert_eq!(q.size(), f["sizeAfterRemove"].as_u64().unwrap() as usize);
@@ -122,17 +166,36 @@ fn the_remove_is_the_javascripts() {
 #[test]
 fn the_visit_count_is_the_javascripts() {
     let f = fixture();
-    let pts: Vec<[f64; 2]> = vec![[0.0,0.0],[1.0,1.0],[2.0,2.0],[0.5,0.5],[3.0,3.0],[1.0,0.0],[0.0,1.0]];
+    let pts: Vec<[f64; 2]> = vec![
+        [0.0, 0.0],
+        [1.0, 1.0],
+        [2.0, 2.0],
+        [0.5, 0.5],
+        [3.0, 3.0],
+        [1.0, 0.0],
+        [0.0, 1.0],
+    ];
     let q = quadtree(&pts);
     let mut count = 0usize;
-    q.visit(|_node, _x0, _y0, _x1, _y1| { count += 1; false });
+    q.visit(|_node, _x0, _y0, _x1, _y1| {
+        count += 1;
+        false
+    });
     assert_eq!(count, f["visitedCount"].as_u64().unwrap() as usize);
 }
 
 #[test]
 fn the_copy_is_the_javascripts() {
     let f = fixture();
-    let pts: Vec<[f64; 2]> = vec![[0.0,0.0],[1.0,1.0],[2.0,2.0],[0.5,0.5],[3.0,3.0],[1.0,0.0],[0.0,1.0]];
+    let pts: Vec<[f64; 2]> = vec![
+        [0.0, 0.0],
+        [1.0, 1.0],
+        [2.0, 2.0],
+        [0.5, 0.5],
+        [3.0, 3.0],
+        [1.0, 0.0],
+        [0.0, 1.0],
+    ];
     let q = quadtree(&pts);
     let qc = q.copy();
     assert_eq!(qc.size(), f["copySize"].as_u64().unwrap() as usize);
@@ -143,13 +206,20 @@ fn the_copy_is_the_javascripts() {
 fn the_accessors_are_the_javascripts() {
     let f = fixture();
     #[derive(Clone)]
-    struct P { x: f64, y: f64 }
+    struct P {
+        x: f64,
+        y: f64,
+    }
     impl Point for P {
-        fn x(&self) -> f64 { self.x }
-        fn y(&self) -> f64 { self.y }
+        fn x(&self) -> f64 {
+            self.x
+        }
+        fn y(&self) -> f64 {
+            self.y
+        }
     }
     let mut q = d3::quadtree::Quadtree::<P>::with_accessors(|d: &P| d.x, |d: &P| d.y);
-    q.add_all(&[P{x:1.0,y:2.0}, P{x:3.0,y:4.0}]);
+    q.add_all(&[P { x: 1.0, y: 2.0 }, P { x: 3.0, y: 4.0 }]);
     let data = q.data();
     let expected = f["accData"].as_array().unwrap();
     assert_eq!(data.len(), expected.len());

@@ -2,7 +2,7 @@
 
 use std::fs;
 
-use d3::force::{self, Force, Node, Link};
+use d3::force::{self, Force, Link, Node};
 use serde_json::Value;
 
 fn fixture() -> Value {
@@ -36,7 +36,11 @@ fn same_node(actual: &Node, expected: &Value) -> bool {
 fn the_center_is_the_javascripts() {
     let f = fixture();
     force::reset_jiggle(1);
-    let mut nodes = vec![Node::new(1.0, 2.0), Node::new(3.0, 4.0), Node::new(5.0, 6.0)];
+    let mut nodes = vec![
+        Node::new(1.0, 2.0),
+        Node::new(3.0, 4.0),
+        Node::new(5.0, 6.0),
+    ];
     for (i, node) in nodes.iter_mut().enumerate() {
         node.index = i;
     }
@@ -90,7 +94,11 @@ fn the_y_is_the_javascripts() {
 fn the_many_body_is_the_javascripts() {
     let f = fixture();
     force::reset_jiggle(1);
-    let mut nodes = vec![Node::new(0.0, 0.0), Node::new(1.0, 0.0), Node::new(0.0, 1.0)];
+    let mut nodes = vec![
+        Node::new(0.0, 0.0),
+        Node::new(1.0, 0.0),
+        Node::new(0.0, 1.0),
+    ];
     for (i, node) in nodes.iter_mut().enumerate() {
         node.index = i;
     }
@@ -130,7 +138,11 @@ fn the_link_is_the_javascripts() {
     for (i, node) in nodes.iter_mut().enumerate() {
         node.index = i;
     }
-    let links = vec![Link { source: 0, target: 1, index: 0 }];
+    let links = vec![Link {
+        source: 0,
+        target: 1,
+        index: 0,
+    }];
     let mut fl = force::force_link(links);
     fl.initialize(&nodes);
     fl.apply(0.5, &mut nodes);
@@ -163,7 +175,11 @@ fn the_radial_is_the_javascripts() {
 fn the_simulation_is_the_javascripts() {
     let f = fixture();
     force::reset_jiggle(1);
-    let mut nodes = vec![Node::new(0.0, 0.0), Node::new(10.0, 0.0), Node::new(0.0, 10.0)];
+    let nodes = vec![
+        Node::new(0.0, 0.0),
+        Node::new(10.0, 0.0),
+        Node::new(0.0, 10.0),
+    ];
     let mut sim = force::force_simulation(nodes);
     sim.set_force("center", Box::new(force::force_center(5.0, 5.0)));
     sim.set_force("x", Box::new(force::force_x(5.0)));
@@ -178,7 +194,10 @@ fn the_simulation_is_the_javascripts() {
         assert!(same_node(actual, exp));
     }
     let alpha = sim.alpha();
-    assert!(same_number(alpha, f64::from_bits(bits(&f["simulationAlpha"]))));
+    assert!(same_number(
+        alpha,
+        f64::from_bits(bits(&f["simulationAlpha"]))
+    ));
 }
 
 #[test]
@@ -193,6 +212,10 @@ fn the_constant_and_jiggle_are_the_javascripts() {
     let expected = f["jiggle"].as_array().unwrap();
     for (i, exp) in expected.iter().enumerate() {
         let value = force::jiggle();
-        assert!(same_number(value, f64::from_bits(bits(exp))), "jiggle {}", i);
+        assert!(
+            same_number(value, f64::from_bits(bits(exp))),
+            "jiggle {}",
+            i
+        );
     }
 }

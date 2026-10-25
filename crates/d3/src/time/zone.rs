@@ -74,6 +74,12 @@ fn local_offset_at(instant: f64) -> i32 {
     windows::offset_at(instant)
 }
 
+/// The system's own offset from Greenwich, in seconds, at a given time.
+#[cfg(windows)]
+fn local_offset_seconds_at(instant: f64) -> i32 {
+    windows::offset_at(instant) * 60
+}
+
 /// The browser's own offset from Greenwich, in minutes, at a given time.
 #[cfg(target_arch = "wasm32")]
 fn local_offset_at(instant: f64) -> i32 {

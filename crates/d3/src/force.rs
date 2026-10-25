@@ -15,7 +15,6 @@ use std::collections::HashMap;
 use std::f64::consts::PI;
 
 use crate::arith;
-use crate::collection;
 use crate::js;
 use crate::quadtree;
 
@@ -335,8 +334,8 @@ impl Force for ForceX {
         if self.strengths.len() != n {
             self.initialize(nodes);
         }
-        for i in 0..n {
-            nodes[i].vx += (self.xz[i] - nodes[i].x) * self.strengths[i] * alpha;
+        for (i, node) in nodes.iter_mut().enumerate() {
+            node.vx += (self.xz[i] - node.x) * self.strengths[i] * alpha;
         }
     }
 }
@@ -419,8 +418,8 @@ impl Force for ForceY {
         if self.strengths.len() != n {
             self.initialize(nodes);
         }
-        for i in 0..n {
-            nodes[i].vy += (self.yz[i] - nodes[i].y) * self.strengths[i] * alpha;
+        for (i, node) in nodes.iter_mut().enumerate() {
+            node.vy += (self.yz[i] - node.y) * self.strengths[i] * alpha;
         }
     }
 }
@@ -446,6 +445,7 @@ pub struct ManyBody {
 
 impl ManyBody {
     /// A many-body force.
+    #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         ManyBody {
             strength: Box::new(|_, _, _| -30.0),
@@ -587,14 +587,16 @@ fn accumulate_many(
     let ptr = node as *const _ as usize;
     match node {
         quadtree::Node::Branch(children) => {
-            let xm = (x0 + x1) / 2.0;
-            let ym = (y0 + y1) / 2.0;
+            let _xm = (x0 + x1) / 2.0;
+            let _ym = (y0 + y1) / 2.0;
             let mut strength = 0.0;
             let mut weight = 0.0;
             let mut sx = 0.0;
             let mut sy = 0.0;
             for i in 0..4 {
-                let child_ptr = children[i].as_ref().map(|c| c.as_ref() as *const _ as usize);
+                let child_ptr = children[i]
+                    .as_ref()
+                    .map(|c| c.as_ref() as *const _ as usize);
                 if let Some(child_box) = &children[i] {
                     let child = child_box.as_ref();
                     let (cx0, cy0, cx1, cy1) = child_bounds(i, x0, y0, x1, y1);
@@ -612,16 +614,8 @@ fn accumulate_many(
                     }
                 }
             }
-            let qx = if weight != 0.0 {
-                sx / weight
-            } else {
-                f64::NAN
-            };
-            let qy = if weight != 0.0 {
-                sy / weight
-            } else {
-                f64::NAN
-            };
+            let qx = if weight != 0.0 { sx / weight } else { f64::NAN };
+            let qy = if weight != 0.0 { sy / weight } else { f64::NAN };
             states.insert(
                 ptr,
                 QuadState {
@@ -749,8 +743,8 @@ fn visit_many(
     }
 
     if let quadtree::Node::Branch(children) = quad {
-        let xm = (x0 + x1) / 2.0;
-        let ym = (y0 + y1) / 2.0;
+        let _xm = (x0 + x1) / 2.0;
+        let _ym = (y0 + y1) / 2.0;
         for i in 0..4 {
             if let Some(child_box) = &children[i] {
                 let child = child_box.as_ref();
@@ -892,20 +886,7 @@ impl Force for Collide {
                     let xi = nodes[i].x + nodes[i].vx;
                     let yi = nodes[i].y + nodes[i].vy;
                     collide_visit(
-                        root,
-                        x0,
-                        y0,
-                        x1,
-                        y1,
-                        i,
-                        ri,
-                        ri2,
-                        xi,
-                        yi,
-                        strength,
-                        &radii,
-                        nodes,
-                        &states,
+                        root, x0, y0, x1, y1, i, ri, ri2, xi, yi, strength, &radii, nodes, &states,
                     );
                 }
             }
@@ -935,17 +916,30 @@ fn prepare_collide(
                     }
                 }
             }
-            states.insert(ptr, QuadState { r, ..QuadState::default() });
+            states.insert(
+                ptr,
+                QuadState {
+                    r,
+                    ..QuadState::default()
+                },
+            );
         }
         quadtree::Node::Leaf(leaf) => {
             let data_pos = leaf.data;
             let node_index = nodes[data_pos.0].index;
             let r = radii[node_index];
-            states.insert(ptr, QuadState { r, ..QuadState::default() });
+            states.insert(
+                ptr,
+                QuadState {
+                    r,
+                    ..QuadState::default()
+                },
+            );
         }
     }
 }
 
+#[allow(clippy::only_used_in_recursion)]
 fn collide_visit(
     quad: &quadtree::Node<(usize, f64, f64)>,
     x0: f64,
@@ -1011,26 +1005,14 @@ fn collide_visit(
     }
 
     if let quadtree::Node::Branch(children) = quad {
-        let xm = (x0 + x1) / 2.0;
-        let ym = (y0 + y1) / 2.0;
+        let _xm = (x0 + x1) / 2.0;
+        let _ym = (y0 + y1) / 2.0;
         for i in 0..4 {
             if let Some(child_box) = &children[i] {
                 let child = child_box.as_ref();
                 let (cx0, cy0, cx1, cy1) = child_bounds(i, x0, y0, x1, y1);
                 collide_visit(
-                    child,
-                    cx0,
-                    cy0,
-                    cx1,
-                    cy1,
-                    target,
-                    ri,
-                    ri2,
-                    xi,
-                    yi,
-                    strength,
-                    radii,
-                    nodes,
+                    child, cx0, cy0, cx1, cy1, target, ri, ri2, xi, yi, strength, radii, nodes,
                     states,
                 );
             }
@@ -1048,9 +1030,11 @@ pub fn force_collide<R: IntoNodeFn>(radius: R) -> Collide {
 // ---------------------------------------------------------------------------
 
 /// The JavaScript's `forceLink`.
+type IdFn = Box<dyn Fn(&Node, usize, &[Node]) -> String>;
+
 pub struct LinkForce {
     links: Vec<Link>,
-    id: Box<dyn Fn(&Node, usize, &[Node]) -> String>,
+    id: IdFn,
     strength: Option<LinkFn>,
     strengths: Vec<f64>,
     distance: Option<LinkFn>,
@@ -1233,20 +1217,10 @@ impl Force for LinkForce {
             for i in 0..m {
                 let source = self.links[i].source;
                 let target = self.links[i].target;
-                let x = (nodes[target].x + nodes[target].vx)
-                    - (nodes[source].x + nodes[source].vx);
-                let x = if x == 0.0 || x.is_nan() {
-                    jiggle()
-                } else {
-                    x
-                };
-                let y = (nodes[target].y + nodes[target].vy)
-                    - (nodes[source].y + nodes[source].vy);
-                let y = if y == 0.0 || y.is_nan() {
-                    jiggle()
-                } else {
-                    y
-                };
+                let x = (nodes[target].x + nodes[target].vx) - (nodes[source].x + nodes[source].vx);
+                let x = if x == 0.0 || x.is_nan() { jiggle() } else { x };
+                let y = (nodes[target].y + nodes[target].vy) - (nodes[source].y + nodes[source].vy);
+                let y = if y == 0.0 || y.is_nan() { jiggle() } else { y };
                 let l = (x * x + y * y).sqrt();
                 let l = (l - self.distances[i]) / l * alpha * self.strengths[i];
                 let x = x * l;
@@ -1365,20 +1339,11 @@ impl Force for Radial {
         if self.strengths.len() != n {
             self.initialize(nodes);
         }
-        for i in 0..n {
-            let node = &mut nodes[i];
+        for (i, node) in nodes.iter_mut().enumerate() {
             let dx = node.x - self.x;
-            let dx = if dx == 0.0 || dx.is_nan() {
-                1e-6
-            } else {
-                dx
-            };
+            let dx = if dx == 0.0 || dx.is_nan() { 1e-6 } else { dx };
             let dy = node.y - self.y;
-            let dy = if dy == 0.0 || dy.is_nan() {
-                1e-6
-            } else {
-                dy
-            };
+            let dy = if dy == 0.0 || dy.is_nan() { 1e-6 } else { dy };
             let r = (dx * dx + dy * dy).sqrt();
             let k = (self.radiuses[i] - r) * self.strengths[i] * alpha / r;
             node.vx += dx * k;
@@ -1440,8 +1405,7 @@ impl Simulation {
     /// The JavaScript's `simulation.nodes`.
     pub fn nodes(&mut self, nodes: Vec<Node>) -> &mut Self {
         let mut nodes = nodes;
-        for i in 0..nodes.len() {
-            let node = &mut nodes[i];
+        for (i, node) in nodes.iter_mut().enumerate() {
             node.index = i;
             if let Some(fx) = node.fx {
                 node.x = fx;
@@ -1565,19 +1529,19 @@ impl Simulation {
             self.forces = forces;
 
             for node in self.nodes.iter_mut() {
-                if node.fx.is_none() {
+                if let Some(fx) = node.fx {
+                    node.x = fx;
+                    node.vx = 0.0;
+                } else {
                     node.vx *= self.velocity_decay;
                     node.x += node.vx;
-                } else {
-                    node.x = node.fx.unwrap();
-                    node.vx = 0.0;
                 }
-                if node.fy.is_none() {
+                if let Some(fy) = node.fy {
+                    node.y = fy;
+                    node.vy = 0.0;
+                } else {
                     node.vy *= self.velocity_decay;
                     node.y += node.vy;
-                } else {
-                    node.y = node.fy.unwrap();
-                    node.vy = 0.0;
                 }
             }
         }

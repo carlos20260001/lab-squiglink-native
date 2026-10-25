@@ -1,9 +1,7 @@
 //! Tests for d3-selection and the DOM implementation.
 
 use d3::dom::{create_document, create_element, Dom};
-use d3::selection::{
-    create, custom_event, local, mouse, namespace, namespaces, Event,
-};
+use d3::selection::{create, custom_event, local, mouse, namespace, namespaces, Event};
 
 #[test]
 fn test_dom_node_tree_and_attributes() {
@@ -108,7 +106,7 @@ fn test_selection_data_join_enter_append() {
     for (i, node) in nodes.iter().enumerate() {
         assert_eq!(node.tag_name(), "circle");
         assert_eq!(node.get_attribute("r"), Some("5".to_string()));
-        let expected_cx = ((data[i] * 2)).to_string();
+        let expected_cx = (data[i] * 2).to_string();
         assert_eq!(node.get_attribute("cx"), Some(expected_cx));
         assert_eq!(node.get_data::<i32>(), Some(data[i]));
     }

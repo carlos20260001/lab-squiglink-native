@@ -3,14 +3,10 @@
 use std::fs;
 
 use d3::scale::{
-    scale_band, scale_diverging, scale_diverging_log, scale_diverging_pow, scale_diverging_sqrt,
-    scale_diverging_symlog, scale_identity, scale_implicit, scale_linear, scale_log, scale_ordinal,
+    scale_band, scale_diverging, scale_identity, scale_linear, scale_log, scale_ordinal,
     scale_point, scale_pow, scale_quantile, scale_quantize, scale_sequential, scale_sequential_log,
-    scale_sequential_pow, scale_sequential_quantile, scale_sequential_sqrt,
-    scale_sequential_symlog, scale_sqrt, scale_symlog, scale_threshold, scale_time, scale_utc,
-    tick_format, Implicit, OrdinalUnknown, ScaleBand, ScaleDiverging, ScaleIdentity, ScaleLinear,
-    ScaleLog, ScaleOrdinal, ScalePow, ScaleQuantile, ScaleQuantize, ScaleSequential,
-    ScaleSequentialQuantile, ScaleSymlog, ScaleThreshold, ScaleTime,
+    scale_sequential_quantile, scale_sqrt, scale_symlog, scale_threshold, scale_time, tick_format,
+    Implicit, OrdinalUnknown,
 };
 use serde_json::Value;
 

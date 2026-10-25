@@ -866,7 +866,7 @@ fn insert_beach_list<D: Clone>(
     }
 }
 
-fn add_beach<D: Clone>(mut builder: &mut Builder<D>, site: Site<D>) {
+fn add_beach<D: Clone>(builder: &mut Builder<D>, site: Site<D>) {
     create_cell(builder, site.clone());
 
     let x = site.point[0];
@@ -1131,10 +1131,9 @@ fn right_breakpoint_beach<D: Clone>(arc: &Rc<RefCell<Beach<D>>>, directrix: f64)
 // Sorting / clipping
 // ---------------------------------------------------------------------------
 
-fn sort_cell_halfedges<D: Clone>(cells: &mut Vec<Option<Cell<D>>>, edges: &[Option<Edge<D>>]) {
-    let n = cells.len();
-    for i in 0..n {
-        let Some(cell) = cells[i].as_mut() else {
+fn sort_cell_halfedges<D: Clone>(cells: &mut [Option<Cell<D>>], edges: &[Option<Edge<D>>]) {
+    for cell_opt in cells.iter_mut() {
+        let Some(cell) = cell_opt.as_mut() else {
             continue;
         };
         let m = cell.halfedges.len();
@@ -1170,9 +1169,9 @@ fn cell_halfedge_angle<D: Clone>(cell: &Cell<D>, edge: &Edge<D>) -> f64 {
             return (vb_pt[1] - va_pt[1]).atan2(vb_pt[0] - va_pt[0]);
         }
     }
-    if vb_site.is_some() {
-        let va_pt = va_site.as_ref().unwrap().point;
-        let vb_pt = vb_site.as_ref().unwrap().point;
+    if let (Some(va), Some(vb)) = (va_site.as_ref(), vb_site.as_ref()) {
+        let va_pt = va.point;
+        let vb_pt = vb.point;
         return (vb_pt[1] - va_pt[1]).atan2(vb_pt[0] - va_pt[0]);
     }
     // border edge
@@ -1229,17 +1228,21 @@ fn connect_edge<D: Clone>(edge: &mut Edge<D>, x0: f64, y0: f64, x1: f64, y1: f64
             return false;
         }
         if lx > rx {
-            if v0.is_none() {
+            if let Some(v) = v0 {
+                if v[1] >= y1 {
+                    return false;
+                }
+            } else {
                 v0 = Some([fx, y0]);
-            } else if v0.unwrap()[1] >= y1 {
-                return false;
             }
             v1 = Some([fx, y1]);
         } else {
-            if v0.is_none() {
+            if let Some(v) = v0 {
+                if v[1] < y0 {
+                    return false;
+                }
+            } else {
                 v0 = Some([fx, y1]);
-            } else if v0.unwrap()[1] < y0 {
-                return false;
             }
             v1 = Some([fx, y0]);
         }
@@ -1248,32 +1251,40 @@ fn connect_edge<D: Clone>(edge: &mut Edge<D>, x0: f64, y0: f64, x1: f64, y1: f64
         let fb = fy - fm * fx;
         if fm < -1.0 || fm > 1.0 {
             if lx > rx {
-                if v0.is_none() {
+                if let Some(v) = v0 {
+                    if v[1] >= y1 {
+                        return false;
+                    }
+                } else {
                     v0 = Some([(y0 - fb) / fm, y0]);
-                } else if v0.unwrap()[1] >= y1 {
-                    return false;
                 }
                 v1 = Some([(y1 - fb) / fm, y1]);
             } else {
-                if v0.is_none() {
+                if let Some(v) = v0 {
+                    if v[1] < y0 {
+                        return false;
+                    }
+                } else {
                     v0 = Some([(y1 - fb) / fm, y1]);
-                } else if v0.unwrap()[1] < y0 {
-                    return false;
                 }
                 v1 = Some([(y0 - fb) / fm, y0]);
             }
         } else if ly < ry {
-            if v0.is_none() {
+            if let Some(v) = v0 {
+                if v[0] >= x1 {
+                    return false;
+                }
+            } else {
                 v0 = Some([x0, fm * x0 + fb]);
-            } else if v0.unwrap()[0] >= x1 {
-                return false;
             }
             v1 = Some([x1, fm * x1 + fb]);
         } else {
-            if v0.is_none() {
+            if let Some(v) = v0 {
+                if v[0] < x0 {
+                    return false;
+                }
+            } else {
                 v0 = Some([x1, fm * x1 + fb]);
-            } else if v0.unwrap()[0] < x0 {
-                return false;
             }
             v1 = Some([x0, fm * x0 + fb]);
         }
@@ -1521,7 +1532,7 @@ fn clip_cells<D: Clone>(builder: &mut Builder<D>, x0: f64, y0: f64, x1: f64, y1:
             i_halfedge += 1;
         }
 
-        let has = builder.cells[i_cell].as_ref().unwrap().halfedges.len() > 0;
+        let has = !builder.cells[i_cell].as_ref().unwrap().halfedges.is_empty();
         if has {
             cover = false;
         }

@@ -15,7 +15,7 @@ use std::sync::Arc;
 
 use crate::dispatch::{dispatch, Dispatch};
 use crate::dom::{Dom, SimpleNode};
-use crate::selection::{custom_event, mouse, touch, Event, Selection};
+use crate::selection::{Event, Selection};
 
 /// An event emitted by a drag behavior during interaction.
 #[derive(Clone)]
@@ -51,10 +51,13 @@ impl std::fmt::Debug for DragEvent {
     }
 }
 
+type FilterFn<N> = Arc<dyn Fn(&N, &Event) -> bool>;
+type ContainerFn<N> = Arc<dyn Fn(&N) -> Option<N>>;
+
 /// A drag gesture recognizer and event generator.
 pub struct Drag<N: Dom = SimpleNode> {
-    filter: Arc<dyn Fn(&N, &Event) -> bool>,
-    container: Arc<dyn Fn(&N) -> Option<N>>,
+    filter: FilterFn<N>,
+    container: ContainerFn<N>,
     click_distance2: f64,
     listeners: Dispatch<DragEvent>,
 }

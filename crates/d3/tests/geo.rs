@@ -2,7 +2,10 @@
 
 use std::fs;
 
-use d3::geo::{geo_area, geo_bounds, geo_centroid, geo_circle, geo_contains, geo_distance, geo_graticule10, geo_interpolate, geo_length, geo_rotation, Geometry};
+use d3::geo::{
+    geo_area, geo_bounds, geo_centroid, geo_circle, geo_contains, geo_distance, geo_graticule10,
+    geo_interpolate, geo_length, geo_rotation, Geometry,
+};
 use serde_json::Value;
 
 fn fixture() -> Value {
@@ -22,7 +25,11 @@ fn bits(value: &Value) -> u64 {
 }
 
 fn same(a: f64, b: f64) -> bool {
-    if a.is_nan() && b.is_nan() { true } else { a.to_bits() == b.to_bits() }
+    if a.is_nan() && b.is_nan() {
+        true
+    } else {
+        a.to_bits() == b.to_bits()
+    }
 }
 
 #[test]
@@ -45,7 +52,13 @@ fn the_length_is_the_javascripts() {
 fn the_area_is_the_javascripts() {
     let f = fixture();
     let exp = f64::from_bits(bits(&f["area"]));
-    let got = geo_area(&Geometry::Polygon(vec![vec![[0.0, 0.0], [10.0, 0.0], [10.0, 10.0], [0.0, 10.0], [0.0, 0.0]]]));
+    let got = geo_area(&Geometry::Polygon(vec![vec![
+        [0.0, 0.0],
+        [10.0, 0.0],
+        [10.0, 10.0],
+        [0.0, 10.0],
+        [0.0, 0.0],
+    ]]));
     assert!(same(got, exp), "area: got {} exp {}", got, exp);
 }
 
@@ -65,7 +78,13 @@ fn the_centroid_is_the_javascripts() {
     let f = fixture();
     let exp0 = f64::from_bits(bits(&f["centroid"][0]));
     let exp1 = f64::from_bits(bits(&f["centroid"][1]));
-    let got = geo_centroid(&Geometry::Polygon(vec![vec![[0.0, 0.0], [10.0, 0.0], [10.0, 10.0], [0.0, 10.0], [0.0, 0.0]]]));
+    let got = geo_centroid(&Geometry::Polygon(vec![vec![
+        [0.0, 0.0],
+        [10.0, 0.0],
+        [10.0, 10.0],
+        [0.0, 10.0],
+        [0.0, 0.0],
+    ]]));
     assert!(same(got[0], exp0), "centroid0: got {} exp {}", got[0], exp0);
     assert!(same(got[1], exp1), "centroid1: got {} exp {}", got[1], exp1);
 }
@@ -74,7 +93,13 @@ fn the_centroid_is_the_javascripts() {
 fn the_contains_is_the_javascripts() {
     let f = fixture();
     let exp = f["contains"].as_bool().unwrap();
-    let poly = Geometry::Polygon(vec![vec![[0.0, 0.0], [10.0, 0.0], [10.0, 10.0], [0.0, 10.0], [0.0, 0.0]]]);
+    let poly = Geometry::Polygon(vec![vec![
+        [0.0, 0.0],
+        [10.0, 0.0],
+        [10.0, 10.0],
+        [0.0, 10.0],
+        [0.0, 0.0],
+    ]]);
     let got = geo_contains(&poly, &[5.0, 5.0]);
     assert_eq!(got, exp, "contains: got {} exp {}", got, exp);
 }
@@ -95,8 +120,6 @@ fn the_circle_is_the_javascripts() {
 
 #[test]
 fn the_graticule_is_the_javascripts() {
-    let f = fixture();
-    let exp = f["graticuleType"].as_str().unwrap();
     let got = geo_graticule10();
     match got {
         Geometry::MultiLineString(_) => {
@@ -113,12 +136,38 @@ fn the_bounds_is_the_javascripts() {
     let exp01 = f64::from_bits(bits(&f["bounds"][0][1]));
     let exp10 = f64::from_bits(bits(&f["bounds"][1][0]));
     let exp11 = f64::from_bits(bits(&f["bounds"][1][1]));
-    let poly = Geometry::Polygon(vec![vec![[0.0, 0.0], [10.0, 0.0], [10.0, 10.0], [0.0, 10.0], [0.0, 0.0]]]);
+    let poly = Geometry::Polygon(vec![vec![
+        [0.0, 0.0],
+        [10.0, 0.0],
+        [10.0, 10.0],
+        [0.0, 10.0],
+        [0.0, 0.0],
+    ]]);
     let got = geo_bounds(&poly);
-    assert!(same(got.0[0], exp00), "bounds00: got {} exp {}", got.0[0], exp00);
-    assert!(same(got.0[1], exp01), "bounds01: got {} exp {}", got.0[1], exp01);
-    assert!(same(got.1[0], exp10), "bounds10: got {} exp {}", got.1[0], exp10);
-    assert!(same(got.1[1], exp11), "bounds11: got {} exp {}", got.1[1], exp11);
+    assert!(
+        same(got.0[0], exp00),
+        "bounds00: got {} exp {}",
+        got.0[0],
+        exp00
+    );
+    assert!(
+        same(got.0[1], exp01),
+        "bounds01: got {} exp {}",
+        got.0[1],
+        exp01
+    );
+    assert!(
+        same(got.1[0], exp10),
+        "bounds10: got {} exp {}",
+        got.1[0],
+        exp10
+    );
+    assert!(
+        same(got.1[1], exp11),
+        "bounds11: got {} exp {}",
+        got.1[1],
+        exp11
+    );
 }
 
 #[test]

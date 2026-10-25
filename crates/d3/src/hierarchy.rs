@@ -32,6 +32,8 @@ pub struct HierarchyNode<T: HierarchyData> {
     pub children: Option<Vec<Rc<RefCell<HierarchyNode<T>>>>>,
 }
 
+type HierarchyLink<T> = (Rc<RefCell<HierarchyNode<T>>>, Rc<RefCell<HierarchyNode<T>>>);
+
 /// The JavaScript's `hierarchy`.
 ///
 /// Builds the tree from data using a children accessor (defaults to `d.children`).
@@ -185,9 +187,7 @@ impl<T: HierarchyData> HierarchyNode<T> {
     }
 
     /// Links (parent-child pairs).
-    pub fn links(
-        node: &Rc<RefCell<HierarchyNode<T>>>,
-    ) -> Vec<(Rc<RefCell<HierarchyNode<T>>>, Rc<RefCell<HierarchyNode<T>>>)> {
+    pub fn links(node: &Rc<RefCell<HierarchyNode<T>>>) -> Vec<HierarchyLink<T>> {
         let mut links = Vec::new();
         let desc = Self::descendants(node);
         for n in desc {

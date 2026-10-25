@@ -120,7 +120,7 @@ fn make_piecewise(
         if d1v < d0v {
             let norm = normalize(d1v, d0v);
             let ip = interp(r1v, r0v);
-            let mut ip = ip;
+            let ip = ip;
             return Box::new(move |x: f64| {
                 let t = norm(x);
                 ip(t)
@@ -151,8 +151,9 @@ fn make_piecewise(
     // need mutable interps inside closure; wrap in Arc<Mutex>? Use indices and recreate?
     // We'll store as Vec and use Cell-like via Rc<RefCell>.
     use std::cell::RefCell;
-    let norms = Arc::new(norms);
-    let interps = Arc::new(RefCell::new(interps));
+    use std::rc::Rc;
+    let norms = Rc::new(norms);
+    let interps = Rc::new(RefCell::new(interps));
     Box::new(move |x: f64| {
         // bisect domain, 1, j
         let mut lo = 1usize;
@@ -168,7 +169,7 @@ fn make_piecewise(
         let idx = lo - 1;
         let idx = if idx >= j { j - 1 } else { idx };
         let t = norms[idx](x);
-        let mut interps = interps.borrow_mut();
+        let interps = interps.borrow_mut();
         interps[idx](t)
     })
 }
@@ -246,18 +247,18 @@ impl ScaleLinear {
         self.core.domain.clone()
     }
     pub fn set_domain(&mut self, domain: &[f64]) -> &mut Self {
-        self.core.domain = domain.iter().map(|x| *x).collect();
+        self.core.domain = domain.to_vec();
         self
     }
     pub fn range(&self) -> Vec<f64> {
         self.core.range.clone()
     }
     pub fn set_range(&mut self, range: &[f64]) -> &mut Self {
-        self.core.range = range.iter().map(|x| *x).collect();
+        self.core.range = range.to_vec();
         self
     }
     pub fn range_round(&mut self, range: &[f64]) -> &mut Self {
-        self.core.range = range.iter().map(|x| *x).collect();
+        self.core.range = range.to_vec();
         self.core.interpolate = round_interpolator_factory();
         self
     }
@@ -311,9 +312,7 @@ impl ScaleLinear {
         let mut start = d[i0];
         let mut stop = d[i1];
         if stop < start {
-            let t = start;
-            start = stop;
-            stop = t;
+            std::mem::swap(&mut start, &mut stop);
         }
         let mut step = array::tick_increment(start, stop, count);
         if step > 0.0 {
@@ -339,6 +338,12 @@ impl ScaleLinear {
         Self {
             core: self.core.clone(),
         }
+    }
+}
+
+impl Default for ScaleLinear {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -416,9 +421,7 @@ impl ScaleIdentity {
         let mut start = d[i0];
         let mut stop = d[i1];
         if stop < start {
-            let t = start;
-            start = stop;
-            stop = t;
+            std::mem::swap(&mut start, &mut stop);
         }
         let mut step = array::tick_increment(start, stop, count);
         if step > 0.0 {
@@ -445,6 +448,12 @@ impl ScaleIdentity {
     }
 }
 
+impl Default for ScaleIdentity {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 pub fn scale_identity() -> ScaleIdentity {
     ScaleIdentity::new()
 }
@@ -466,7 +475,7 @@ impl ScaleLog {
         s
     }
     fn rescale(&mut self) {
-        let logs: Arc<dyn Fn(f64) -> f64> = if self.base == std::f64::consts::E {
+        let _logs: Arc<dyn Fn(f64) -> f64> = if self.base == std::f64::consts::E {
             Arc::new(|x: f64| x.ln())
         } else if self.base == 10.0 {
             Arc::new(|x: f64| x.log10())
@@ -476,7 +485,7 @@ impl ScaleLog {
             let b = self.base.ln();
             Arc::new(move |x: f64| x.ln() / b)
         };
-        let pows: Arc<dyn Fn(f64) -> f64> = if self.base == 10.0 {
+        let _pows: Arc<dyn Fn(f64) -> f64> = if self.base == 10.0 {
             Arc::new(|x: f64| {
                 if x.is_finite() {
                     crate::ieee754::pow(10.0, x)
@@ -502,7 +511,7 @@ impl ScaleLog {
             let _ = logs_r;
         }
         // We store transform closures in core based on sign.
-        let mut transform: Arc<dyn Fn(f64) -> f64>;
+        let transform: Arc<dyn Fn(f64) -> f64>;
         let untransform: Arc<dyn Fn(f64) -> f64>;
         if neg {
             transform = Arc::new(|x: f64| -crate::ieee754::log(-x));
@@ -577,9 +586,7 @@ impl ScaleLog {
         let mut v = d[d.len() - 1];
         let reverse = v < u;
         if reverse {
-            let t = u;
-            u = v;
-            v = t;
+            std::mem::swap(&mut u, &mut v);
         }
         // logs/pows recompute
         let base = self.base;
@@ -627,7 +634,7 @@ impl ScaleLog {
         let j = logs(v);
         let n = count;
         let mut z = Vec::new();
-        let base_int = base as i64;
+        let _base_int = base as i64;
         let integer_base = base == base.floor() && base != 0.0;
         if integer_base && (j - i).abs() < n {
             let mut ii = i.round() as i64 - 1;
@@ -738,9 +745,7 @@ impl ScaleLog {
         let mut x1 = d[d.len() - 1];
         let reverse = x1 < x0;
         if reverse {
-            let t = x0;
-            x0 = x1;
-            x1 = t;
+            std::mem::swap(&mut x0, &mut x1);
         }
         let base = self.base;
         let logs = |x: f64| -> f64 {
@@ -769,12 +774,11 @@ impl ScaleLog {
                 };
                 -pw
             } else {
-                let pw = if base == 10.0 {
+                if base == 10.0 {
                     10.0_f64.powf(p)
                 } else {
                     base.powf(p)
-                };
-                pw
+                }
             }
         };
         let ceil = |x: f64| -> f64 {
@@ -788,12 +792,11 @@ impl ScaleLog {
                 };
                 -pw
             } else {
-                let pw = if base == 10.0 {
+                if base == 10.0 {
                     10.0_f64.powf(p)
                 } else {
                     base.powf(p)
-                };
-                pw
+                }
             }
         };
         let mut domain = d.clone();
@@ -804,9 +807,7 @@ impl ScaleLog {
         let (mut a, mut b) = (xx0, xx1);
         let swapped = b < a;
         if swapped {
-            let t = a;
-            a = b;
-            b = t;
+            std::mem::swap(&mut a, &mut b);
         }
         domain[i0] = if swapped { ceil(b) } else { floor(a) }; // approximate; JS nice uses floor(x0), ceil(x1)
                                                                // Actually JS: domain[i0]=floor(start); domain[i1]=ceil(stop) after swap handling.
@@ -814,7 +815,7 @@ impl ScaleLog {
         let (i0, i1) = (0usize, dom.len() - 1);
         let (x0, x1) = (dom[i0], dom[i1]);
         let swapped = x1 < x0;
-        let (mut lo, mut hi) = if swapped { (x1, x0) } else { (x0, x1) };
+        let (lo, hi) = if swapped { (x1, x0) } else { (x0, x1) };
         let f_lo = floor(lo);
         let c_hi = ceil(hi);
         if swapped {
@@ -836,6 +837,12 @@ impl ScaleLog {
     }
 }
 
+impl Default for ScaleLog {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 pub fn scale_log() -> ScaleLog {
     ScaleLog::new()
 }
@@ -843,15 +850,15 @@ pub fn scale_log() -> ScaleLog {
 // ContinuousCore methods used above
 impl ContinuousCore {
     pub fn set_domain(&mut self, domain: &[f64]) -> &mut Self {
-        self.domain = domain.iter().copied().collect();
+        self.domain = domain.to_vec();
         self
     }
     pub fn set_range(&mut self, range: &[f64]) -> &mut Self {
-        self.range = range.iter().copied().collect();
+        self.range = range.to_vec();
         self
     }
     pub fn range_round(&mut self, range: &[f64]) -> &mut Self {
-        self.range = range.iter().copied().collect();
+        self.range = range.to_vec();
         self.interpolate = round_interpolator_factory();
         self
     }
@@ -972,6 +979,12 @@ impl ScaleSymlog {
             core: self.core.clone(),
             c: self.c,
         }
+    }
+}
+
+impl Default for ScaleSymlog {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -1109,6 +1122,12 @@ impl ScalePow {
     }
 }
 
+impl Default for ScalePow {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 pub fn scale_pow() -> ScalePow {
     let mut s = ScalePow::new();
     s.rescale();
@@ -1145,10 +1164,6 @@ impl ScaleOrdinal {
             unknown: OrdinalUnknown::Implicit(scale_implicit()),
             keys: Vec::new(),
         }
-    }
-    fn rebuild_keys(&mut self) {
-        self.keys = self.domain.iter().map(|d| d.to_string()).collect(); // approximate; JS uses d+""
-                                                                         // Actually need dedup keys; domain already deduped
     }
     pub fn domain(&self) -> Vec<f64> {
         self.domain.clone()
@@ -1215,6 +1230,12 @@ impl ScaleOrdinal {
     // Note: implicit case should mutate domain; but &self call can't. We'll provide call_mut?
     pub fn copy(&self) -> Self {
         self.clone()
+    }
+}
+
+impl Default for ScaleOrdinal {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -1433,7 +1454,7 @@ impl ScaleBand {
         self.align
     }
     pub fn set_align(&mut self, v: f64) -> &mut Self {
-        self.align = v.max(0.0).min(1.0);
+        self.align = v.clamp(0.0, 1.0);
         self.rescale();
         self
     }
@@ -1482,8 +1503,8 @@ impl ScaleQuantile {
         // use d3-array quantile
         let mut i = 0usize;
         while i + 1 < n {
-            let q = i as f64 / n as f64; // placeholder; need quantile
-                                         // We'll compute properly below
+            let _q = i as f64 / n as f64; // placeholder; need quantile
+                                          // We'll compute properly below
             i += 1;
         }
         // proper:
@@ -1565,6 +1586,12 @@ impl ScaleQuantile {
     }
     pub fn copy(&self) -> Self {
         self.clone()
+    }
+}
+
+impl Default for ScaleQuantile {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -1695,6 +1722,12 @@ impl ScaleQuantize {
     }
 }
 
+impl Default for ScaleQuantize {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 pub fn scale_quantize() -> ScaleQuantize {
     ScaleQuantize::new()
 }
@@ -1769,6 +1802,12 @@ impl ScaleThreshold {
     }
     pub fn copy(&self) -> Self {
         self.clone()
+    }
+}
+
+impl Default for ScaleThreshold {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -1860,7 +1899,7 @@ impl ScaleTime {
         self.core.domain.clone()
     }
     pub fn set_domain(&mut self, domain: &[f64]) -> &mut Self {
-        self.core.domain = domain.iter().map(|x| *x).collect();
+        self.core.domain = domain.to_vec();
         self
     }
     pub fn range(&self) -> Vec<f64> {
@@ -1896,17 +1935,15 @@ impl ScaleTime {
         let (mut t0, mut t1) = (d[0], d[d.len() - 1]);
         let reverse = t1 < t0;
         if reverse {
-            let t = t0;
-            t0 = t1;
-            t1 = t;
+            std::mem::swap(&mut t0, &mut t1);
         }
         // tickInterval
         let ivs = self.intervals();
         let durations: Vec<f64> = ivs.iter().map(|x| x.2).collect();
         let target = (t1 - t0).abs() / count;
         let i = crate::array::bisect_right(&durations, target);
-        let mut chosen: Option<crate::time::interval::Interval> = None;
-        let mut step: Option<i32> = None;
+        let chosen: Option<crate::time::interval::Interval>;
+        let step: Option<i32>;
         if i == ivs.len() {
             // year step
             let step_y = crate::array::tick_step(
@@ -1947,24 +1984,18 @@ impl ScaleTime {
         } else {
             iv
         };
-        let mut date0 = if self.utc {
+        let date0 = if self.utc {
             crate::time::Date::utc(t0)
         } else {
             crate::time::Date::local(t0)
         };
-        let mut date1 = if self.utc {
-            crate::time::Date::utc(t1)
-        } else {
-            crate::time::Date::local(t1)
-        };
-        let mut ticks = iv.range(&date0, &date1, 1);
         // inclusive stop: range to t1+1ms? JS t.range(t0, t1+1). We'll add one more by extending? Use range with stop+1ms
         let stop_date = if self.utc {
             crate::time::Date::utc(t1 + 1.0)
         } else {
             crate::time::Date::local(t1 + 1.0)
         };
-        ticks = iv.range(&date0, &stop_date, 1);
+        let ticks = iv.range(&date0, &stop_date, 1);
         let mut out: Vec<f64> = ticks.iter().map(|d| d.time()).collect();
         // dedup and ensure within
         out.retain(|&t| t >= t0.min(t1) && t <= t1.max(t0) || true);
@@ -1975,7 +2006,7 @@ impl ScaleTime {
     }
     pub fn tick_format(
         &self,
-        count: Option<f64>,
+        _count: Option<f64>,
         specifier: Option<&str>,
     ) -> Box<dyn Fn(f64) -> String> {
         if let Some(spec) = specifier {
@@ -2039,7 +2070,7 @@ impl ScaleTime {
             let day = floor(&day_iv, date);
             let week = floor(&week_iv, date);
             let month = floor(&month_iv, date);
-            let year = floor(&year_iv, date);
+            let _year = floor(&year_iv, date);
             let fmt = if second.time() < date.time() {
                 crate::time_format::time_format(".%L")
             } else if minute.time() < date.time() {
@@ -2070,7 +2101,7 @@ impl ScaleTime {
         let target = (t1 - t0).abs() / count;
         let i = crate::array::bisect_right(&durations, target);
         // choose interval
-        let mut iv = if i == ivs.len() {
+        let iv = if i == ivs.len() {
             if self.utc {
                 crate::time::interval::utc_year()
             } else {
@@ -2126,30 +2157,6 @@ pub enum SeqKind {
     Log(f64),
     Symlog(f64),
     Pow(f64),
-}
-
-fn seq_transform(kind: &SeqKind, domain0: f64) -> Arc<dyn Fn(f64) -> f64> {
-    match kind {
-        SeqKind::Identity => Arc::new(|x: f64| x),
-        SeqKind::Log(base) => {
-            let base = *base;
-            if domain0 < 0.0 {
-                Arc::new(move |x: f64| -((-x).abs().ln() / base.ln()))
-            } else {
-                Arc::new(move |x: f64| {
-                    x.abs().ln() / base.ln() * x.signum().max(0.0).min(1.0) + 0.0
-                }) // not exact
-            }
-        }
-        SeqKind::Symlog(c) => {
-            let c = *c;
-            Arc::new(move |x: f64| (x / c).abs().ln_1p() * x.signum())
-        }
-        SeqKind::Pow(e) => {
-            let e = *e;
-            Arc::new(move |x: f64| if x < 0.0 { -(-x).powf(e) } else { x.powf(e) })
-        }
-    }
 }
 
 // Fix Log transform for positive: use log with base
@@ -2255,7 +2262,7 @@ impl ScaleSequential {
             (tx - self.t0) * self.k10
         };
         if self.clamp {
-            param = param.max(0.0).min(1.0);
+            param = param.clamp(0.0, 1.0);
         }
         (self.interpolator)(param)
     }
@@ -2328,8 +2335,7 @@ pub fn scale_sequential() -> ScaleSequential {
     ScaleSequential::new(SeqKind::Identity, [0.0, 1.0])
 }
 pub fn scale_sequential_log() -> ScaleSequential {
-    let mut s = ScaleSequential::new(SeqKind::Log(10.0), [1.0, 10.0]);
-    s
+    ScaleSequential::new(SeqKind::Log(10.0), [1.0, 10.0])
 }
 pub fn scale_sequential_symlog() -> ScaleSequential {
     ScaleSequential::new(SeqKind::Symlog(1.0), [0.0, 1.0])
@@ -2395,6 +2401,12 @@ impl ScaleSequentialQuantile {
     }
     pub fn copy(&self) -> Self {
         self.clone()
+    }
+}
+
+impl Default for ScaleSequentialQuantile {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -2502,7 +2514,7 @@ impl ScaleDiverging {
         let tx = (self.transform)(x);
         let mut param = 0.5 + (tx - self.t1) * (if tx < self.t1 { self.k10 } else { self.k21 });
         if self.clamp {
-            param = param.max(0.0).min(1.0);
+            param = param.clamp(0.0, 1.0);
         }
         (self.interpolator)(param)
     }

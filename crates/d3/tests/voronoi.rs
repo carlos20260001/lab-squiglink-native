@@ -53,11 +53,11 @@ fn basic_edges_and_cells() {
             let arr = ex.as_array().unwrap();
             let got = ee.as_ref().unwrap();
             // endpoints
-            for k in 0..2 {
-                if arr[k].is_null() {
+            for (k, a) in arr.iter().enumerate().take(2) {
+                if a.is_null() {
                     assert!(got.v[k].is_none());
                 } else {
-                    assert!(same_point(got.v[k].unwrap(), &arr[k]));
+                    assert!(same_point(got.v[k].unwrap(), a));
                 }
             }
         }

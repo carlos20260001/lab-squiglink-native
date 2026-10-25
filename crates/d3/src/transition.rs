@@ -105,7 +105,10 @@ type NodeSchedules<N> = HashMap<usize, Schedule<N>>;
 
 fn get_node_schedules<N: Dom>(node: &N) -> NodeSchedules<N> {
     node.get_any("__transition")
-        .and_then(|a| a.downcast_ref::<RefCell<NodeSchedules<N>>>().map(|rc| rc.borrow().clone()))
+        .and_then(|a| {
+            a.downcast_ref::<RefCell<NodeSchedules<N>>>()
+                .map(|rc| rc.borrow().clone())
+        })
         .unwrap_or_default()
 }
 
@@ -388,10 +391,7 @@ impl<N: Dom> Transition<N> {
 }
 
 /// Create a transition from an existing selection.
-pub fn transition_selection<N: Dom>(
-    sel: &Selection<N>,
-    name: Option<&str>,
-) -> Transition<N> {
+pub fn transition_selection<N: Dom>(sel: &Selection<N>, name: Option<&str>) -> Transition<N> {
     let id = new_id();
     let name_str = name.map(|s| s.to_string());
     for group in &sel._groups {
