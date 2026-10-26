@@ -732,27 +732,43 @@ fn grid(painter: &egui::Painter, plot: Rect, transform: &Transform, minimum: &f3
         .into_iter()
         .map(|v| (v * f64::from(t)) as f32)
         .collect();
+    // The horizontal (dB) grid lines, drawn as a single d3 path tessellated
+    // by svg-tessellate, so the whole grid is d3-driven. Major and minor
+    // ticks differ in stroke width, so two paths are emitted.
+    let mut major_path = d3::path::Path::default();
+    let mut minor_path = d3::path::Path::default();
     for db in ticks {
         let y = transform.db_to_y(db);
-        if y >= plot.top() && y <= plot.bottom() {
-            // Major ticks (every 5 dB) get the thicker line and a label;
-            // minor ticks (only present when the step is 1 dB) get a thin
-            // line and no label, matching the reference's fmtY.
-            let major = (db as i32) % 5 == 0;
-            let thickness = if major { 0.7 } else { 0.2 };
-            painter.line_segment(
-                [Pos2::new(plot.left(), y), Pos2::new(plot.right(), y)],
-                Stroke::new(thickness, grid_color),
+        if y < plot.top() || y > plot.bottom() {
+            continue;
+        }
+        let major = (db as i32) % 5 == 0;
+        if major {
+            major_path.move_to(f64::from(plot.left()), f64::from(y));
+            major_path.line_to(f64::from(plot.right()), f64::from(y));
+        } else {
+            minor_path.move_to(f64::from(plot.left()), f64::from(y));
+            minor_path.line_to(f64::from(plot.right()), f64::from(y));
+        }
+        if major {
+            painter.text(
+                Pos2::new(plot.left() + 5.0, y),
+                Align2::LEFT_CENTER,
+                tick_db(db),
+                label_font.clone(),
+                label_color,
             );
-            if major {
-                painter.text(
-                    Pos2::new(plot.left() + 5.0, y),
-                    Align2::LEFT_CENTER,
-                    tick_db(db),
-                    label_font.clone(),
-                    label_color,
-                );
-            }
+        }
+    }
+    for (path, thickness) in [(major_path, 0.7_f32), (minor_path, 0.2_f32)] {
+        let shapes = svg_tessellate::tessellate(
+            &path.to_string(),
+            Some(Stroke::new(thickness, grid_color)),
+            None,
+            svg_tessellate::Options::default(),
+        );
+        for shape in shapes {
+            painter.add(shape);
         }
     }
 
