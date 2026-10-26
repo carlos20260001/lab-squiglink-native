@@ -1149,20 +1149,32 @@ pub fn export_svg(app: &App, width: f32, height: f32) -> String {
         if curve.points.is_empty() {
             continue;
         }
-        let points: Vec<Pos2> = curve
+        let points: Vec<[f64; 2]> = curve
             .points
             .iter()
-            .map(|point| Pos2::new(transform.hz_to_x(point.hz), transform.db_to_y(point.db)))
+            .map(|point| {
+                [
+                    f64::from(transform.hz_to_x(point.hz)),
+                    f64::from(transform.db_to_y(point.db)),
+                ]
+            })
             .collect();
-        let path = sample_curve_path(&points, app.session.smooth_level > 0);
+        let smooth = app.session.smooth_level > 0;
+        let mut path = d3::path::Path::default();
+        let mut curve_shape = if smooth {
+            d3::shape::curve_natural()
+        } else {
+            d3::shape::curve_cardinal(0.5)
+        };
+        curve_shape.line_start(&mut path);
+        for point in &points {
+            curve_shape.point(&mut path, point[0], point[1]);
+        }
+        curve_shape.line_end(&mut path);
+        let d = path.to_string();
         let color = hex(theme::color(curve.color));
-        let points = path
-            .iter()
-            .map(|point| format!("{:.2},{:.2}", point.x, point.y))
-            .collect::<Vec<_>>()
-            .join(" ");
         svg.push_str(&format!(
-            "<polyline points=\"{points}\" fill=\"none\" stroke=\"{color}\" stroke-width=\"2\"{dash} />\n",
+            "<path d=\"{d}\" fill=\"none\" stroke=\"{color}\" stroke-width=\"2\"{dash} />\n",
             dash = if curve.dashed {
                 " stroke-dasharray=\"6 4\""
             } else {
