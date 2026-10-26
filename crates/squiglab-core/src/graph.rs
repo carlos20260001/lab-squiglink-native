@@ -184,12 +184,14 @@ pub fn format_frequency(hz: f32) -> String {
     }
 }
 pub fn format_axis_frequency(hz: f32) -> String {
+    // Match the reference's tickFormat: f => f>=1000 ? (f/1000)+"k" : f,
+    // so 1500 becomes "1.5k" rather than "1k".
     if hz <= 20.0 {
         format!("{hz:.0}Hz")
     } else if hz >= 20000.0 {
         format!("{:.0}kHz", hz / 1000.0)
     } else if hz >= 1000.0 {
-        format!("{}k", hz as u32 / 1000)
+        format!("{}k", hz / 1000.0)
     } else {
         format!("{hz:.0}")
     }
