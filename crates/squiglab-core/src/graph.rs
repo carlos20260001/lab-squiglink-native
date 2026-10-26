@@ -199,7 +199,8 @@ pub fn nearest_point(points: &[FRPoint], frequency: f32) -> Option<&FRPoint> {
     let upper = points.partition_point(|point| point.hz < frequency);
     match (upper.checked_sub(1), points.get(upper)) {
         (Some(lower), Some(upper_point)) => {
-            if (frequency / points[lower].hz).ln().abs() <= (upper_point.hz / frequency).ln().abs()
+            if d3::ieee754::log(f64::from(frequency) / f64::from(points[lower].hz)).abs()
+                <= d3::ieee754::log(f64::from(upper_point.hz) / f64::from(frequency)).abs()
             {
                 Some(&points[lower])
             } else {
