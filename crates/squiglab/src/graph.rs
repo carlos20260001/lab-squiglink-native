@@ -847,17 +847,43 @@ fn curves_into(
         if curve.points.is_empty() {
             continue;
         }
-        let points: Vec<Pos2> = curve
+        let points: Vec<[f64; 2]> = curve
             .points
             .iter()
-            .map(|point| Pos2::new(transform.hz_to_x(point.hz), transform.db_to_y(point.db)))
+            .map(|point| {
+                [
+                    f64::from(transform.hz_to_x(point.hz)),
+                    f64::from(transform.db_to_y(point.db)),
+                ]
+            })
             .collect();
-        let path = sample_curve_path(&points, app.session.smooth_level > 0);
         let color = theme::color(curve.color);
         if curve.dashed {
+            let sampled: Vec<Pos2> = points.iter().map(|p| Pos2::new(p[0] as f32, p[1] as f32)).collect();
+            let path = sample_curve_path(&sampled, app.session.smooth_level > 0);
             dashed_path(painter, &path, color);
         } else {
-            painter.add(egui::Shape::line(path, Stroke::new(2.0, color)));
+            let smooth = app.session.smooth_level > 0;
+            let mut path = d3::path::Path::default();
+            let mut curve_shape = if smooth {
+                d3::shape::curve_natural()
+            } else {
+                d3::shape::curve_cardinal(0.5)
+            };
+            curve_shape.line_start(&mut path);
+            for point in &points {
+                curve_shape.point(&mut path, point[0], point[1]);
+            }
+            curve_shape.line_end(&mut path);
+            let shapes = svg_tessellate::tessellate(
+                &path.to_string(),
+                Some(Stroke::new(2.0, color)),
+                None,
+                svg_tessellate::Options::default(),
+            );
+            for shape in shapes {
+                painter.add(shape);
+            }
         }
     }
 }
