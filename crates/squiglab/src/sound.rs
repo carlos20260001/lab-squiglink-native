@@ -61,19 +61,29 @@ pub fn show(ui: &mut Ui, app: &mut App) {
 
     // --- the sources ---
     card(ui, "Pink Noise", |ui| {
-        if play_button(ui, app.source == Source::PinkNoise && app.player.is_some()) {
-            play(app, Source::PinkNoise);
+        let playing = app.player.is_some() && app.source == Source::PinkNoise;
+        if play_button(ui, playing) {
+            if playing {
+                stop(app);
+            } else {
+                play(app, Source::PinkNoise);
+            }
         }
     });
     ui.add_space(metrics::GAP);
     card(ui, "Tone Generator", |ui| {
-        if play_button(ui, app.source.is_tone() && app.player.is_some()) {
-            play(
-                app,
-                Source::Tone {
-                    freq: f64::from(app.frequency),
-                },
-            );
+        let playing = app.player.is_some() && app.source.is_tone();
+        if play_button(ui, playing) {
+            if playing {
+                stop(app);
+            } else {
+                play(
+                    app,
+                    Source::Tone {
+                        freq: f64::from(app.frequency),
+                    },
+                );
+            }
         }
         ui.add_space(metrics::GAP);
         // The reference's row: the slider, and the frequency it is at.
@@ -168,8 +178,24 @@ pub fn show(ui: &mut Ui, app: &mut App) {
         {
             app.tone_band.1 = high;
         }
-        // The high bound never falls below the low one.
+        // Keep the range valid, then keep the selected frequency inside it.
         app.tone_band.1 = app.tone_band.1.max(app.tone_band.0);
+        let frequency = app.frequency.clamp(app.tone_band.0, app.tone_band.1);
+        if frequency != app.frequency {
+            app.frequency = frequency;
+            // If a tone is already playing, changing the range must not leave
+            // the actual oscillator at a frequency outside the selected band.
+            if app.player.is_some() && app.source.is_tone() {
+                if let Some(player) = &app.player {
+                    player.set_settings(Settings {
+                        source: Source::Tone {
+                            freq: f64::from(frequency),
+                        },
+                        volume: app.volume,
+                    });
+                }
+            }
+        }
     });
     if let Some(message) = &app.sound_message {
         ui.add_space(metrics::GAP);
