@@ -38,7 +38,7 @@ fn x_tick_frequencies() -> Vec<f32> {
 }
 
 /// The graph, in the middle of the window.
-pub fn show(ui: &mut egui::Ui, app: &mut App) {
+pub fn show_legacy(ui: &mut egui::Ui, app: &mut App) {
     let palette = theme::current_palette();
     // The reference's rule for the graph's width: two and a bit units across
     // for every unit of the window's height, less the chrome around it. The
@@ -69,6 +69,19 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
         scale(app, &painter, rect, &response);
         eq_editor(app, &painter, plot, &transform, &response, &ctx);
     });
+}
+
+/// The graph, in the middle of the window.
+///
+/// Rewrite entry point: the rendering is being ported to d3-driven graphics
+/// piece by piece. Each section below is replaced in turn; until then it
+/// delegates to the legacy implementation so the app keeps working.
+pub fn show(ui: &mut egui::Ui, app: &mut App) {
+    // TODO(d3-rewrite): axes
+    // TODO(d3-rewrite): curves
+    // TODO(d3-rewrite): labels
+    // TODO(d3-rewrite): editor
+    show_legacy(ui, app);
 }
 
 /// The plot's own area, inside the box: room for the dB scale on the left
