@@ -709,27 +709,39 @@ fn grid(painter: &egui::Painter, plot: Rect, transform: &Transform, minimum: &f3
     let label_font = FontId::new(10.0, egui::FontFamily::Monospace);
     let label_color = palette.text_primary;
 
-    // The horizontal lines: every five decibels.
-    let step = 5.0_f32;
-    let mut db = (*minimum / step).ceil() * step;
-    while db <= *maximum {
+    // The horizontal lines: the reference's own dB ticks. The step is 1 dB
+    // when the range is small and 5 dB otherwise, and the ticks run from the
+    // ceiling of the lower bound to the floor of the upper one.
+    let range = *maximum - *minimum;
+    let t = if range < 40.0 { 1.0_f32 } else { 5.0_f32 };
+    let y0 = (*minimum / t).ceil();
+    let y1 = (*maximum / t).floor();
+    let ticks: Vec<f32> = d3::array::range(f64::from(y0), Some(f64::from(y1) + 1.0), Some(f64::from(t)))
+        .into_iter()
+        .map(|v| (v * f64::from(t)) as f32)
+        .collect();
+    for db in ticks {
         let y = transform.db_to_y(db);
         if y >= plot.top() && y <= plot.bottom() {
+            // Major ticks (every 5 dB) get the thicker line and a label;
+            // minor ticks (only present when the step is 1 dB) get a thin
+            // line and no label, matching the reference's fmtY.
+            let major = (db as i32) % 5 == 0;
+            let thickness = if major { 0.7 } else { 0.2 };
             painter.line_segment(
                 [Pos2::new(plot.left(), y), Pos2::new(plot.right(), y)],
-                Stroke::new(0.7, grid_color),
+                Stroke::new(thickness, grid_color),
             );
-            // The reference writes the figures to the right of the scale,
-            // just inside the plot's own edge.
-            painter.text(
-                Pos2::new(plot.left() + 5.0, y),
-                Align2::LEFT_CENTER,
-                tick_db(db),
-                label_font.clone(),
-                label_color,
-            );
+            if major {
+                painter.text(
+                    Pos2::new(plot.left() + 5.0, y),
+                    Align2::LEFT_CENTER,
+                    tick_db(db),
+                    label_font.clone(),
+                    label_color,
+                );
+            }
         }
-        db += step;
     }
 
     // The "dB" the reference writes up the left of the scale, turned on its
@@ -1088,22 +1100,32 @@ pub fn export_svg(app: &App, width: f32, height: f32) -> String {
     // The grid and the dB scale.
     let grid_color = hex(palette.border.gamma_multiply(0.6));
     let label_color = hex(palette.text_tertiary);
-    let mut db = (minimum / 5.0).ceil() * 5.0;
-    while db <= maximum {
+    let range = maximum - minimum;
+    let t = if range < 40.0 { 1.0_f32 } else { 5.0_f32 };
+    let y0 = (minimum / t).ceil();
+    let y1 = (maximum / t).floor();
+    let db_ticks: Vec<f32> = d3::array::range(f64::from(y0), Some(f64::from(y1) + 1.0), Some(f64::from(t)))
+        .into_iter()
+        .map(|v| (v * f64::from(t)) as f32)
+        .collect();
+    for db in db_ticks {
         let y = transform.db_to_y(db);
         if y >= plot.top() && y <= plot.bottom() {
+            let major = (db as i32) % 5 == 0;
+            let thickness = if major { 0.7 } else { 0.2 };
             svg.push_str(&format!(
-                "<line x1=\"{:.2}\" y1=\"{:.2}\" x2=\"{:.2}\" y2=\"{:.2}\" stroke=\"{grid_color}\" stroke-width=\"0.7\" />\n",
-                plot.left(), y, plot.right(), y
+                "<line x1=\"{:.2}\" y1=\"{:.2}\" x2=\"{:.2}\" y2=\"{:.2}\" stroke=\"{grid_color}\" stroke-width=\"{:.1}\" />\n",
+                plot.left(), y, plot.right(), y, thickness
             ));
-            svg.push_str(&format!(
-                "<text x=\"{:.2}\" y=\"{:.2}\" text-anchor=\"end\" font-family=\"sans-serif\" font-size=\"11\" fill=\"{label_color}\">{}</text>\n",
-                plot.left() - 6.0,
-                y + 4.0,
-                tick_db(db)
-            ));
+            if major {
+                svg.push_str(&format!(
+                    "<text x=\"{:.2}\" y=\"{:.2}\" text-anchor=\"end\" font-family=\"sans-serif\" font-size=\"11\" fill=\"{label_color}\">{}</text>\n",
+                    plot.left() - 6.0,
+                    y + 4.0,
+                    tick_db(db)
+                ));
+            }
         }
-        db += 5.0;
     }
     for frequency in x_tick_frequencies() {
         if frequency < transform.x_range.0 || frequency > transform.x_range.1 {
