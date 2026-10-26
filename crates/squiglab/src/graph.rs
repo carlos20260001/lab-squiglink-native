@@ -16,7 +16,6 @@ use squiglab_core::graph::{
 use crate::app::App;
 use crate::theme::{self, metrics, TypeStep};
 
-
 /// The frequencies the axis is marked at, taken from the reference's own
 /// `d3.merge([1,2,3].map(e => xvals.map(m => m * Math.pow(10, e)))).concat([20000])`
 /// with `xvals = [2,3,4,5,6,8,10,15]`, so the native's grid agrees with the
@@ -26,7 +25,12 @@ fn x_tick_frequencies() -> Vec<f32> {
     let mut lists: Vec<Vec<f64>> = Vec::new();
     for e in [1_i32, 2, 3] {
         let e = e as f64;
-        lists.push(xvals.iter().map(|m| m * d3::ieee754::pow(10.0, e)).collect());
+        lists.push(
+            xvals
+                .iter()
+                .map(|m| m * d3::ieee754::pow(10.0, e))
+                .collect(),
+        );
     }
     let mut ticks = d3::array::merge(&lists);
     ticks.push(20000.0);
@@ -646,19 +650,18 @@ fn db_at(points: &[squiglab_core::data::FRPoint], hz: f64) -> f32 {
     if points.is_empty() {
         return 0.0;
     }
-    let hz = hz as f32;
     for window in points.windows(2) {
         let (left, right) = (&window[0], &window[1]);
-        if hz >= left.hz && hz <= right.hz {
-            let span = right.hz - left.hz;
+        if hz >= f64::from(left.hz) && hz <= f64::from(right.hz) {
+            let span = f64::from(right.hz) - f64::from(left.hz);
             if span <= 0.0 {
                 return left.db;
             }
-            let place = (hz - left.hz) / span;
-            return left.db + (right.db - left.db) * place;
+            let place = (hz - f64::from(left.hz)) / span;
+            return (f64::from(left.db) + (f64::from(right.db) - f64::from(left.db)) * place) as f32;
         }
     }
-    if hz < points[0].hz {
+    if hz < f64::from(points[0].hz) {
         points[0].db
     } else {
         points[points.len() - 1].db
