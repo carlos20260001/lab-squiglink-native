@@ -153,11 +153,13 @@ pub fn y_range(curves: &[PlotCurve<'_>]) -> (f32, f32) {
     } else {
         &measuring
     };
+    // Run the bounds in f64 (the reference's own number type) and snap to
+    // the five-decibel grid the reference's axis uses.
     let bounds = curves
         .iter()
-        .flat_map(|curve| curve.points.iter().map(|point| point.db))
+        .flat_map(|curve| curve.points.iter().map(|point| f64::from(point.db)))
         .filter(|value| value.is_finite())
-        .fold(None, |bounds: Option<(f32, f32)>, value| {
+        .fold(None, |bounds: Option<(f64, f64)>, value| {
             Some(match bounds {
                 Some((min, max)) => (min.min(value), max.max(value)),
                 None => (value, value),
@@ -167,8 +169,8 @@ pub fn y_range(curves: &[PlotCurve<'_>]) -> (f32, f32) {
         Some((min, max)) => {
             let padding = ((max - min) * 0.08).max(3.0);
             (
-                ((min - padding) / 5.0).floor() * 5.0,
-                ((max + padding) / 5.0).ceil() * 5.0,
+                (((min - padding) / 5.0).floor() * 5.0) as f32,
+                (((max + padding) / 5.0).ceil() * 5.0) as f32,
             )
         }
         None => (20.0, 120.0),
@@ -397,10 +399,11 @@ pub fn place_labels(mut labels: Vec<(String, f32, f32)>, plot_rect: Rect) -> BTr
         .map(|(key, top, height)| {
             (
                 key,
-                top.clamp(
-                    plot_rect.top(),
-                    (plot_rect.bottom() - height).max(plot_rect.top()),
-                ),
+                (top as f64)
+                    .clamp(
+                        f64::from(plot_rect.top()),
+                        f64::from((plot_rect.bottom() - height).max(plot_rect.top())),
+                    ) as f32,
             )
         })
         .collect()
@@ -418,9 +421,14 @@ pub fn clamp_label_position(position: Pos2, size: Vec2, bounds: Rect) -> Pos2 {
 }
 
 pub fn scaled_y_range((minimum, maximum): (f32, f32), scale: f32) -> (f32, f32) {
+    // Evaluate in f64, matching the reference's number type, and clamp the
+    // scale factor the same way the reference's slider does.
+    let minimum = f64::from(minimum);
+    let maximum = f64::from(maximum);
+    let scale = f64::from(scale).clamp(0.35, 4.0);
     let center = (minimum + maximum) / 2.0;
-    let half_range = (maximum - minimum) * scale.clamp(0.35, 4.0) / 2.0;
-    (center - half_range, center + half_range)
+    let half_range = (maximum - minimum) * scale / 2.0;
+    ((center - half_range) as f32, (center + half_range) as f32)
 }
 
 pub fn sample_curve_path(points: &[Pos2], smooth: bool) -> Vec<Pos2> {
