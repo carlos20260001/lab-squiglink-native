@@ -766,16 +766,31 @@ fn grid(painter: &egui::Painter, plot: Rect, transform: &Transform, minimum: &f3
         label_color,
     );
 
-    // The vertical lines: the marked frequencies.
+    // The vertical lines: the marked frequencies, drawn as a single d3 path
+    // tessellated by svg-tessellate, so the grid is d3-driven too.
+    let mut path = d3::path::Path::default();
     for frequency in x_tick_frequencies() {
         if frequency < transform.x_range.0 || frequency > transform.x_range.1 {
             continue;
         }
         let x = transform.hz_to_x(frequency);
-        painter.line_segment(
-            [Pos2::new(x, plot.top()), Pos2::new(x, plot.bottom())],
-            Stroke::new(0.7, grid_color),
-        );
+        path.move_to(f64::from(x), f64::from(plot.top()));
+        path.line_to(f64::from(x), f64::from(plot.bottom()));
+    }
+    let shapes = svg_tessellate::tessellate(
+        &path.to_string(),
+        Some(Stroke::new(0.7, grid_color)),
+        None,
+        svg_tessellate::Options::default(),
+    );
+    for shape in shapes {
+        painter.add(shape);
+    }
+    for frequency in x_tick_frequencies() {
+        if frequency < transform.x_range.0 || frequency > transform.x_range.1 {
+            continue;
+        }
+        let x = transform.hz_to_x(frequency);
         painter.text(
             Pos2::new(x, plot.bottom() + 6.0),
             Align2::CENTER_TOP,
