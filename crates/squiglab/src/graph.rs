@@ -141,7 +141,7 @@ fn scale(app: &mut App, painter: &egui::Painter, rect: Rect, response: &egui::Re
     let centre = (minimum + maximum) / 2.0;
     let half = (maximum - minimum) / 2.0;
     let middle_y = plot.center().y;
-    let half_y = half / (maximum - minimum) * plot.height();
+    let half_y = 77.0 / 2.0;
     let x = plot.left() + 2.0;
 
     // The scale itself: the reference's own shape, which carries the line
@@ -790,7 +790,10 @@ fn grid(painter: &egui::Painter, plot: Rect, transform: &Transform, minimum: &f3
             );
         }
     }
-    for (path, thickness) in [(major_path, 0.7_f32), (minor_path, 0.2_f32)] {
+    let r = (maximum - minimum).max(1.0);
+    let major_thickness = (0.15 * (1.0 + 45.0 / r)).clamp(0.1, 1.0);
+    let minor_thickness = (0.2 * (1.0 - r / 45.0)).clamp(0.05, 0.3);
+    for (path, thickness) in [(major_path, major_thickness), (minor_path, minor_thickness)] {
         let shapes = svg_tessellate::tessellate(
             &path.to_string(),
             Some(Stroke::new(thickness, grid_color)),

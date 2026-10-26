@@ -365,15 +365,18 @@ pub fn corner_label_position(
         LabelLayout::CurveEnd => Pos2::ZERO,
         LabelLayout::CornerBottomLeft => Pos2::new(
             plot_rect.left() + inset.x + 26.0,
-            plot_rect.bottom() - inset.y - size.y - row * line,
+            (plot_rect.bottom() - inset.y - size.y - row * line)
+                .clamp(plot_rect.top(), plot_rect.bottom()),
         ),
         LabelLayout::CornerBottomRight => Pos2::new(
             plot_rect.right() - inset.x - size.x - 26.0,
-            plot_rect.bottom() - inset.y - size.y - row * line,
+            (plot_rect.bottom() - inset.y - size.y - row * line)
+                .clamp(plot_rect.top(), plot_rect.bottom()),
         ),
         LabelLayout::CornerTopLeft => Pos2::new(
             plot_rect.left() + inset.x + 26.0,
-            plot_rect.top() + inset.y + 16.0 + row * line,
+            (plot_rect.top() + inset.y + 16.0 + row * line)
+                .clamp(plot_rect.top(), plot_rect.bottom()),
         ),
     }
 }
@@ -393,7 +396,7 @@ pub fn place_labels(mut labels: Vec<(String, f32, f32)>, plot_rect: Rect) -> BTr
     }
     let mut next_top = plot_rect.bottom();
     for (_, top, height) in positioned.iter_mut().rev() {
-        *top = top.min(next_top - *height);
+        *top = top.min(next_top - *height).max(plot_rect.top());
         next_top = *top - 2.0;
     }
     positioned
