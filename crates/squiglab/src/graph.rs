@@ -408,11 +408,17 @@ fn eq_editor(
         };
         let left = transform.hz_to_x(low as f32);
         let right = transform.hz_to_x(high as f32);
-        painter.rect_filled(
-            Rect::from_min_max(Pos2::new(left, plot.top()), Pos2::new(right, plot.bottom())),
-            0.0,
-            palette.accent.gamma_multiply(0.18),
+        let mut path = d3::path::Path::default();
+        path.rect(f64::from(left), f64::from(plot.top()), f64::from(right - left), f64::from(plot.bottom() - plot.top()));
+        let shapes = svg_tessellate::tessellate(
+            &path.to_string(),
+            None,
+            Some(palette.accent.gamma_multiply(0.18)),
+            svg_tessellate::Options::default(),
         );
+        for shape in shapes {
+            painter.add(shape);
+        }
     }
 
     // The marks.
@@ -983,11 +989,22 @@ fn labels(
         // The name is preceded by a bar of the curve's colour, so a name that
         // lies over another curve can still be read.
         let swatch = Pos2::new(plot.left() + 12.0, *top + TypeStep::Label.size() * 0.45);
-        painter.rect_filled(
-            Rect::from_min_max(swatch - Vec2::new(0.0, 5.0), swatch + Vec2::new(10.0, 5.0)),
-            0.0,
-            color,
+        let mut path = d3::path::Path::default();
+        path.rect(
+            f64::from(swatch.x - 0.0),
+            f64::from(swatch.y - 5.0),
+            10.0,
+            10.0,
         );
+        let shapes = svg_tessellate::tessellate(
+            &path.to_string(),
+            None,
+            Some(color),
+            svg_tessellate::Options::default(),
+        );
+        for shape in shapes {
+            painter.add(shape);
+        }
         painter.text(
             Pos2::new(plot.left() + 28.0, *top),
             Align2::LEFT_TOP,
