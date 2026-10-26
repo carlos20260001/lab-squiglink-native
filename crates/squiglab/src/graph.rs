@@ -38,17 +38,15 @@ fn x_tick_frequencies() -> Vec<f32> {
 }
 
 /// The graph, in the middle of the window.
-pub fn show_legacy(ui: &mut egui::Ui, app: &mut App) {
+///
+/// Rewrite entry point: the rendering is being ported to d3-driven graphics
+/// piece by piece. Each section below is replaced in turn; until then it
+/// delegates to the legacy implementation so the app keeps working.
+pub fn show(ui: &mut egui::Ui, app: &mut App) {
     let palette = theme::current_palette();
-    // The reference's rule for the graph's width: two and a bit units across
-    // for every unit of the window's height, less the chrome around it. The
-    // graph keeps its proportion, so the room there is sets the height and
-    // the height sets the width.
     let window_height = ui.ctx().content_rect().height();
     let by_height =
         (window_height - metrics::GRAPH_CHROME_HEIGHT).max(120.0) * metrics::GRAPH_ASPECT;
-    // The graph is as tall as the reference's rule says, and the column
-    // scrolls under it, as the reference's page does.
     let height = (ui.available_height() - 40.0)
         .min(by_height / metrics::GRAPH_ASPECT)
         .max(160.0);
@@ -64,24 +62,25 @@ pub fn show_legacy(ui: &mut egui::Ui, app: &mut App) {
         let rect = response.rect;
         painter.rect_filled(rect, 0.0, palette.graph);
         let plot = plot_rect(rect);
+        let curves = plot_curves(app);
+        let (minimum, maximum) = match app.session.graph_range {
+            Some(range) => range,
+            None => {
+                let (minimum, maximum) = y_range(&curves);
+                scaled_y_range((minimum, maximum), app.session.y_scale)
+            }
+        };
         let transform = transform_for(app, plot);
-        draw(app, &painter, rect, response.hover_pos());
+
+        // axes (d3-backed)
+        render_axes(&painter, plot, &transform, &minimum, &maximum);
+        // curves, labels, inspector, rig line, watermark
+        render_body(&painter, app, rect, plot, &transform, &curves, response.hover_pos());
+        // dB scale drag handle
         scale(app, &painter, rect, &response);
+        // equalizer editor
         eq_editor(app, &painter, plot, &transform, &response, &ctx);
     });
-}
-
-/// The graph, in the middle of the window.
-///
-/// Rewrite entry point: the rendering is being ported to d3-driven graphics
-/// piece by piece. Each section below is replaced in turn; until then it
-/// delegates to the legacy implementation so the app keeps working.
-pub fn show(ui: &mut egui::Ui, app: &mut App) {
-    // TODO(d3-rewrite): axes
-    // TODO(d3-rewrite): curves
-    // TODO(d3-rewrite): labels
-    // TODO(d3-rewrite): editor
-    show_legacy(ui, app);
 }
 
 /// The plot's own area, inside the box: room for the dB scale on the left
@@ -262,31 +261,31 @@ fn scale_shape(
 }
 
 /// Draw the graph into a rectangle, with the pointer where it is.
-fn draw(app: &App, painter: &egui::Painter, rect: Rect, pointer: Option<Pos2>) {
-    let curves = plot_curves(app);
+fn render_axes(
+    painter: &egui::Painter,
+    plot: Rect,
+    transform: &Transform,
+    minimum: &f32,
+    maximum: &f32,
+) {
+    grid(painter, plot, transform, minimum, maximum);
+}
 
-    let plot = plot_rect(rect);
-    if plot.width() <= 0.0 || plot.height() <= 0.0 {
-        return;
-    }
-
-    // The range is the curves' own, unless the user has dragged the scale.
-    let (minimum, maximum) = match app.session.graph_range {
-        Some(range) => range,
-        None => {
-            let (minimum, maximum) = y_range(&curves);
-            scaled_y_range((minimum, maximum), app.session.y_scale)
-        }
-    };
-    let transform = transform_for(app, plot);
-
-    grid(painter, plot, &transform, &minimum, &maximum);
-    band_names(painter, plot, &transform);
-    curves_into(painter, app, &curves, &transform);
+fn render_body(
+    painter: &egui::Painter,
+    app: &App,
+    rect: Rect,
+    plot: Rect,
+    transform: &Transform,
+    curves: &[PlotCurve<'_>],
+    pointer: Option<Pos2>,
+) {
+    band_names(painter, plot, transform);
+    curves_into(painter, app, curves, transform);
     if app.session.inspect_mode {
-        inspector(painter, app, &curves, &transform, plot, pointer);
+        inspector(painter, app, curves, transform, plot, pointer);
     }
-    labels(painter, app, &curves, &transform, plot);
+    labels(painter, app, curves, transform, plot);
     rig_line(painter, app, rect);
     watermark(painter, plot);
 }
