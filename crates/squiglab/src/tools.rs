@@ -66,6 +66,7 @@ fn label(ui: &mut Ui, text: &str) {
 /// "Full", because the whole axis is what the graph shows until one of the
 /// three is pressed.
 fn zoom(ui: &mut Ui, app: &mut App) {
+    let palette = theme::current_palette();
     label(ui, "Zoom");
     for (region, name) in [
         (squiglab_core::graph::ZoomRegion::Bass, "Bass"),
@@ -73,12 +74,24 @@ fn zoom(ui: &mut Ui, app: &mut App) {
         (squiglab_core::graph::ZoomRegion::Treble, "Treble"),
     ] {
         let selected = app.session.zoom == region;
-        if ui
-            .selectable_label(selected, name)
-            .on_hover_text("Show this part of the frequency axis")
-            .clicked()
-        {
-            app.session.zoom = region;
+        let resp = ui
+            .selectable_label(
+                selected,
+                RichText::new(name)
+                    .font(TypeStep::Control.font())
+                    .color(if selected {
+                        palette.on_accent
+                    } else {
+                        palette.accent_text
+                    }),
+            )
+            .on_hover_text("Show this part of the frequency axis");
+        if resp.clicked() {
+            if app.session.zoom == region {
+                app.session.zoom = squiglab_core::graph::ZoomRegion::Full;
+            } else {
+                app.session.zoom = region;
+            }
         }
     }
 }
