@@ -815,81 +815,22 @@ fn grid(painter: &egui::Painter, plot: Rect, transform: &Transform, minimum: &f3
         label_color,
     );
 
-    // The vertical lines: the marked frequencies. The reference varies the
-    // stroke thickness per tick via tickPattern = [3,0,0,1,0,0,2,0] and
-    // tickThickness = [0.2,0.4,0.4,0.9,1.5], with the first and last ticks
-    // getting the thickest stroke. Group the lines by thickness so each group
-    // is a single d3 path tessellated by svg-tessellate.
-    let tick_pattern: [usize; 8] = [3, 0, 0, 1, 0, 0, 2, 0];
-    let tick_thickness: [f32; 5] = [0.2, 0.4, 0.4, 0.9, 1.5];
+    // The vertical lines: the marked frequencies from d3 tick values.
     let ticks = x_tick_frequencies();
-    // Build one path per thickness level.
-    let mut paths: [d3::path::Path; 5] = [
-        d3::path::Path::default(),
-        d3::path::Path::default(),
-        d3::path::Path::default(),
-        d3::path::Path::default(),
-        d3::path::Path::default(),
-    ];
-    for (i, frequency) in ticks.iter().enumerate() {
-        if *frequency < transform.x_range.0 || *frequency > transform.x_range.1 {
+    for frequency in ticks {
+        if frequency < transform.x_range.0 || frequency > transform.x_range.1 {
             continue;
         }
-        let x = transform.hz_to_x(*frequency);
-        let tick_type = if i == 0 || i == 3 * 8 {
-            4
-        } else {
-            tick_pattern[i % 8]
-        };
-        let thickness_idx = tick_type;
-        paths[thickness_idx].move_to(f64::from(x), f64::from(plot.top()));
-        paths[thickness_idx].line_to(f64::from(x), f64::from(plot.bottom()));
-    }
-    for (idx, path) in paths.iter().enumerate() {
-        if path.to_string().is_empty() {
-            continue;
-        }
-        let thickness = tick_thickness[idx];
-        let shapes = svg_tessellate::tessellate(
-            &path.to_string(),
-            Some(Stroke::new(thickness, grid_color)),
-            None,
-            svg_tessellate::Options::default(),
+        let x = transform.hz_to_x(frequency);
+        painter.line_segment(
+            [Pos2::new(x, plot.top()), Pos2::new(x, plot.bottom())],
+            Stroke::new(0.7, grid_color),
         );
-        for shape in shapes {
-            painter.add(shape);
-        }
-    }
-    // Labels: the reference shrinks the ticks whose tickPattern entry is 0,
-    // and nudges the first/last labels.
-    for (i, frequency) in ticks.iter().enumerate() {
-        if *frequency < transform.x_range.0 || *frequency > transform.x_range.1 {
-            continue;
-        }
-        let x = transform.hz_to_x(*frequency);
-        let small = tick_pattern[i % 8] == 0 && !(i == 0 || i == 3 * 8);
-        let font = if small {
-            FontId::new(8.6, egui::FontFamily::Monospace)
-        } else {
-            label_font.clone()
-        };
-        let dx = if i == 0 {
-            4.0
-        } else if i == ticks.len() - 1 {
-            -5.0
-        } else {
-            0.0
-        };
-        let text = if i == ticks.len() - 1 {
-            "20kHz".to_string()
-        } else {
-            format_axis_frequency(*frequency)
-        };
         painter.text(
-            Pos2::new(x + dx, plot.bottom() + 6.0),
+            Pos2::new(x, plot.bottom() + 6.0),
             Align2::CENTER_TOP,
-            text,
-            font,
+            format_axis_frequency(frequency),
+            label_font.clone(),
             label_color,
         );
     }
