@@ -1,0 +1,10 @@
+[package]
+name = "svg-tessellate"
+version = "0.1.0"
+edition = "2021"
+description = "Tessellate SVG path data into egui shapes (polylines), without pixmaps."
+license = "MIT"
+
+[dependencies]
+egui = "0.36"
+svgtypes = "0.16"

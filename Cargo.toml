@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/d3", "crates/squiglab-core", "crates/squiglab"]
+members = ["crates/d3", "crates/squiglab-core", "crates/squiglab", "crates/svg-tessellate"]
 resolver = "2"
 
 # The program's own crate is the member of this workspace. The rules of the
