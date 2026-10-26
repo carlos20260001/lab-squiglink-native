@@ -9,7 +9,7 @@
 use egui::{Align2, Color32, FontId, Pos2, Rect, Sense, Stroke, Vec2};
 
 use squiglab_core::graph::{
-    format_axis_frequency, format_frequency, nice_limit, place_labels, sample_curve_path,
+    format_axis_frequency, format_frequency, nice_limit, place_labels,
     scaled_y_range, tick_db, y_range, LabelLayout, PlotCurve, Transform, FREQUENCY_BANDS,
 };
 
@@ -60,7 +60,17 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
         let (response, painter) =
             ui.allocate_painter(Vec2::new(width, height), Sense::click_and_drag());
         let rect = response.rect;
-        painter.rect_filled(rect, 0.0, palette.graph);
+        let mut path = d3::path::Path::default();
+        path.rect(f64::from(rect.left()), f64::from(rect.top()), f64::from(rect.width()), f64::from(rect.height()));
+        let shapes = svg_tessellate::tessellate(
+            &path.to_string(),
+            None,
+            Some(palette.graph),
+            svg_tessellate::Options::default(),
+        );
+        for shape in shapes {
+            painter.add(shape);
+        }
         let plot = plot_rect(rect);
         let curves = plot_curves(app);
         let (minimum, maximum) = match app.session.graph_range {
@@ -421,7 +431,7 @@ fn eq_editor(
         }
     }
 
-    // The marks.
+    // The marks, drawn as d3 arc paths tessellated by svg-tessellate.
     for marker in &markers {
         let centre = Pos2::new(
             transform.hz_to_x(marker.hz as f32),
@@ -437,8 +447,22 @@ fn eq_editor(
             app,
             app.session.eq_phone.unwrap_or(0),
         ));
-        painter.circle_filled(centre, radius, palette.graph);
-        painter.circle_stroke(centre, radius, Stroke::new(1.4, color));
+        let r = radius as f64;
+        let cx = centre.x as f64;
+        let cy = centre.y as f64;
+        let path_data = format!(
+            "M {},{} A {},{} 0 1,1 {},{} A {},{} 0 1,1 {},{} Z",
+            cx - r, cy, r, r, cx + r, cy, r, r, cx - r, cy
+        );
+        let shapes = svg_tessellate::tessellate(
+            &path_data,
+            Some(Stroke::new(1.4, color)),
+            Some(palette.graph),
+            svg_tessellate::Options::default(),
+        );
+        for shape in shapes {
+            painter.add(shape);
+        }
     }
 
     // The wheel over a band changes its width, as the reference's does.
@@ -896,9 +920,30 @@ fn curves_into(
             .collect();
         let color = theme::color(curve.color);
         if curve.dashed {
-            let sampled: Vec<Pos2> = points.iter().map(|p| Pos2::new(p[0] as f32, p[1] as f32)).collect();
-            let path = sample_curve_path(&sampled, app.session.smooth_level > 0);
-            dashed_path(painter, &path, color);
+            let smooth = app.session.smooth_level > 0;
+            let mut path = d3::path::Path::default();
+            let mut curve_shape = if smooth {
+                d3::shape::curve_natural()
+            } else {
+                d3::shape::curve_cardinal(0.5)
+            };
+            curve_shape.line_start(&mut path);
+            for point in &points {
+                curve_shape.point(&mut path, point[0], point[1]);
+            }
+            curve_shape.line_end(&mut path);
+            let shapes = svg_tessellate::tessellate(
+                &path.to_string(),
+                Some(Stroke::new(1.6, color)),
+                None,
+                svg_tessellate::Options::default(),
+            );
+            // Apply dashing by walking the tessellated polyline.
+            for shape in shapes {
+                if let egui::Shape::Path(path_shape) = shape {
+                    dashed_path(painter, &path_shape.points, color);
+                }
+            }
         } else {
             let smooth = app.session.smooth_level > 0;
             let mut path = d3::path::Path::default();
@@ -1034,10 +1079,18 @@ fn inspector(
     };
     let frequency = transform.x_at(pointer.x);
     let x = transform.hz_to_x(frequency);
-    painter.line_segment(
-        [Pos2::new(x, plot.top()), Pos2::new(x, plot.bottom())],
-        egui::Stroke::new(1.0, palette.text_tertiary),
+    let mut path = d3::path::Path::default();
+    path.move_to(f64::from(x), f64::from(plot.top()));
+    path.line_to(f64::from(x), f64::from(plot.bottom()));
+    let shapes = svg_tessellate::tessellate(
+        &path.to_string(),
+        Some(Stroke::new(1.0, palette.text_tertiary)),
+        None,
+        svg_tessellate::Options::default(),
     );
+    for shape in shapes {
+        painter.add(shape);
+    }
     // The readings, one under the other, from the top of the plot down.
     let mut next_top = plot.top() + 6.0;
     for curve in curves {
