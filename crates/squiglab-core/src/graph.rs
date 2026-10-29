@@ -404,11 +404,10 @@ pub fn place_labels(mut labels: Vec<(String, f32, f32)>, plot_rect: Rect) -> BTr
         .map(|(key, top, height)| {
             (
                 key,
-                (top as f64)
-                    .clamp(
-                        f64::from(plot_rect.top()),
-                        f64::from((plot_rect.bottom() - height).max(plot_rect.top())),
-                    ) as f32,
+                (top as f64).clamp(
+                    f64::from(plot_rect.top()),
+                    f64::from((plot_rect.bottom() - height).max(plot_rect.top())),
+                ) as f32,
             )
         })
         .collect()

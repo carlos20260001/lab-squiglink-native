@@ -6,7 +6,59 @@
 
 use crate::data::{CurveInfo, FRPoint};
 use crate::equalizer;
-use crate::graph::{LabelLayout, ZoomRegion};
+/// How much of the frequency axis the graph shows.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Deserialize, Serialize)]
+pub enum ZoomRegion {
+    #[default]
+    Full,
+    Bass,
+    Mids,
+    Treble,
+}
+
+impl ZoomRegion {
+    /// The frequency range the region covers, in hertz.
+    pub fn x_range(self) -> (f32, f32) {
+        match self {
+            Self::Full => (20.0, 20000.0),
+            Self::Bass => (20.0, 400.0),
+            Self::Mids => (100.0, 4000.0),
+            Self::Treble => (1000.0, 20000.0),
+        }
+    }
+}
+
+/// Where the curve labels are put.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Deserialize, Serialize)]
+pub enum LabelLayout {
+    CurveEnd,
+    #[default]
+    CornerBottomLeft,
+    CornerBottomRight,
+    CornerTopLeft,
+}
+
+impl LabelLayout {
+    /// The next layout, in the order the reference turns them.
+    pub fn next(self) -> Self {
+        match self {
+            Self::CornerBottomLeft => Self::CornerBottomRight,
+            Self::CornerBottomRight => Self::CornerTopLeft,
+            Self::CornerTopLeft => Self::CurveEnd,
+            Self::CurveEnd => Self::CornerBottomLeft,
+        }
+    }
+
+    /// The short name the reference shows for the layout.
+    pub fn short_name(self) -> &'static str {
+        match self {
+            Self::CornerBottomLeft => "bottom-left",
+            Self::CornerBottomRight => "bottom-right",
+            Self::CornerTopLeft => "top-left",
+            Self::CurveEnd => "",
+        }
+    }
+}
 use crate::processing::{self, NormParams, SmoothingParams};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
@@ -147,7 +199,7 @@ pub struct Preferences {
     /// window and is off by default.
     pub show_delta: bool,
     pub label_positions: BTreeMap<String, [f32; 2]>,
-    pub label_layout: crate::graph::LabelLayout,
+    pub label_layout: LabelLayout,
     pub tutorial_segment: Option<usize>,
     pub y_scale: f32,
     /// The range the graph shows, in decibels, when the user has set it by
@@ -182,7 +234,7 @@ impl Default for Preferences {
             show_measurements: true,
             show_delta: false,
             label_positions: BTreeMap::new(),
-            label_layout: crate::graph::LabelLayout::default(),
+            label_layout: LabelLayout::default(),
             tutorial_segment: None,
             y_scale: 1.0,
             graph_range: None,

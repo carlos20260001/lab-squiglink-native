@@ -69,9 +69,9 @@ fn zoom(ui: &mut Ui, app: &mut App) {
     let palette = theme::current_palette();
     label(ui, "Zoom");
     for (region, name) in [
-        (squiglab_core::graph::ZoomRegion::Bass, "Bass"),
-        (squiglab_core::graph::ZoomRegion::Mids, "Mids"),
-        (squiglab_core::graph::ZoomRegion::Treble, "Treble"),
+        (squiglab_core::session::ZoomRegion::Bass, "Bass"),
+        (squiglab_core::session::ZoomRegion::Mids, "Mids"),
+        (squiglab_core::session::ZoomRegion::Treble, "Treble"),
     ] {
         let selected = app.session.zoom == region;
         let resp = ui
@@ -88,7 +88,7 @@ fn zoom(ui: &mut Ui, app: &mut App) {
             .on_hover_text("Show this part of the frequency axis");
         if resp.clicked() {
             if app.session.zoom == region {
-                app.session.zoom = squiglab_core::graph::ZoomRegion::Full;
+                app.session.zoom = squiglab_core::session::ZoomRegion::Full;
             } else {
                 app.session.zoom = region;
             }
@@ -335,31 +335,11 @@ fn actions(ui: &mut Ui, app: &mut App) {
     {
         app.screenshot_requested = true;
     }
-    if ui
-        .button("SVG")
-        .on_hover_text("Save the graph as a vector picture")
-        .clicked()
-    {
-        let svg = crate::graph::export_svg(app, 1200.0, 360.0);
-        match save("graph.svg", &svg) {
-            Ok(path) => app.say(format!("The graph was saved to {}", path.display())),
-            Err(problem) => app.say(format!("The graph was not saved: {problem}")),
-        }
-    }
+    let _ = app;
 }
 
 /// Write a file into the user's pictures directory, or their home directory if
 /// the operating system does not have one.
-fn save(name: &str, contents: &str) -> anyhow::Result<std::path::PathBuf> {
-    let directory = dirs::picture_dir()
-        .or_else(dirs::home_dir)
-        .ok_or_else(|| anyhow::anyhow!("the operating system did not provide a directory"))?;
-    std::fs::create_dir_all(&directory)?;
-    let path = directory.join(name);
-    std::fs::write(&path, contents)?;
-    Ok(path)
-}
-
 /// Write a picture of the window into the user's pictures directory, or their
 /// home directory if the operating system does not have one.
 pub fn save_picture(name: &str, image: &egui::ColorImage) -> anyhow::Result<std::path::PathBuf> {

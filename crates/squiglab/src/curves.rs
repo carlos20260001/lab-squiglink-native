@@ -257,7 +257,11 @@ fn row(ui: &mut Ui, app: &mut App, index: usize) {
         "" => group.name.clone(),
         brand => format!("{brand} {}", group.name),
     };
-    let color = theme::color(crate::graph::curve_color(app, index));
+    let color = theme::color(squiglab_core::color::Rgb {
+        r: 128,
+        g: 128,
+        b: 128,
+    });
     let target = group.target;
 
     // The hairline that separates one row from the next.

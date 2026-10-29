@@ -17,12 +17,20 @@ pub struct Options {
 
 impl Default for Options {
     fn default() -> Self {
-        Self { curve_segments: 12, arc_segments: 24 }
+        Self {
+            curve_segments: 12,
+            arc_segments: 24,
+        }
     }
 }
 
 /// Tessellate an SVG path data string into egui shapes.
-pub fn tessellate(path_data: &str, stroke: Option<Stroke>, fill: Option<Color32>, options: Options) -> Vec<Shape> {
+pub fn tessellate(
+    path_data: &str,
+    stroke: Option<Stroke>,
+    fill: Option<Color32>,
+    options: Options,
+) -> Vec<Shape> {
     let mut subpaths: Vec<Vec<Pos2>> = Vec::new();
     let mut current: Vec<Pos2> = Vec::new();
     let _start = Pos2::ZERO;
@@ -32,27 +40,61 @@ pub fn tessellate(path_data: &str, stroke: Option<Stroke>, fill: Option<Color32>
     let mut sy = 0.0_f64;
 
     for seg in PathParser::from(path_data) {
-        let seg = match seg { Ok(s) => s, Err(_) => continue };
+        let seg = match seg {
+            Ok(s) => s,
+            Err(_) => continue,
+        };
         match seg {
             svgtypes::PathSegment::MoveTo { abs, x, y } => {
-                if !current.is_empty() { subpaths.push(std::mem::take(&mut current)); }
-                if abs { cx = x; cy = y; } else { cx += x; cy += y; }
-                sx = cx; sy = cy;
+                if !current.is_empty() {
+                    subpaths.push(std::mem::take(&mut current));
+                }
+                if abs {
+                    cx = x;
+                    cy = y;
+                } else {
+                    cx += x;
+                    cy += y;
+                }
+                sx = cx;
+                sy = cy;
                 current.push(Pos2::new(cx as f32, cy as f32));
             }
             svgtypes::PathSegment::LineTo { abs, x, y } => {
-                if abs { cx = x; cy = y; } else { cx += x; cy += y; }
+                if abs {
+                    cx = x;
+                    cy = y;
+                } else {
+                    cx += x;
+                    cy += y;
+                }
                 current.push(Pos2::new(cx as f32, cy as f32));
             }
             svgtypes::PathSegment::HorizontalLineTo { abs, x } => {
-                if abs { cx = x; } else { cx += x; }
+                if abs {
+                    cx = x;
+                } else {
+                    cx += x;
+                }
                 current.push(Pos2::new(cx as f32, cy as f32));
             }
             svgtypes::PathSegment::VerticalLineTo { abs, y } => {
-                if abs { cy = y; } else { cy += y; }
+                if abs {
+                    cy = y;
+                } else {
+                    cy += y;
+                }
                 current.push(Pos2::new(cx as f32, cy as f32));
             }
-            svgtypes::PathSegment::CurveTo { abs, x1, y1, x2, y2, x, y } => {
+            svgtypes::PathSegment::CurveTo {
+                abs,
+                x1,
+                y1,
+                x2,
+                y2,
+                x,
+                y,
+            } => {
                 let (x1, y1, x2, y2, x, y) = if abs {
                     (x1, y1, x2, y2, x, y)
                 } else {
@@ -67,13 +109,19 @@ pub fn tessellate(path_data: &str, stroke: Option<Stroke>, fill: Option<Color32>
                     let pt = cubic(p0, p1, p2, p3, t);
                     current.push(Pos2::new(pt.0 as f32, pt.1 as f32));
                 }
-                cx = x; cy = y;
+                cx = x;
+                cy = y;
             }
             svgtypes::PathSegment::SmoothCurveTo { abs, x2, y2, x, y } => {
                 // approximate: treat as cubic with reflected control point
-                let (x2, y2, x, y) = if abs { (x2, y2, x, y) } else { (cx + x2, cy + y2, cx + x, cy + y) };
+                let (x2, y2, x, y) = if abs {
+                    (x2, y2, x, y)
+                } else {
+                    (cx + x2, cy + y2, cx + x, cy + y)
+                };
                 // reflect last control point (unknown; use current point)
-                let x1 = cx; let y1 = cy;
+                let x1 = cx;
+                let y1 = cy;
                 let p0 = (cx, cy);
                 let p1 = (x1, y1);
                 let p2 = (x2, y2);
@@ -83,10 +131,15 @@ pub fn tessellate(path_data: &str, stroke: Option<Stroke>, fill: Option<Color32>
                     let pt = cubic(p0, p1, p2, p3, t);
                     current.push(Pos2::new(pt.0 as f32, pt.1 as f32));
                 }
-                cx = x; cy = y;
+                cx = x;
+                cy = y;
             }
             svgtypes::PathSegment::Quadratic { abs, x1, y1, x, y } => {
-                let (x1, y1, x, y) = if abs { (x1, y1, x, y) } else { (cx + x1, cy + y1, cx + x, cy + y) };
+                let (x1, y1, x, y) = if abs {
+                    (x1, y1, x, y)
+                } else {
+                    (cx + x1, cy + y1, cx + x, cy + y)
+                };
                 let p0 = (cx, cy);
                 let p1 = (x1, y1);
                 let p2 = (x, y);
@@ -95,12 +148,14 @@ pub fn tessellate(path_data: &str, stroke: Option<Stroke>, fill: Option<Color32>
                     let pt = quadratic(p0, p1, p2, t);
                     current.push(Pos2::new(pt.0 as f32, pt.1 as f32));
                 }
-                cx = x; cy = y;
+                cx = x;
+                cy = y;
             }
             svgtypes::PathSegment::SmoothQuadratic { abs, x, y } => {
                 let (x, y) = if abs { (x, y) } else { (cx + x, cy + y) };
                 // reflect control point
-                let x1 = cx; let y1 = cy;
+                let x1 = cx;
+                let y1 = cy;
                 let p0 = (cx, cy);
                 let p1 = (x1, y1);
                 let p2 = (x, y);
@@ -109,9 +164,19 @@ pub fn tessellate(path_data: &str, stroke: Option<Stroke>, fill: Option<Color32>
                     let pt = quadratic(p0, p1, p2, t);
                     current.push(Pos2::new(pt.0 as f32, pt.1 as f32));
                 }
-                cx = x; cy = y;
+                cx = x;
+                cy = y;
             }
-            svgtypes::PathSegment::EllipticalArc { abs, rx, ry, x_axis_rotation, large_arc, sweep, x, y } => {
+            svgtypes::PathSegment::EllipticalArc {
+                abs,
+                rx,
+                ry,
+                x_axis_rotation,
+                large_arc,
+                sweep,
+                x,
+                y,
+            } => {
                 let (x2, y2) = if abs { (x, y) } else { (cx + x, cy + y) };
                 // Proper SVG elliptical arc sampling (W3C algorithm).
                 let mut rx = rx.abs();
@@ -119,7 +184,8 @@ pub fn tessellate(path_data: &str, stroke: Option<Stroke>, fill: Option<Color32>
                 if rx == 0.0 || ry == 0.0 {
                     // Degenerate: treat as line.
                     current.push(Pos2::new(x2 as f32, y2 as f32));
-                    cx = x2; cy = y2;
+                    cx = x2;
+                    cy = y2;
                     continue;
                 }
                 let phi = x_axis_rotation.to_radians();
@@ -169,7 +235,8 @@ pub fn tessellate(path_data: &str, stroke: Option<Stroke>, fill: Option<Color32>
                     let py = ccy + rx * t.cos() * sin_phi + ry * t.sin() * cos_phi;
                     current.push(Pos2::new(px as f32, py as f32));
                 }
-                cx = x2; cy = y2;
+                cx = x2;
+                cy = y2;
             }
             svgtypes::PathSegment::ClosePath { .. } => {
                 if !current.is_empty() {
@@ -179,16 +246,21 @@ pub fn tessellate(path_data: &str, stroke: Option<Stroke>, fill: Option<Color32>
                     }
                     subpaths.push(std::mem::take(&mut current));
                 }
-                cx = sx; cy = sy;
+                cx = sx;
+                cy = sy;
                 current.push(Pos2::new(cx as f32, cy as f32));
             }
         }
     }
-    if !current.is_empty() { subpaths.push(current); }
+    if !current.is_empty() {
+        subpaths.push(current);
+    }
 
     let mut shapes = Vec::new();
     for sub in subpaths {
-        if sub.len() < 2 { continue; }
+        if sub.len() < 2 {
+            continue;
+        }
         if let Some(stroke) = stroke {
             shapes.push(Shape::line(sub.clone(), stroke));
         }
@@ -216,6 +288,8 @@ fn cubic(p0: (f64, f64), p1: (f64, f64), p2: (f64, f64), p3: (f64, f64), t: f64)
 
 fn quadratic(p0: (f64, f64), p1: (f64, f64), p2: (f64, f64), t: f64) -> (f64, f64) {
     let u = 1.0 - t;
-    (u * u * p0.0 + 2.0 * u * t * p1.0 + t * t * p2.0,
-     u * u * p0.1 + 2.0 * u * t * p1.1 + t * t * p2.1)
+    (
+        u * u * p0.0 + 2.0 * u * t * p1.0 + t * t * p2.0,
+        u * u * p0.1 + 2.0 * u * t * p1.1 + t * t * p2.1,
+    )
 }

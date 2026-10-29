@@ -6,11 +6,13 @@
 //! 2.2 units across for every unit of the window's height, less the chrome
 //! around it, and it is centred in its column.
 
-use egui::{Align2, Color32, FontId, Pos2, Rect, Sense, Stroke, Vec2};
+use std::sync::Arc;
+
+use egui::{Align2, Color32, FontId, Galley, Pos2, Rect, Sense, Stroke, Vec2};
 
 use squiglab_core::graph::{
-    format_axis_frequency, format_frequency, nice_limit, place_labels,
-    scaled_y_range, tick_db, y_range, LabelLayout, PlotCurve, Transform, FREQUENCY_BANDS,
+    format_axis_frequency, format_frequency, nice_limit, place_labels, scaled_y_range, tick_db,
+    y_range, PlotCurve, Transform, FREQUENCY_BANDS,
 };
 
 use crate::app::App;
@@ -61,7 +63,12 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
             ui.allocate_painter(Vec2::new(width, height), Sense::click_and_drag());
         let rect = response.rect;
         let mut path = d3::path::Path::default();
-        path.rect(f64::from(rect.left()), f64::from(rect.top()), f64::from(rect.width()), f64::from(rect.height()));
+        path.rect(
+            f64::from(rect.left()),
+            f64::from(rect.top()),
+            f64::from(rect.width()),
+            f64::from(rect.height()),
+        );
         let shapes = svg_tessellate::tessellate(
             &path.to_string(),
             None,
@@ -72,6 +79,8 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
             painter.add(shape);
         }
         let plot = plot_rect(rect);
+        // dB scale drag handle first, so the axis labels draw above it.
+        scale(app, &painter, rect, &response);
         let curves = plot_curves(app);
         let (minimum, maximum) = match app.session.graph_range {
             Some(range) => range,
@@ -83,22 +92,33 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
         let transform = transform_for(app, plot);
 
         // axes (d3-backed)
-        render_axes(&painter, plot, &transform, &minimum, &maximum);
+        grid(&painter, rect, plot, &transform, minimum, maximum);
         // curves, labels, inspector, rig line, watermark
-        render_body(&painter, app, rect, plot, &transform, &curves, response.hover_pos());
-        // dB scale drag handle
-        scale(app, &painter, rect, &response);
+        render_body(
+            &painter,
+            app,
+            rect,
+            plot,
+            &transform,
+            &curves,
+            response.hover_pos(),
+        );
         // equalizer editor
         eq_editor(app, &painter, plot, &transform, &response, &ctx);
     });
 }
 
-/// The plot's own area, inside the box: room for the dB scale on the left
-/// and for the frequency axis and the band names below.
+/// The plot's own area, inside the box.
+///
+/// The reference lays its graph out in an 800-by-360 viewBox with fifteen
+/// units of padding at the sides, ten at the top and thirty-six at the
+/// bottom, and the box is drawn at the window's scale. The same fractions
+/// of this box are used here, so the plot sits where the reference's does.
 fn plot_rect(rect: Rect) -> Rect {
+    let unit = rect.width() / 800.0;
     Rect::from_min_max(
-        Pos2::new(rect.left() + 40.0, rect.top() + 10.0),
-        Pos2::new(rect.right() - 10.0, rect.bottom() - 46.0),
+        Pos2::new(rect.left() + 15.0 * unit, rect.top() + 10.0 * unit),
+        Pos2::new(rect.right() - 15.0 * unit, rect.bottom() - 36.0 * unit),
     )
 }
 
@@ -119,14 +139,11 @@ fn transform_for(app: &App, plot: Rect) -> Transform {
 /// The scale down the left of the graph, and the handles that move it.
 ///
 /// The reference's scale is dragged: the handle in the middle moves the
-/// range up and down, and the two circles change how far it reaches. A
+/// range up and down, and the two ends change how far it reaches. A
 /// double-click puts it back where the curves say it should be.
 fn scale(app: &mut App, painter: &egui::Painter, rect: Rect, response: &egui::Response) {
     let palette = theme::current_palette();
-    let plot = Rect::from_min_max(
-        Pos2::new(rect.left() + 40.0, rect.top() + 10.0),
-        Pos2::new(rect.right() - 10.0, rect.bottom() - 46.0),
-    );
+    let plot = plot_rect(rect);
     if plot.width() <= 0.0 || plot.height() <= 0.0 {
         return;
     }
@@ -138,25 +155,29 @@ fn scale(app: &mut App, painter: &egui::Painter, rect: Rect, response: &egui::Re
             scaled_y_range((minimum, maximum), app.session.y_scale)
         }
     };
-    let centre = (minimum + maximum) / 2.0;
-    let half = (maximum - minimum) / 2.0;
-    let middle_y = plot.center().y;
-    let half_y = 77.0 / 2.0;
-    let x = plot.left() + 2.0;
+    let centre_db = (minimum + maximum) / 2.0;
+    let half_db = (maximum - minimum) / 2.0;
 
-    // The scale itself: the reference's own shape, which carries the line
-    // the figures stand beside.
-    scale_shape(painter, x, middle_y, half_y, &palette);
+    // Where the reference puts the handle: its origin sits nine units left
+    // of the plot's edge, on the 60 dB line, and it reaches ten dB either
+    // way. Its own path is in viewBox units, scaled by the graph's unit.
+    let transform = Transform::new(plot, app.session.zoom.x_range(), (minimum, maximum));
+    let unit = rect.width() / 800.0;
+    let origin_x = rect.left() + 6.0 * unit; // pad.l − 9 = 6
+    let origin_y = transform.db_to_y(60.0);
+    let half_px = transform.db_to_y(60.0) - transform.db_to_y(70.0); // > 0
 
-    // Dragging the middle mark moves the range; dragging a circle widens it.
+    scale_shape(painter, origin_x, origin_y, half_px, unit, &palette);
+
+    // Dragging the middle mark moves the range; dragging an end widens it.
     // The scale is only taken hold of at the scale itself: the rest of the
     // graph belongs to the equalizer, as it does in the reference.
     let on_the_scale = response
         .hover_pos()
-        .is_some_and(|point| (point.x - x).abs() <= 12.0);
+        .is_some_and(|point| (point.x - origin_x).abs() <= 12.0 * unit);
     if response.drag_started() && on_the_scale {
         // Where the pointer took hold, which is what tells the mark from the
-        // circles once the pointer has moved.
+        // ends once the pointer has moved.
         app.scale_grab = response.hover_pos();
     }
     if response.dragged() && app.scale_grab.is_some() {
@@ -164,16 +185,16 @@ fn scale(app: &mut App, painter: &egui::Painter, rect: Rect, response: &egui::Re
         if delta != 0.0 {
             let per_pixel = (maximum - minimum) / plot.height();
             let range;
-            // The circle the pointer took hold of: the one above the middle
+            // The end the pointer took hold of: the one above the middle
             // or the one below it, which reach in opposite directions.
-            let circle = app
+            let end = app
                 .scale_grab
-                .filter(|grab| (grab.y - middle_y).abs() > half_y * 0.6);
-            if let Some(grab) = circle {
-                // The pointer is on a circle: the scale reaches further or less.
-                let sign = if grab.y < middle_y { -1.0 } else { 1.0 };
-                let new_half = (half + sign * delta * per_pixel).abs().max(1.0);
-                range = (centre - new_half, centre + new_half);
+                .filter(|grab| (grab.y - origin_y).abs() > half_px.abs() * 0.6);
+            if let Some(grab) = end {
+                // The pointer is on an end: the scale reaches further or less.
+                let sign = if grab.y < origin_y { -1.0 } else { 1.0 };
+                let new_half = (half_db + sign * delta * per_pixel).abs().max(1.0);
+                range = (centre_db - new_half, centre_db + new_half);
             } else {
                 // The pointer is on the mark: the whole range moves.
                 let shift = -delta * per_pixel;
@@ -187,100 +208,97 @@ fn scale(app: &mut App, painter: &egui::Painter, rect: Rect, response: &egui::Re
     }
 }
 
-/// The mark the reference draws at the middle of the dB scale.
+/// The reference's scale handle: the two mirrored paths and the three
+/// grips, drawn at the size the graph's unit gives.
 ///
-/// The reference's scale is two shapes, one above the middle and one below
-/// it, each sixteen points wide and seventy-seven tall, with three short
-/// grips at the middle of them. Its own path is used here, at the size the
-/// reference draws it.
+/// The path is the reference's own, in viewBox units: a spine at x=9.9
+/// running from y=−1 to y=dB.H, a foot at the far end, and a curve back
+/// to x=−1.8. dB.H is the ten dB from 60 to 70, which the graph's unit
+/// turns into pixels. The grips are the three short marks at the middle,
+/// cut in the graph's own colour.
 fn scale_shape(
     painter: &egui::Painter,
-    x: f32,
-    middle_y: f32,
-    half_y: f32,
+    origin_x: f32,
+    origin_y: f32,
+    half_px: f32,
+    unit: f32,
     palette: &theme::Palette,
 ) {
-    // The reference's path is in its own units: each shape is fifty-five
-    // tall and eleven and a half wide, and it is drawn at seventy-seven
-    // points tall.
-    const HEIGHT: f32 = 77.0;
-    const WIDTH: f32 = 19.0;
-    // The path's own extent, from -1.8 to 9.9 units.
-    // The path's own extent: from -1.8 to 9.9 units across, and fifty-five
-    // down.
-    let unit = WIDTH / 11.7;
-    let tall = HEIGHT / 55.0;
+    // The reference's own path, drawn once for each sign: one half above
+    // the middle, one below it. dB.H is the half-height in pixels; the
+    // rest are fixed offsets the reference writes into its path.
+    for sign in [1.0, -1.0] {
+        let mut path = d3::path::Path::default();
+        let mut x = origin_x + 9.9 * unit;
+        let mut y = origin_y - 1.0 * unit * sign;
+        path.move_to(f64::from(x), f64::from(y));
+        // The spine, down to the far end of the handle.
+        y = origin_y + half_px * sign;
+        path.line_to(f64::from(x), f64::from(y));
+        // The foot: a step, a rise, a fall, a run, and a small drop.
+        x -= 1.0 * unit;
+        path.line_to(f64::from(x), f64::from(y));
+        x -= 1.0 * unit;
+        y -= 1.5 * unit * sign;
+        path.line_to(f64::from(x), f64::from(y));
+        x -= 2.1 * unit;
+        y += 2.0 * unit * sign;
+        path.line_to(f64::from(x), f64::from(y));
+        x -= 5.6 * unit;
+        path.line_to(f64::from(x), f64::from(y));
+        y -= 1.5 * unit * sign;
+        path.line_to(f64::from(x), f64::from(y));
+        // The reference's own curve back toward the spine.
+        let cx = x + 7.0 * unit;
+        let cy = y + 2.0 * unit * sign;
+        x += 8.0 * unit;
+        y -= 7.0 * unit * sign;
+        path.quadratic_curve_to(f64::from(cx), f64::from(cy), f64::from(x), f64::from(y));
+        // Up the inner edge to the bracket, then the curve to the far side.
+        y = origin_y + 29.0 * unit * sign;
+        path.line_to(f64::from(x), f64::from(y));
+        let c1x = x + 1.0 * unit;
+        let c1y = y - 16.0 * unit * sign;
+        let c2x = x - 10.0 * unit;
+        let c2y = y - 15.0 * unit * sign;
+        x -= 10.0 * unit;
+        y -= 14.0 * unit * sign;
+        path.bezier_curve_to(
+            f64::from(c1x),
+            f64::from(c1y),
+            f64::from(c2x),
+            f64::from(c2y),
+            f64::from(x),
+            f64::from(y),
+        );
+        // Back to the top of the spine, which closes the shape.
+        y = origin_y - 1.0 * unit * sign;
+        path.line_to(f64::from(x), f64::from(y));
+        path.close_path();
 
-    // The upper shape, and the lower one, which is the same path turned the
-    // other way up. The spine of the shape is at its right-hand edge, which
-    // is where the scale's line stands.
-    let half = |up: bool| {
-        let sy = |v: f32| if up { v } else { -v };
-        let at = |ux: f32, uy: f32| Pos2::new(x + (ux - 9.9) * unit, middle_y + sy(uy) * tall);
-        let mut points = vec![
-            at(9.9, 1.0),
-            at(9.9, -54.77),
-            at(8.9, -54.77),
-            at(7.9, -53.27),
-            at(5.8, -55.27),
-            at(0.2, -55.27),
-            at(0.2, -53.77),
-        ];
-        // The reference's own curve back to the spine.
-        for step in 1..=10 {
-            let t = step as f32 / 10.0;
-            let u = 1.0 - t;
-            points.push(at(
-                u * u * 0.2 + 2.0 * u * t * 7.2 + t * t * 8.2,
-                u * u * -53.77 + 2.0 * u * t * -55.77 + t * t * -46.77,
-            ));
+        let shapes = svg_tessellate::tessellate(
+            &path.to_string(),
+            None,
+            Some(palette.border_strong),
+            svg_tessellate::Options::default(),
+        );
+        for shape in shapes {
+            painter.add(shape);
         }
-        points.push(at(8.2, -29.0));
-        // And the bracket's curve, down to the foot.
-        for step in 1..=10 {
-            let t = step as f32 / 10.0;
-            let u = 1.0 - t;
-            points.push(at(
-                u * u * 8.2 + 2.0 * u * t * 9.2 + t * t * -1.8,
-                u * u * -29.0 + 2.0 * u * t * -13.0 + t * t * -15.0,
-            ));
-        }
-        points.push(at(-1.8, 1.0));
-        points
-    };
-
-    let colour = palette.border_strong;
-    for up in [true, false] {
-        painter.add(egui::Shape::Path(egui::epaint::PathShape {
-            points: half(up),
-            fill: colour,
-            stroke: egui::epaint::PathStroke::NONE,
-            closed: true,
-        }));
     }
 
-    // The three grips at the middle, one point wide.
-    for (ux, height) in [(0.0, 27.0), (2.8, 19.0), (5.6, 35.0)] {
-        let top = Pos2::new(x + (ux + 0.5 - 9.9) * unit, middle_y - height / 2.0);
-        let bottom = Pos2::new(x + (ux + 0.5 - 9.9) * unit, middle_y + height / 2.0);
-        painter.line_segment([top, bottom], egui::Stroke::new(1.0, palette.page));
+    // The three grips at the middle, cut in the graph's own colour. The
+    // reference's own heights: ten, seven and thirteen units.
+    for (i, d) in [10.0_f32, 7.0, 13.0].iter().enumerate() {
+        let grip = Rect::from_min_size(
+            Pos2::new(origin_x + i as f32 * 2.8 * unit, origin_y - d * unit),
+            Vec2::new(0.8 * unit, 2.0 * d * unit),
+        );
+        painter.rect_filled(grip, 0.0, palette.graph);
     }
-    // The scale's own reach is the height it is drawn at, and the figures
-    // stand beside it.
-    let _ = half_y;
 }
 
 /// Draw the graph into a rectangle, with the pointer where it is.
-fn render_axes(
-    painter: &egui::Painter,
-    plot: Rect,
-    transform: &Transform,
-    minimum: &f32,
-    maximum: &f32,
-) {
-    grid(painter, plot, transform, minimum, maximum);
-}
-
 fn render_body(
     painter: &egui::Painter,
     app: &App,
@@ -419,7 +437,12 @@ fn eq_editor(
         let left = transform.hz_to_x(low as f32);
         let right = transform.hz_to_x(high as f32);
         let mut path = d3::path::Path::default();
-        path.rect(f64::from(left), f64::from(plot.top()), f64::from(right - left), f64::from(plot.bottom() - plot.top()));
+        path.rect(
+            f64::from(left),
+            f64::from(plot.top()),
+            f64::from(right - left),
+            f64::from(plot.bottom() - plot.top()),
+        );
         let shapes = svg_tessellate::tessellate(
             &path.to_string(),
             None,
@@ -443,7 +466,7 @@ fn eq_editor(
         } else {
             MARKER_RADIUS
         };
-        let color = theme::color(crate::graph::curve_color(
+        let color = theme::color(crate::graph_port::curve_color(
             app,
             app.session.eq_phone.unwrap_or(0),
         ));
@@ -452,7 +475,16 @@ fn eq_editor(
         let cy = centre.y as f64;
         let path_data = format!(
             "M {},{} A {},{} 0 1,1 {},{} A {},{} 0 1,1 {},{} Z",
-            cx - r, cy, r, r, cx + r, cy, r, r, cx - r, cy
+            cx - r,
+            cy,
+            r,
+            r,
+            cx + r,
+            cy,
+            r,
+            r,
+            cx - r,
+            cy
         );
         let shapes = svg_tessellate::tessellate(
             &path_data,
@@ -700,7 +732,8 @@ fn db_at(points: &[squiglab_core::data::FRPoint], hz: f64) -> f32 {
                 return left.db;
             }
             let place = (hz - f64::from(left.hz)) / span;
-            return (f64::from(left.db) + (f64::from(right.db) - f64::from(left.db)) * place) as f32;
+            return (f64::from(left.db) + (f64::from(right.db) - f64::from(left.db)) * place)
+                as f32;
         }
     }
     if hz < f64::from(points[0].hz) {
@@ -742,120 +775,273 @@ fn near_the_trace(app: &App, transform: &Transform, pointer: Pos2) -> bool {
     (y - pointer.y).abs() <= MARKER_HIT_PX
 }
 
-/// The grid, the dB scale and the frequency axis.
-fn grid(painter: &egui::Painter, plot: Rect, transform: &Transform, minimum: &f32, maximum: &f32) {
-    let palette = theme::current_palette();
-    let grid_color = palette.border.gamma_multiply(0.6);
-    // The reference writes its axis figures in the monospaced face, at ten
-    // points, in the primary colour: they are figures, and they line up.
-    let label_font = FontId::new(10.0, egui::FontFamily::Monospace);
-    let label_color = palette.text_primary;
+/// The reference's own weights for the ticks of the frequency axis.
+///
+/// `tickPattern` cycles along the ticks and gives each one a kind;
+/// `tickThickness` turns a kind into a width, and the first and last
+/// ticks — the ends of the range — take the heaviest of them. The same
+/// pattern decides which figures are plain: the reference writes those
+/// at eighty-six per cent and its lightest weight.
+const X_TICK_PATTERN: [usize; 8] = [3, 0, 0, 1, 0, 0, 2, 0];
+const X_TICK_THICKNESS: [f32; 5] = [0.2, 0.4, 0.4, 0.9, 1.5];
 
-    // The horizontal lines: the reference's own dB ticks. The step is 1 dB
-    // when the range is small and 5 dB otherwise, and the ticks run from the
-    // ceiling of the lower bound to the floor of the upper one.
-    let range = *maximum - *minimum;
-    let t = if range < 40.0 { 1.0_f32 } else { 5.0_f32 };
-    let y0 = (*minimum / t).ceil();
-    let y1 = (*maximum / t).floor();
-    let ticks: Vec<f32> = d3::array::range(f64::from(y0), Some(f64::from(y1) + 1.0), Some(f64::from(t)))
+/// The blur the reference lays over every major decibel line.
+///
+/// Its stylesheet has no filter of its own: the graph's script puts a
+/// Gaussian of 0.8 units over each line, cut off two units either side.
+/// The ink of a fifth of a unit ends as a soft band four units wide and
+/// about an eighth as strong at the heart. egui's painter has no filter,
+/// so three strokes of falling width stand in for it; their alphas are
+/// the Gaussian's profile read at their own edges.
+const DB_LINE_BLUR: [(f32, f32); 3] = [(1.2, 0.075), (2.4, 0.045), (4.0, 0.015)];
+
+/// Lay a figure out in the face the graph writes its numbers in.
+fn figure_galley(
+    painter: &egui::Painter,
+    text: &str,
+    font: &FontId,
+    colour: Color32,
+) -> Arc<Galley> {
+    painter
+        .ctx()
+        .fonts_mut(|fonts| fonts.layout_no_wrap(text.to_owned(), font.clone(), colour))
+}
+
+/// Where the baseline of a figure's first row falls, measured down from
+/// the top of its galley.
+///
+/// SVG writes text by the baseline and egui by the top of the box, so
+/// every figure that has to stand on a line of its own needs this.
+fn row_baseline(galley: &Galley) -> f32 {
+    galley.rows.first().map_or(0.0, |row| {
+        row.pos.y + row.glyphs.first().map_or(0.0, |glyph| glyph.pos.y)
+    })
+}
+
+/// A figure written with its baseline on `baseline` and its left edge at
+/// `left`, which is how the reference's SVG places every axis number.
+fn figure_at(
+    painter: &egui::Painter,
+    galley: Arc<Galley>,
+    colour: Color32,
+    left: f32,
+    baseline: f32,
+) {
+    let top = baseline - row_baseline(&galley);
+    painter.add(egui::epaint::TextShape::new(
+        Pos2::new(left, top),
+        galley,
+        colour,
+    ));
+}
+
+/// A d3 path drawn as the stroke it is named with.
+fn stroke_path(painter: &egui::Painter, path: &d3::path::Path, stroke: Stroke) {
+    let shapes = svg_tessellate::tessellate(
+        &path.to_string(),
+        Some(stroke),
+        None,
+        svg_tessellate::Options::default(),
+    );
+    for shape in shapes {
+        painter.add(shape);
+    }
+}
+
+/// The grid, the dB scale and the frequency axis.
+///
+/// Everything here is the reference's own: the tick values come from
+/// `fmtY` and `fmtX` in graphtool.js, the figures are its monospaced ten
+/// — its eight and a half for the plain ticks below the frequency axis —
+/// written by the baseline as SVG writes them, and the lines carry the
+/// colour its stylesheet gives every `svg line`, which the `#333` the
+/// script sets on the frequency ticks does not outlive.
+fn grid(
+    painter: &egui::Painter,
+    rect: Rect,
+    plot: Rect,
+    transform: &Transform,
+    minimum: f32,
+    maximum: f32,
+) {
+    let palette = theme::current_palette();
+    // The reference draws its graph in an 800-unit viewBox at the size of
+    // the box, so a figure of ten units stands ten times this tall.
+    let unit = rect.width() / 800.0;
+    let font = FontId::new(10.0 * unit, egui::FontFamily::Monospace);
+    let minor_font = FontId::new(8.6 * unit, egui::FontFamily::Monospace);
+    let colour = palette.text_primary;
+    let line = palette.border_strong;
+
+    // The decibel scale. The step is one when the range is narrow and
+    // five otherwise; the ticks run from the ceiling of the lower bound
+    // to the floor of the upper one.
+    let range = (maximum - minimum).max(1.0);
+    let step = if range < 40.0 { 1.0_f32 } else { 5.0_f32 };
+    let y0 = (minimum / step).ceil();
+    let y1 = (maximum / step).floor();
+    // The reference's own step: `d3.range(y1-y0+1).map(i => t*(y0+i))`.
+    // The range steps by one tick index at a time and the decibel value
+    // is taken afterwards; stepping it in decibels would skip four
+    // fifths of the ticks whenever the step is five, leaving the axis
+    // with one number.
+    let ticks: Vec<f32> = d3::array::range(f64::from(y0), Some(f64::from(y1) + 1.0), Some(1.0))
         .into_iter()
-        .map(|v| (v * f64::from(t)) as f32)
+        .map(|v| (v * f64::from(step)) as f32)
         .collect();
-    // The horizontal (dB) grid lines, drawn as a single d3 path tessellated
-    // by svg-tessellate, so the whole grid is d3-driven. Major and minor
-    // ticks differ in stroke width, so two paths are emitted.
-    let mut major_path = d3::path::Path::default();
+    // One path per band of the blur, so that the whole blurred scale is
+    // three tessellations, and one for the minor lines, which the
+    // reference leaves sharp.
+    let mut bands = [
+        d3::path::Path::default(),
+        d3::path::Path::default(),
+        d3::path::Path::default(),
+    ];
     let mut minor_path = d3::path::Path::default();
     for db in ticks {
         let y = transform.db_to_y(db);
         if y < plot.top() || y > plot.bottom() {
             continue;
         }
-        let major = (db as i32) % 5 == 0;
-        if major {
-            major_path.move_to(f64::from(plot.left()), f64::from(y));
-            major_path.line_to(f64::from(plot.right()), f64::from(y));
-        } else {
-            minor_path.move_to(f64::from(plot.left()), f64::from(y));
-            minor_path.line_to(f64::from(plot.right()), f64::from(y));
+        // A tick is minor when the step is one and its figure is not a
+        // multiple of five; the reference hides those figures altogether
+        // and draws only their line, thin and sharp.
+        let minor = step == 1.0 && (db as i32) % 5 != 0;
+        let across = |path: &mut d3::path::Path| {
+            path.move_to(f64::from(plot.left()), f64::from(y));
+            path.line_to(f64::from(plot.right()), f64::from(y));
+        };
+        if minor {
+            across(&mut minor_path);
+            continue;
         }
-        if major {
-            painter.text(
-                Pos2::new(plot.left() + 5.0, y),
-                Align2::LEFT_CENTER,
-                tick_db(db),
-                label_font.clone(),
-                label_color,
-            );
+        for band in &mut bands {
+            across(band);
         }
-    }
-    let r = (maximum - minimum).max(1.0);
-    let major_thickness = (0.15 * (1.0 + 45.0 / r)).clamp(0.1, 1.0);
-    let minor_thickness = (0.2 * (1.0 - r / 45.0)).clamp(0.05, 0.3);
-    for (path, thickness) in [(major_path, major_thickness), (minor_path, minor_thickness)] {
-        let shapes = svg_tessellate::tessellate(
-            &path.to_string(),
-            Some(Stroke::new(thickness, grid_color)),
-            None,
-            svg_tessellate::Options::default(),
+        // The figure: its left edge three units in from the plot's side,
+        // its baseline two above the line it names.
+        let galley = figure_galley(painter, &tick_db(db), &font, colour);
+        figure_at(
+            painter,
+            galley,
+            colour,
+            plot.left() + 3.0 * unit,
+            y - 2.0 * unit,
         );
-        for shape in shapes {
-            painter.add(shape);
-        }
     }
+    for (band, (width, alpha)) in bands.iter().zip(DB_LINE_BLUR) {
+        stroke_path(
+            painter,
+            band,
+            Stroke::new(width * unit, line.gamma_multiply(alpha)),
+        );
+    }
+    // The minor lines are `0.2*(1-r/45)`, the reference's own figure.
+    stroke_path(
+        painter,
+        &minor_path,
+        Stroke::new(0.2 * (1.0 - range / 45.0) * unit, line),
+    );
 
-    // The "dB" the reference writes up the left of the scale, turned on its
-    // side so that it reads from the bottom.
+    // The "dB" the reference writes up the left of the scale: its end on
+    // the plot's top-left corner, reading upward.
     rotated_label(
         painter,
         "dB",
-        Pos2::new(plot.left() - 2.0, plot.top() + 2.0),
-        label_font.clone(),
-        label_color,
+        Pos2::new(plot.left(), plot.top()),
+        font.clone(),
+        colour,
     );
 
-    // The vertical lines: the marked frequencies from d3 tick values.
-    let ticks = x_tick_frequencies();
-    for frequency in ticks {
-        if frequency < transform.x_range.0 || frequency > transform.x_range.1 {
+    // The frequency axis. The reference's ticks run from ten units below
+    // the top of the plot to two above its foot, each weighted by its
+    // place in the pattern, and each carries its figure centred on it:
+    // the plain ones written small, the ends nudged in from the range.
+    let frequencies = x_tick_frequencies();
+    let last = frequencies.len() - 1;
+    // One path per width among the ticks: four tessellations for the
+    // whole axis.
+    let mut widths = [
+        d3::path::Path::default(),
+        d3::path::Path::default(),
+        d3::path::Path::default(),
+        d3::path::Path::default(),
+    ];
+    let top = plot.top() + 10.0 * unit;
+    let foot = plot.bottom() - 2.0 * unit;
+    for (i, hz) in frequencies.iter().enumerate() {
+        if *hz < transform.x_range.0 || *hz > transform.x_range.1 {
             continue;
         }
-        let x = transform.hz_to_x(frequency);
-        painter.line_segment(
-            [Pos2::new(x, plot.top()), Pos2::new(x, plot.bottom())],
-            Stroke::new(0.7, grid_color),
-        );
-        painter.text(
-            Pos2::new(x, plot.bottom() + 6.0),
-            Align2::CENTER_TOP,
-            format_axis_frequency(frequency),
-            label_font.clone(),
-            label_color,
-        );
+        let x = transform.hz_to_x(*hz);
+        // The ends of the range take the heaviest weight; the rest come
+        // from the pattern, whose two middle kinds share a width.
+        let kind = if i == 0 || i == last {
+            4
+        } else {
+            X_TICK_PATTERN[i % 8]
+        };
+        let band = match kind {
+            0 => 0,
+            1 | 2 => 1,
+            3 => 2,
+            _ => 3,
+        };
+        widths[band].move_to(f64::from(x), f64::from(top));
+        widths[band].line_to(f64::from(x), f64::from(foot));
+        // The figure: the plain ticks of the pattern stand eighty-six per
+        // cent tall, and the two ends are nudged in from the range.
+        let plain = X_TICK_PATTERN[i % 8] == 0;
+        let (face, units) = if plain {
+            (&minor_font, 8.6)
+        } else {
+            (&font, 10.0)
+        };
+        let nudge = if i == 0 {
+            4.0
+        } else if i == last {
+            -5.0
+        } else {
+            0.0
+        };
+        let galley = figure_galley(painter, &format_axis_frequency(*hz), face, colour);
+        let left = x + nudge * unit - galley.size().x / 2.0;
+        // The reference sets its tick text at the foot of a line of
+        // H+3+3 units and drops the baseline seven-tenths of an em
+        // further, where H is the plot's own height.
+        let baseline = plot.bottom() + (6.0 + 0.71 * units) * unit;
+        figure_at(painter, galley, colour, left, baseline);
+    }
+    let band_widths = [
+        X_TICK_THICKNESS[0],
+        X_TICK_THICKNESS[1],
+        X_TICK_THICKNESS[3],
+        X_TICK_THICKNESS[4],
+    ];
+    for (path, width) in widths.iter().zip(band_widths) {
+        stroke_path(painter, path, Stroke::new(width * unit, line));
     }
 }
 
-/// A word written on its side, the way the reference writes the unit of the
-/// scale up the left of the graph.
+/// A word written on its side, the way the reference writes the unit of
+/// the scale up the left of the graph.
 ///
-/// egui writes its text upright, so the word is laid out as usual and the
-/// shape that carries it is then turned a quarter turn about its own
-/// bottom-left corner: the word then climbs away from that corner, which is
-/// where its foot stands.
-fn rotated_label(
-    painter: &egui::Painter,
-    text: &str,
-    anchor: Pos2,
-    font: FontId,
-    color: egui::Color32,
-) {
-    let galley = painter
-        .ctx()
-        .fonts_mut(|fonts| fonts.layout_no_wrap(text.to_owned(), font, color));
-    // A quarter turn anticlockwise, so that the word reads from the bottom.
-    let shape = egui::epaint::TextShape::new(anchor, galley, color)
-        .with_angle_and_anchor(-std::f32::consts::FRAC_PI_2, egui::Align2::LEFT_BOTTOM);
+/// The reference turns the word a quarter turn anticlockwise about its
+/// own end and plants that end on the corner it is given, so the word
+/// reads upward with its last letter at the top and its body hanging
+/// into the gutter beside the scale.
+fn rotated_label(painter: &egui::Painter, text: &str, corner: Pos2, font: FontId, colour: Color32) {
+    let galley = figure_galley(painter, text, &font, colour);
+    // The pivot is the word's own end, which the corner holds: egui turns
+    // a shape about the point its anchor names, so the galley is set down
+    // with its foot at the pivot and then turned.
+    let pivot = Pos2::new(corner.x, corner.y + galley.size().x);
+    let shape = egui::epaint::TextShape::new(
+        Pos2::new(pivot.x, pivot.y - galley.size().y),
+        galley,
+        colour,
+    )
+    .with_angle_and_anchor(-std::f32::consts::FRAC_PI_2, egui::Align2::LEFT_BOTTOM);
     painter.add(shape);
 }
 
@@ -863,6 +1049,10 @@ fn rotated_label(
 fn band_names(painter: &egui::Painter, plot: Rect, transform: &Transform) {
     let palette = theme::current_palette();
     let font = FontId::new(TypeStep::Label.size(), egui::FontFamily::Proportional);
+    // The names sit below the frequency figures, near the foot of the box,
+    // so the two rows of small type do not crowd one another.
+    let unit = plot.width() / 770.0;
+    let top = plot.bottom() + 22.0 * unit;
     for band in FREQUENCY_BANDS {
         let (low, high) = band.range_hz;
         if high < transform.x_range.0 || low > transform.x_range.1 {
@@ -877,7 +1067,7 @@ fn band_names(painter: &egui::Painter, plot: Rect, transform: &Transform) {
             continue;
         }
         painter.text(
-            Pos2::new((start + end) / 2.0, plot.bottom() + 22.0),
+            Pos2::new((start + end) / 2.0, top),
             Align2::CENTER_TOP,
             band.title,
             font.clone(),
@@ -1190,7 +1380,7 @@ pub fn scale_limit(peak: f32) -> f32 {
 }
 
 /// Where the labels sit.
-pub fn label_layout(app: &App) -> LabelLayout {
+pub fn label_layout(app: &App) -> squiglab_core::session::LabelLayout {
     app.session.label_layout
 }
 
@@ -1232,7 +1422,8 @@ pub fn export_svg(app: &App, width: f32, height: f32) -> String {
     let t = if range < 40.0 { 1.0_f32 } else { 5.0_f32 };
     let y0 = (minimum / t).ceil();
     let y1 = (maximum / t).floor();
-    let db_ticks: Vec<f32> = d3::array::range(f64::from(y0), Some(f64::from(y1) + 1.0), Some(f64::from(t)))
+    // As the screen's grid: the range steps in tick indices, not decibels.
+    let db_ticks: Vec<f32> = d3::array::range(f64::from(y0), Some(f64::from(y1) + 1.0), Some(1.0))
         .into_iter()
         .map(|v| (v * f64::from(t)) as f32)
         .collect();

@@ -5,10 +5,11 @@
 //! on egui and could be drawn by anything.
 
 pub mod app;
+pub mod breakpoints;
 pub mod curves;
 pub mod equalizer;
 pub mod filepick;
-pub mod graph;
+pub mod graph_port;
 pub mod header;
 pub mod icons;
 pub mod links;

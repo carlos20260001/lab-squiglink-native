@@ -108,7 +108,7 @@ pub struct App {
     #[cfg(target_os = "android")]
     pub android_files: Option<(Pick, String, Vec<crate::filepick::android::File>)>,
     /// What the pointer is doing on the graph.
-    pub graph_drag: Option<crate::graph::GraphDrag>,
+    pub graph_drag: Option<crate::graph_port::GraphDrag>,
     /// The file the user is being asked for, and the dialog that is asking.
     pub picker: Option<(Pick, crate::filepick::Picker)>,
     /// The measurement the user chose with the system's dialog, waiting to be
@@ -243,6 +243,11 @@ impl App {
         #[cfg(target_os = "android")]
         self.show_android_files(&ctx);
 
+        let rect = ui.ctx().content_rect();
+        // Keep the familiar side-by-side desktop layout unless the window is
+        // genuinely narrow; the reference's 9/4 rule is too aggressive for an
+        // application window and stacks everything on a normal desktop.
+        let wide = rect.width() >= crate::breakpoints::MAX_WIDTH_800PX;
         egui::CentralPanel::default()
             .frame(
                 egui::Frame::new()
@@ -251,12 +256,15 @@ impl App {
             )
             .show(ui, |ui| {
                 self.header(ui);
-                self.left_column(ui);
-                // The rest of the window's controls keep their own height.
-                ui.ctx().all_styles_mut(|style| {
-                    style.spacing.interact_size = egui::vec2(80.0, 36.0);
-                });
-                self.right_column(ui);
+                if wide {
+                    self.left_column(ui);
+                    ui.ctx().all_styles_mut(|style| {
+                        style.spacing.interact_size = egui::vec2(80.0, 36.0);
+                    });
+                    self.right_column(ui);
+                } else {
+                    self.stacked_columns(ui);
+                }
             });
 
         if self.screenshot_requested {
@@ -353,7 +361,47 @@ impl App {
     /// keeps the target strip from being pushed off the bottom of the window.
     fn right_column(&mut self, ui: &mut Ui) {
         crate::tools::show(ui, self);
-        crate::graph::show(ui, self);
+        crate::graph_port::show(ui, self);
+        egui::ScrollArea::vertical()
+            .id_salt("right_column")
+            .auto_shrink([false, false])
+            .show(ui, |ui| {
+                crate::curves::show(ui, self);
+                self.status_line(ui);
+            });
+    }
+
+    /// Stacked layout for narrow/tall viewports: the left content above the
+    /// right content, mirroring the reference's column flex-direction.
+    fn stacked_columns(&mut self, ui: &mut Ui) {
+        ui.ctx().all_styles_mut(|style| {
+            style.spacing.interact_size = egui::vec2(40.0, 26.0);
+        });
+        crate::selector::show_tabs(ui, self);
+        egui::ScrollArea::vertical()
+            .id_salt("column_scroll")
+            .auto_shrink([false, false])
+            .show(ui, |ui| match self.tab {
+                Tab::Equalizer => {
+                    crate::equalizer::show(ui, self);
+                    ui.separator();
+                    crate::sound::show(ui, self);
+                    ui.separator();
+                    crate::upload::show(ui, self);
+                }
+                _ => {
+                    crate::selector::show_list(ui, self);
+                    ui.separator();
+                    crate::equalizer::show_summary(ui, self);
+                    ui.separator();
+                    crate::upload::show(ui, self);
+                }
+            });
+        ui.ctx().all_styles_mut(|style| {
+            style.spacing.interact_size = egui::vec2(80.0, 36.0);
+        });
+        crate::tools::show(ui, self);
+        crate::graph_port::show(ui, self);
         egui::ScrollArea::vertical()
             .id_salt("right_column")
             .auto_shrink([false, false])
