@@ -119,7 +119,7 @@ pub struct FilePlayback {
     pub channels: u32,
     /// The rate the file was recorded at.
     pub rate: f64,
-    /// The playhead, in samples.
+    /// The playhead, in frames. A frame holds one sample per channel.
     pub position: f64,
     /// Whether the file is to be looped.
     pub looping: bool,
@@ -134,42 +134,102 @@ impl FilePlayback {
         self.samples.len() as f64 / self.channels as f64 / self.rate
     }
 
-    /// The next sample of the file, resampled to the rate asked for.
-    pub fn next_sample(&mut self, rate: f64) -> f32 {
-        if self.samples.is_empty() || self.channels == 0 {
-            return 0.0;
+    /// How many complete frames the file holds.
+    fn frame_count(&self) -> usize {
+        if self.channels == 0 {
+            return 0;
         }
-        // How far through the file the playhead moves for each sample that
-        // comes out: a file recorded at 44.1 kHz played on a 48 kHz device
-        // gives up its samples more slowly, or the music plays fast.
-        let step = if self.rate > 0.0 && rate > 0.0 {
+        self.samples.len() / self.channels as usize
+    }
+
+    /// The step the playhead takes per output frame: an input frame count.
+    fn step(&self, rate: f64) -> f64 {
+        if self.rate > 0.0 && rate > 0.0 && self.rate.is_finite() && rate.is_finite() {
             self.rate / rate
         } else {
             1.0
-        };
-        let position = self.position;
-        self.position += step;
-        let last = self.samples.len() as f64 - self.channels as f64;
-        if position >= last {
+        }
+    }
+
+    /// Read one stereo frame, resampled to the rate asked for.
+    ///
+    /// The playhead is tracked in frames, so interpolation never slides across
+    /// adjacent interleaved channel samples. Mono input is duplicated to both
+    /// outputs; stereo input keeps its left and right content. Files with more
+    /// than two channels use their first two channels as left and right, which
+    /// is a deliberate, documented policy rather than an accidental downmix.
+    pub fn next_frame(&mut self, rate: f64) -> [f32; 2] {
+        self.next_samples(rate)
+    }
+
+    /// Read one stereo frame, resampled to the rate asked for.
+    pub fn next_samples(&mut self, rate: f64) -> [f32; 2] {
+        let frames = self.frame_count();
+        if frames == 0 || self.channels == 0 {
+            return [0.0, 0.0];
+        }
+        if !self.rate.is_finite() || self.rate <= 0.0 || !rate.is_finite() || rate <= 0.0 {
+            return [0.0, 0.0];
+        }
+        let last = frames - 1;
+        let step = self.step(rate);
+        let mut position = self.position;
+
+        // Past the end: silence for non-looping playback, wrap for looping.
+        if position > last as f64 {
             if self.looping {
-                self.position = 0.0;
-                return self.next_sample(rate);
+                position %= frames as f64;
+                // A one-frame file (or a position that lands exactly on the
+                // boundary) must still make progress rather than re-entering
+                // the same branch forever.
+                if position > last as f64 {
+                    position = 0.0;
+                }
+            } else {
+                self.position = last as f64;
+                return [0.0, 0.0];
             }
-            self.position = last;
-            return 0.0;
         }
-        // The sample before and the sample after, so the file is resampled
-        // rather than played at the wrong speed.
-        let index = position as usize;
+
+        let index = position.floor() as usize;
+        let index = index.min(last);
         let fraction = (position - index as f64) as f32;
-        let next = (index + self.channels as usize).min(self.samples.len() - 1);
-        let mut out = 0.0;
-        for channel in 0..self.channels as usize {
-            let here = self.samples[index + channel];
-            let after = self.samples[next + channel];
-            out += here + (after - here) * fraction;
-        }
-        out / self.channels as f32
+        let next_index = (index + 1).min(last);
+
+        let channels = self.channels as usize;
+        let interpolate = |channel: usize| -> f32 {
+            let here = self.samples[index * channels + channel];
+            let after = self.samples[next_index * channels + channel];
+            here + (after - here) * fraction
+        };
+
+        let out = if self.channels == 1 {
+            let value = interpolate(0);
+            [value, value]
+        } else {
+            [interpolate(0), interpolate(1)]
+        };
+
+        self.position = position + step;
+        out
+    }
+
+    /// Read one stereo frame as a tuple.
+    pub fn next_stereo(&mut self, rate: f64) -> (f32, f32) {
+        let frame = self.next_samples(rate);
+        (frame[0], frame[1])
+    }
+
+    /// Mono contract: read one sample from a mono file. For files with more
+    /// than one channel this returns the left channel only, which is only
+    /// meaningful for genuinely mono input.
+    pub fn next_sample(&mut self, rate: f64) -> f32 {
+        self.next_samples(rate)[0]
+    }
+
+    /// Read one stereo frame (alias).
+    pub fn next(&mut self, rate: f64) -> [f32; 2] {
+        self.next_samples(rate)
     }
 }
 
@@ -248,17 +308,18 @@ impl Generator {
     }
 
     /// Fill `buffer` with interleaved stereo frames, advancing the generator by
-    /// its length. The source is mono, so both channels start with the same
-    /// sample, and the filters then shape each side as the reference's do.
+    /// its length. The source may already be stereo (a music file); otherwise
+    /// both channels start with the same sample, and the filters then shape
+    /// each side as the reference's do.
     pub fn render(&mut self, buffer: &mut [f32], settings: &Settings) {
         for frame in buffer.as_chunks_mut::<2>().0 {
-            let sample = self.next_sample(settings);
-            let mut left = f64::from(sample);
-            let mut right = f64::from(sample);
+            let (left_sample, right_sample) = self.next_frame(settings);
+            let mut left = f64::from(left_sample);
+            let mut right = f64::from(right_sample);
             let chain = &mut self.chain;
             for filter in &mut chain.shared {
-                left = filter.process(left);
-                right = filter.process(right);
+                left = filter.process_left(left);
+                right = filter.process_right(right);
             }
             for filter in &mut chain.left {
                 left = filter.process(left);
@@ -271,8 +332,57 @@ impl Generator {
         }
     }
 
+    /// The next stereo frame, before the chain is applied.
+    fn next_frame(&mut self, settings: &Settings) -> (f32, f32) {
+        let target_gain = if settings.volume > 0.0 { 1.0 } else { 0.0 };
+        self.gain += (target_gain - self.gain) * self.fade_coefficient;
+        let volume = settings.volume.clamp(0.0, 1.0) * self.gain;
+        // The oscillator's state advances whether or not anything is audible,
+        // so resuming plays at the pitch it was aimed at rather than gliding up
+        // from where it stopped.
+        self.advance_pitch(settings);
+        if volume <= 0.0 {
+            return (0.0, 0.0);
+        }
+        let (left, right) = match settings.source {
+            Source::Tone { .. } => {
+                let sample = (std::f64::consts::TAU * self.phase).sin() as f32;
+                (sample, sample)
+            }
+            Source::PinkNoise => {
+                let sample = self.pink.next_sample();
+                (sample, sample)
+            }
+            Source::WhiteNoise => {
+                let sample = self.white.next_sample();
+                (sample, sample)
+            }
+            Source::File => match &mut self.file {
+                Some(file) => {
+                    let frame = file.next_samples(self.sample_rate);
+                    (frame[0], frame[1])
+                }
+                None => (0.0, 0.0),
+            },
+        };
+        (
+            (left * volume).clamp(-1.0, 1.0),
+            (right * volume).clamp(-1.0, 1.0),
+        )
+    }
+
     /// Change the filters the source is played through.
-    pub fn set_chain(&mut self, chain: Chain) {
+    pub fn set_chain(&mut self, mut chain: Chain) {
+        let rate = self.sample_rate;
+        for filter in &mut chain.shared {
+            filter.set_sample_rate(rate);
+        }
+        for filter in &mut chain.left {
+            filter.set_sample_rate(rate);
+        }
+        for filter in &mut chain.right {
+            filter.set_sample_rate(rate);
+        }
         self.chain = chain;
     }
 
@@ -289,41 +399,26 @@ impl Generator {
     /// rate the samples are at.
     pub fn set_sample_rate(&mut self, rate: u32) {
         let rate = f64::from(rate);
-        if rate <= 0.0 || (self.sample_rate - rate).abs() < f64::EPSILON {
+        if !rate.is_finite() || rate <= 0.0 || (self.sample_rate - rate).abs() < f64::EPSILON {
             return;
         }
         self.sample_rate = rate;
         self.glide_coefficient = smoothing(rate, GLIDE_SECONDS);
         self.fade_coefficient = smoothing(rate, f64::from(FADE_SECONDS)) as f32;
+        for filter in &mut self.chain.shared {
+            filter.set_sample_rate(rate);
+        }
+        for filter in &mut self.chain.left {
+            filter.set_sample_rate(rate);
+        }
+        for filter in &mut self.chain.right {
+            filter.set_sample_rate(rate);
+        }
     }
 
     /// Play a music file.
     pub fn set_file(&mut self, file: FilePlayback) {
         self.file = Some(file);
-    }
-
-    /// The next sample.
-    fn next_sample(&mut self, settings: &Settings) -> f32 {
-        let target_gain = if settings.volume > 0.0 { 1.0 } else { 0.0 };
-        self.gain += (target_gain - self.gain) * self.fade_coefficient;
-        let volume = settings.volume.clamp(0.0, 1.0) * self.gain;
-        // The oscillator's state advances whether or not anything is audible,
-        // so resuming plays at the pitch it was aimed at rather than gliding up
-        // from where it stopped.
-        self.advance_pitch(settings);
-        if volume <= 0.0 {
-            return 0.0;
-        }
-        let sample = match settings.source {
-            Source::Tone { .. } => (std::f64::consts::TAU * self.phase).sin() as f32,
-            Source::PinkNoise => self.pink.next_sample(),
-            Source::WhiteNoise => self.white.next_sample(),
-            Source::File => match &mut self.file {
-                Some(file) => file.next_sample(self.sample_rate),
-                None => 0.0,
-            },
-        };
-        (sample * volume).clamp(-1.0, 1.0)
     }
 
     /// Move the oscillator's pitch toward the target and step its position.
@@ -687,7 +782,7 @@ mod tests {
         // the pitch must still be the recording's.
         let mut out = Vec::new();
         for _ in 0..88_200 {
-            out.push(file.next_sample(48_000.0));
+            out.push(file.next_samples(48_000.0)[0]);
         }
         let measured = measure_frequency(&out);
         assert!(

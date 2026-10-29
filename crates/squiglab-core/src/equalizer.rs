@@ -140,34 +140,73 @@ pub fn interp(frequencies: &[f64], curve: &[ResponsePoint]) -> Vec<ResponsePoint
 /// A filter that runs over a stream of samples.
 ///
 /// The equalizer's coefficients describe a filter's shape; this is that filter
-/// running, sample by sample, so a sound can be heard through it.
-#[derive(Clone, Debug, Default)]
+/// running, sample by sample, so a sound can be heard through it. The
+/// coefficients are shared by construction, but each instance keeps its own
+/// delay state for the left and the right channel, so a filter that shapes
+/// both channels never lets one channel's history leak into the other.
+#[derive(Clone, Debug)]
 pub struct Biquad {
+    /// The kind of filter, kept so the coefficients can be rebuilt when the
+    /// sample rate changes rather than going stale.
+    filter_type: FilterType,
+    /// The frequency the filter was built for, in Hz.
+    freq: f64,
+    /// The Q the filter was built for.
+    q: f64,
+    /// The gain the filter was built for, in dB.
+    gain: f64,
+    /// The rate the coefficients are valid for.
+    sample_rate: f64,
     /// The feed-forward coefficients, normalised.
     b: [f64; 3],
     /// The feedback coefficients, normalised.
     a: [f64; 2],
-    /// The last two samples in.
+    /// The last two samples in on the left channel.
     x: [f64; 2],
-    /// The last two samples out.
+    /// The last two samples out on the left channel.
     y: [f64; 2],
+    /// The last two samples in on the right channel.
+    xr: [f64; 2],
+    /// The last two samples out on the right channel.
+    yr: [f64; 2],
+}
+
+impl Default for Biquad {
+    fn default() -> Self {
+        Self {
+            filter_type: FilterType::Peaking,
+            freq: 0.0,
+            q: 0.0,
+            gain: 0.0,
+            sample_rate: DEFAULT_SAMPLE_RATE,
+            b: [0.0, 0.0, 0.0],
+            a: [0.0, 0.0],
+            x: [0.0, 0.0],
+            y: [0.0, 0.0],
+            xr: [0.0, 0.0],
+            yr: [0.0, 0.0],
+        }
+    }
 }
 
 impl Biquad {
     /// A filter of the given kind, at the given frequency, Q and gain.
     pub fn new(filter_type: FilterType, freq: f64, q: f64, gain: f64, sample_rate: f64) -> Self {
-        let [a0, a1, a2, b0, b1, b2] = match filter_type {
-            FilterType::Peaking => peaking(freq, q, gain, sample_rate),
-            FilterType::LowShelf => lowshelf(freq, q, gain, sample_rate),
-            FilterType::HighShelf => highshelf(freq, q, gain, sample_rate),
-        };
-        let _ = a0;
-        Self {
-            b: [b0, b1, b2],
-            a: [a1, a2],
+        let mut biquad = Self {
+            filter_type,
+            freq,
+            q,
+            gain,
+            sample_rate,
+            b: [0.0, 0.0, 0.0],
+            a: [0.0, 0.0],
             x: [0.0, 0.0],
             y: [0.0, 0.0],
-        }
+            xr: [0.0, 0.0],
+            yr: [0.0, 0.0],
+        };
+        biquad.recompute();
+        biquad
     }
 
     /// A filter of the given kind, with the equalizer's own description.
@@ -181,7 +220,43 @@ impl Biquad {
         )
     }
 
-    /// Run one sample through the filter.
+    /// Rebuild the coefficients for the stored parameters and rate, clearing
+    /// the delay state. Called on construction and whenever the rate changes.
+    fn recompute(&mut self) {
+        let [a0, a1, a2, b0, b1, b2] = match self.filter_type {
+            FilterType::Peaking => peaking(self.freq, self.q, self.gain, self.sample_rate),
+            FilterType::LowShelf => lowshelf(self.freq, self.q, self.gain, self.sample_rate),
+            FilterType::HighShelf => highshelf(self.freq, self.q, self.gain, self.sample_rate),
+        };
+        let _ = a0;
+        self.b = [b0, b1, b2];
+        self.a = [a1, a2];
+        self.x = [0.0, 0.0];
+        self.y = [0.0, 0.0];
+        self.xr = [0.0, 0.0];
+        self.yr = [0.0, 0.0];
+    }
+
+    /// Rebuild the coefficients for another sample rate, so a device that
+    /// reports a different rate never keeps coefficients calculated for the
+    /// old one.
+    pub fn set_sample_rate(&mut self, rate: f64) {
+        if !rate.is_finite() || rate <= 0.0 {
+            return;
+        }
+        if (self.sample_rate - rate).abs() < f64::EPSILON {
+            return;
+        }
+        self.sample_rate = rate;
+        self.recompute();
+    }
+
+    /// The rate the coefficients are valid for.
+    pub fn sample_rate(&self) -> f64 {
+        self.sample_rate
+    }
+
+    /// Run one sample through the filter on the left channel.
     ///
     /// Direct form one: the shape is the same as the coefficients the
     /// equalizer computes for its curves, so what is heard is what is drawn.
@@ -193,6 +268,24 @@ impl Biquad {
         self.x[0] = sample;
         self.y[1] = self.y[0];
         self.y[0] = out;
+        out
+    }
+
+    /// Run one sample through the filter on the left channel (explicit name).
+    pub fn process_left(&mut self, sample: f64) -> f64 {
+        self.process(sample)
+    }
+
+    /// Run one sample through the filter on the right channel, using its own
+    /// delay state so the two channels stay independent.
+    pub fn process_right(&mut self, sample: f64) -> f64 {
+        let out = self.b[0] * sample + self.b[1] * self.xr[0] + self.b[2] * self.xr[1]
+            - self.a[0] * self.yr[0]
+            - self.a[1] * self.yr[1];
+        self.xr[1] = self.xr[0];
+        self.xr[0] = sample;
+        self.yr[1] = self.yr[0];
+        self.yr[0] = out;
         out
     }
 }
