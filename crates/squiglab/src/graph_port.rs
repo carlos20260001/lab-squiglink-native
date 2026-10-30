@@ -1083,6 +1083,10 @@ fn curves_into(
     curves: &[PlotCurve<'_>],
     transform: &Transform,
 ) {
+    // The reference draws its traces at a stroke of 2.3 in an 800-unit box,
+    // and, having no `non-scaling-stroke`, lets that scale with the figure.
+    // One unit of that box is this many points.
+    let unit = transform.rect.width() / 770.0;
     for curve in curves {
         if curve.points.is_empty() {
             continue;
@@ -1113,7 +1117,7 @@ fn curves_into(
             curve_shape.line_end(&mut path);
             let shapes = svg_tessellate::tessellate(
                 &path.to_string(),
-                Some(Stroke::new(1.6, color)),
+                Some(Stroke::new(1.6 * unit, color)),
                 None,
                 svg_tessellate::Options::default(),
             );
@@ -1138,7 +1142,7 @@ fn curves_into(
             curve_shape.line_end(&mut path);
             let shapes = svg_tessellate::tessellate(
                 &path.to_string(),
-                Some(Stroke::new(2.0, color)),
+                Some(Stroke::new(2.3 * unit, color)),
                 None,
                 svg_tessellate::Options::default(),
             );
