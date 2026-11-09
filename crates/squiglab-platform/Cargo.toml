@@ -13,7 +13,7 @@
 #   web       = wasm32 via web_sys / wasm-bindgen (like eframe's web backend)
 #   ios       = objc2 (like egui-winit on iOS)
 #   android   = jni + ndk (like egui-winit on Android)
-#   winit     = winit backend (stub; winit not in the offline lock yet)
+#   winit     = winit backend (uses winit 0.30, now in the offline lock file)
 
 [package]
 name = "squiglab-platform"
@@ -30,7 +30,7 @@ default = []
 web = ["dep:web-sys", "dep:js-sys", "dep:wasm-bindgen"]
 ios = ["dep:objc2", "dep:objc2-foundation"]
 android = ["dep:jni", "dep:ndk", "dep:ndk-context"]
-winit = []
+winit = ["dep:winit"]
 
 [dependencies]
 squiglab-core = { path = "../squiglab-core" }
@@ -102,4 +102,8 @@ optional = true
 
 [dependencies.ndk-context]
 version = "0.1"
+optional = true
+
+[dependencies.winit]
+version = "0.30"
 optional = true
