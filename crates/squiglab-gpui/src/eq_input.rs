@@ -14,17 +14,30 @@
 use std::ops::Range;
 
 use gpui::{
-    actions, App, Bounds, ClipboardItem, Context, CursorStyle, ElementId, ElementInputHandler,
-    Entity, EntityInputHandler, FocusHandle, Focusable, GlobalElementId, KeyDownEvent, LayoutId,
+    actions, div, fill, point, prelude::*, px, relative, rgb, rgba, size, white, App, Bounds,
+    ClipboardItem, Context, CursorStyle, ElementId, ElementInputHandler, Entity,
+    EntityInputHandler, FocusHandle, Focusable, GlobalElementId, KeyDownEvent, LayoutId,
     MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, PaintQuad, Pixels, Point,
-    ShapedLine, SharedString, Style, TextRun, UnderlineStyle, UTF16Selection, Window, div, fill,
-    point, prelude::*, px, relative, rgb, rgba, size, white,
+    ShapedLine, SharedString, Style, TextRun, UTF16Selection, UnderlineStyle, Window,
 };
 use unicode_segmentation::UnicodeSegmentation;
 
 actions!(
     eq_input,
-    [Backspace, Delete, Left, Right, SelectLeft, SelectRight, SelectAll, Home, End, Paste, Cut, Copy]
+    [
+        Backspace,
+        Delete,
+        Left,
+        Right,
+        SelectLeft,
+        SelectRight,
+        SelectAll,
+        Home,
+        End,
+        Paste,
+        Cut,
+        Copy
+    ]
 );
 
 /// An editable `f64` value rendered as text.
@@ -278,11 +291,7 @@ impl EqInput {
             let _ = cx.write_to_clipboard(ClipboardItem::new_string(
                 self.text.as_str()[self.selected_range.clone()].to_string(),
             ));
-            self.replace_text_in_range(
-                self.selected_range.clone(),
-                "",
-                cx,
-            );
+            self.replace_text_in_range(self.selected_range.clone(), "", cx);
         }
         let _ = window;
     }
@@ -323,12 +332,7 @@ impl EqInput {
     /// Handle a raw key down event: insert printable characters and run
     /// editing commands. This keeps the widget self-contained without
     /// requiring global key bindings.
-    fn on_key_down(
-        &mut self,
-        event: &KeyDownEvent,
-        _window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
+    fn on_key_down(&mut self, event: &KeyDownEvent, _window: &mut Window, cx: &mut Context<Self>) {
         let key = &event.keystroke.key;
         let key_char = event.keystroke.key_char.as_deref();
         let modifiers = event.keystroke.modifiers;
@@ -446,8 +450,9 @@ impl EntityInputHandler for EqInput {
         let range = range.unwrap_or_else(|| self.selected_range.clone());
         let start = range.start.min(self.text.len());
         let end = range.end.min(self.text.len());
-        self.text = (self.text.as_str()[0..start].to_owned() + new_text + &self.text.as_str()[end..])
-            .into();
+        self.text =
+            (self.text.as_str()[0..start].to_owned() + new_text + &self.text.as_str()[end..])
+                .into();
         let cursor = start + new_text.len();
         self.selected_range = cursor..cursor;
         self.selection_reversed = false;
@@ -466,8 +471,9 @@ impl EntityInputHandler for EqInput {
         let range = range.unwrap_or_else(|| self.selected_range.clone());
         let start = range.start.min(self.text.len());
         let end = range.end.min(self.text.len());
-        self.text = (self.text.as_str()[0..start].to_owned() + new_text + &self.text.as_str()[end..])
-            .into();
+        self.text =
+            (self.text.as_str()[0..start].to_owned() + new_text + &self.text.as_str()[end..])
+                .into();
         if !new_text.is_empty() {
             self.marked_range = Some(start..start + new_text.len());
         } else {
@@ -491,10 +497,7 @@ impl EntityInputHandler for EqInput {
         let start = range_utf16.start.min(self.text.len());
         let end = range_utf16.end.min(self.text.len());
         Some(Bounds::from_corners(
-            point(
-                bounds.left() + last_layout.x_for_index(start),
-                bounds.top(),
-            ),
+            point(bounds.left() + last_layout.x_for_index(start), bounds.top()),
             point(
                 bounds.left() + last_layout.x_for_index(end),
                 bounds.bottom(),
@@ -601,12 +604,7 @@ impl EqInput {
         self.move_to(self.text.len(), cx);
     }
 
-    fn paste_action(
-        &mut self,
-        _: &Paste,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
+    fn paste_action(&mut self, _: &Paste, window: &mut Window, cx: &mut Context<Self>) {
         self.paste(window, cx);
     }
 

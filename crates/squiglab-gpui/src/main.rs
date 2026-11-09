@@ -2,6 +2,7 @@
 
 mod app;
 mod eq_input;
+mod gpui_bridge;
 mod graph;
 mod icons;
 mod theme;

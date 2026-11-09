@@ -1,37 +1,52 @@
-# A multiplatform plugin crate for squiglab, modeled on egui's backend
-# architecture:
+# squiglab-platform — shared compatibility glue between GPUI and the
+# underlying cross-platform runtime.
 #
-#   squiglab-core        platform-agnostic rules (like egui core)
-#   squiglab-platform    windowing/input/clipboard abstraction (like egui-winit)
+# Architecture:
 #
-# Backends translate platform events into squiglab input events so the core
-# and the GPUI interface never need to know whether they are running on
-# desktop, iOS, Android, or the web.
+#   GPUI 0.2.2
+#       |
+#       v
+#   squiglab-platform  (this crate)
+#       |
+#       v
+#     Winit  (windowing, event loop, input)
+#       |
+#   +---+---+---+
+#   |   |   | |
+# Lin Win Mac Wasm
 #
-# Feature flags select the backend, following egui-winit's convention:
-#   default   = desktop (raw-window-handle handles the window)
-#   web       = wasm32 via web_sys / wasm-bindgen (like eframe's web backend)
-#   ios       = objc2 (like egui-winit on iOS)
-#   android   = jni + ndk (like egui-winit on Android)
-#   winit     = winit backend (uses winit 0.30, now in the offline lock file)
-
+# egui-winit is used only for permitted platform integration — never for
+# egui widgets, layout, or rendering. wgpu provides the shared GPU renderer.
+#
+# Feature flags:
+#   default   = desktop native (winit, wgpu)
+#   web       = wasm32 via Winit's wasm backend + web-sys/wasm-bindgen
+#   winit     = explicit winit backend (same as default on desktop)
+#
 [package]
 name = "squiglab-platform"
 version = "0.1.0"
 edition = "2021"
-description = "Multiplatform windowing, input and clipboard plugin for squiglab, modeled on egui-winit"
+description = "Shared platform abstraction for GPUI across native and WebAssembly"
 
 [lib]
 name = "squiglab_platform"
 path = "src/lib.rs"
-crate-type = ["cdylib"]
+crate-type = ["cdylib", "rlib"]
 
 [features]
-default = []
-web = ["dep:web-sys", "dep:js-sys", "dep:wasm-bindgen"]
+default = ["winit", "renderer"]
+web = [
+    "dep:web-sys",
+    "dep:js-sys",
+    "dep:wasm-bindgen",
+    "dep:wasm-bindgen-futures",
+]
+winit = ["dep:winit"]
+renderer = ["dep:wgpu"]
+egui-winit-integration = ["dep:egui-winit"]
 ios = ["dep:objc2", "dep:objc2-foundation"]
 android = ["dep:jni", "dep:ndk", "dep:ndk-context"]
-winit = ["dep:winit"]
 
 [dependencies]
 squiglab-core = { path = "../squiglab-core" }
@@ -39,42 +54,57 @@ squiglab-core = { path = "../squiglab-core" }
 # Window handle abstraction, available on every platform.
 raw-window-handle = "0.6"
 
-# Logging, used by backends and platform output helpers.
+# Logging.
 log = "0.4"
 
-# Optional platform dependencies, pulled in only when their feature is on.
-# These are all already in the offline lock file (as transitive deps of
-# egui-winit / eframe / gpui), so they build without network access.
+# ---------------------------------------------------------------------------
+# Winit — authoritative windowing system (all targets).
+# ---------------------------------------------------------------------------
+[dependencies.winit]
+version = "0.30"
+optional = true
+
+# ---------------------------------------------------------------------------
+# egui-winit — permitted platform integration only.
+# Never exposes egui widgets/layout/rendering to GPUI or application code.
+# ---------------------------------------------------------------------------
+[dependencies.egui-winit]
+version = "0.29"
+optional = true
+default-features = false
+
+# ---------------------------------------------------------------------------
+# wgpu — shared cross-platform GPU renderer.
+# ---------------------------------------------------------------------------
+[dependencies.wgpu]
+version = "=22.1.0"
+optional = true
+default-features = false
+
+# ---------------------------------------------------------------------------
+# wasm-bindgen / web-sys — WebAssembly target only.
+# ---------------------------------------------------------------------------
 [dependencies.web-sys]
 version = "0.3"
 optional = true
 features = [
-    # DOM
     "Document",
+    "Window",
+    "Element",
     "HtmlElement",
     "HtmlCanvasElement",
     "EventTarget",
     "Node",
-    "Element",
     "DomRect",
-    "Window",
-    # Events
-    "Event",
     "KeyboardEvent",
     "MouseEvent",
     "PointerEvent",
     "TouchEvent",
-    "Touch",
-    "TouchList",
     "WheelEvent",
-    "DragEvent",
-    "DataTransfer",
-    "ClipboardEvent",
     "FocusEvent",
     "UiEvent",
-    "AddEventListenerOptions",
-    # Window
     "console",
+    "AddEventListenerOptions",
 ]
 
 [dependencies.js-sys]
@@ -85,6 +115,13 @@ optional = true
 version = "0.2"
 optional = true
 
+[dependencies.wasm-bindgen-futures]
+version = "0.4"
+optional = true
+
+# ---------------------------------------------------------------------------
+# Optional platform backends (iOS, Android) — retained for future targets.
+# ---------------------------------------------------------------------------
 [dependencies.objc2]
 version = "0.6"
 optional = true
@@ -103,8 +140,4 @@ optional = true
 
 [dependencies.ndk-context]
 version = "0.1"
-optional = true
-
-[dependencies.winit]
-version = "0.30"
 optional = true

@@ -27,7 +27,14 @@ pub mod cpal_sink;
 pub mod decode;
 #[cfg(target_os = "linux")]
 pub mod pipewire;
-#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows", target_os = "ios", target_os = "android", target_arch = "wasm32"))]
+#[cfg(any(
+    target_os = "linux",
+    target_os = "macos",
+    target_os = "windows",
+    target_os = "ios",
+    target_os = "android",
+    target_arch = "wasm32"
+))]
 use std::sync::mpsc::{Receiver, Sender};
 
 /// The sample rate the generators run at. It matches the equalizer DSP's rate,

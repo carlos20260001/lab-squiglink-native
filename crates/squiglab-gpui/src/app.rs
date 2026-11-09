@@ -10,7 +10,7 @@ use std::sync::Arc;
 
 use gpui::prelude::*;
 use gpui::{
-    div, Entity, img, px, AnyElement, Context, FontWeight, Image, ImageFormat, MouseButton, Render,
+    div, img, px, AnyElement, Context, Entity, FontWeight, Image, ImageFormat, MouseButton, Render,
     Rgba, Window,
 };
 use squiglab_core::color::get_curve_color_with_offset;
@@ -193,10 +193,7 @@ impl App {
                 ImageFormat::Png,
                 product::WINDOW_ICON_PNG.to_vec(),
             )),
-            platform_state: PlatformState::new(
-                squiglab_platform::ViewportId::ROOT,
-                None,
-            ),
+            platform_state: PlatformState::new(squiglab_platform::ViewportId::ROOT, None),
             history: History::default(),
             constraints_open: false,
             eq_dropdown: None,
@@ -760,33 +757,27 @@ impl App {
                             .flex()
                             .flex_row()
                             .gap(px(4.0))
-                            .child(
-                                self.eq_bank_button(
-                                    palette,
-                                    cx,
-                                    EqBank::Left,
-                                    bank == EqBank::Left,
-                                    "L",
-                                ),
-                            )
-                            .child(
-                                self.eq_bank_button(
-                                    palette,
-                                    cx,
-                                    EqBank::Both,
-                                    bank == EqBank::Both,
-                                    "L + R",
-                                ),
-                            )
-                            .child(
-                                self.eq_bank_button(
-                                    palette,
-                                    cx,
-                                    EqBank::Right,
-                                    bank == EqBank::Right,
-                                    "R",
-                                ),
-                            ),
+                            .child(self.eq_bank_button(
+                                palette,
+                                cx,
+                                EqBank::Left,
+                                bank == EqBank::Left,
+                                "L",
+                            ))
+                            .child(self.eq_bank_button(
+                                palette,
+                                cx,
+                                EqBank::Both,
+                                bank == EqBank::Both,
+                                "L + R",
+                            ))
+                            .child(self.eq_bank_button(
+                                palette,
+                                cx,
+                                EqBank::Right,
+                                bank == EqBank::Right,
+                                "R",
+                            )),
                     ),
             );
         }
@@ -1112,48 +1103,44 @@ impl App {
             .unwrap_or_else(|| "Choose measurement".to_string());
         let open = matches!(self.eq_dropdown, Some(EqDropdown::Measurement));
 
-        let mut row = div()
-            .flex()
-            .flex_col()
-            .gap(px(2.0))
-            .child(
-                div()
-                    .id("eq_measurement_btn")
-                    .flex()
-                    .flex_row()
-                    .items_center()
-                    .justify_between()
-                    .px(px(8.0))
-                    .py(px(3.0))
-                    .rounded(px(metrics::RADIUS))
-                    .bg(if open {
-                        palette.accent
-                    } else {
-                        palette.field
-                    })
-                    .border_1()
-                    .border_color(if open {
-                        palette.accent
-                    } else {
-                        palette.border_strong
-                    })
-                    .text_color(if open {
-                        palette.on_accent
-                    } else {
-                        palette.text_primary
-                    })
-                    .text_size(px(theme::type_scale::CONTROL))
-                    .cursor_pointer()
-                    .child(div().flex_1().truncate().child(current_label.clone()))
-                    .child(if open { "▲" } else { "▼" })
-                    .on_mouse_up(MouseButton::Left, cx.listener(move |this, _, _, _| {
-                        this.eq_dropdown = if matches!(this.eq_dropdown, Some(EqDropdown::Measurement)) {
-                            None
-                        } else {
-                            Some(EqDropdown::Measurement)
-                        };
-                    })),
-            );
+        let mut row = div().flex().flex_col().gap(px(2.0)).child(
+            div()
+                .id("eq_measurement_btn")
+                .flex()
+                .flex_row()
+                .items_center()
+                .justify_between()
+                .px(px(8.0))
+                .py(px(3.0))
+                .rounded(px(metrics::RADIUS))
+                .bg(if open { palette.accent } else { palette.field })
+                .border_1()
+                .border_color(if open {
+                    palette.accent
+                } else {
+                    palette.border_strong
+                })
+                .text_color(if open {
+                    palette.on_accent
+                } else {
+                    palette.text_primary
+                })
+                .text_size(px(theme::type_scale::CONTROL))
+                .cursor_pointer()
+                .child(div().flex_1().truncate().child(current_label.clone()))
+                .child(if open { "▲" } else { "▼" })
+                .on_mouse_up(
+                    MouseButton::Left,
+                    cx.listener(move |this, _, _, _| {
+                        this.eq_dropdown =
+                            if matches!(this.eq_dropdown, Some(EqDropdown::Measurement)) {
+                                None
+                            } else {
+                                Some(EqDropdown::Measurement)
+                            };
+                    }),
+                ),
+        );
 
         if open {
             let mut list = div()
@@ -1186,11 +1173,14 @@ impl App {
                         })
                         .cursor_pointer()
                         .child(name)
-                        .on_mouse_up(MouseButton::Left, cx.listener(move |this, _, _, _| {
-                            this.session.eq_phone = Some(index);
-                            this.session.rebuild_display_curves();
-                            this.eq_dropdown = None;
-                        })),
+                        .on_mouse_up(
+                            MouseButton::Left,
+                            cx.listener(move |this, _, _, _| {
+                                this.session.eq_phone = Some(index);
+                                this.session.rebuild_display_curves();
+                                this.eq_dropdown = None;
+                            }),
+                        ),
                 );
             }
             row = row.child(list);
@@ -1223,11 +1213,7 @@ impl App {
                     .px(px(8.0))
                     .py(px(3.0))
                     .rounded(px(metrics::RADIUS))
-                    .bg(if open {
-                        palette.accent
-                    } else {
-                        palette.field
-                    })
+                    .bg(if open { palette.accent } else { palette.field })
                     .border_1()
                     .border_color(if open {
                         palette.accent
@@ -1243,39 +1229,38 @@ impl App {
                     .cursor_pointer()
                     .child(div().flex_1().truncate().child(target_name.to_string()))
                     .child(if open { "▲" } else { "▼" })
-                    .on_mouse_up(MouseButton::Left, cx.listener(move |this, _, _, _| {
-                        this.eq_dropdown = if matches!(this.eq_dropdown, Some(EqDropdown::Target)) {
-                            None
-                        } else {
-                            Some(EqDropdown::Target)
-                        };
-                    })),
+                    .on_mouse_up(
+                        MouseButton::Left,
+                        cx.listener(move |this, _, _, _| {
+                            this.eq_dropdown =
+                                if matches!(this.eq_dropdown, Some(EqDropdown::Target)) {
+                                    None
+                                } else {
+                                    Some(EqDropdown::Target)
+                                };
+                        }),
+                    ),
             )
             .child(
-                div()
-                    .flex()
-                    .flex_row()
-                    .gap(px(6.0))
-                    .mt(px(4.0))
-                    .child(
-                        div()
-                            .id("auto_eq_btn")
-                            .px(px(12.0))
-                            .py(px(4.0))
-                            .rounded(px(metrics::RADIUS))
-                            .bg(palette.accent)
-                            .text_color(palette.on_accent)
-                            .text_size(px(theme::type_scale::CONTROL))
-                            .font_weight(FontWeight::BOLD)
-                            .cursor_pointer()
-                            .child("Auto EQ")
-                            .on_click(cx.listener(move |this, _, _, _| {
-                                let before = this.snapshot();
-                                let _ = this.session.run_auto_eq();
-                                this.history.record(before);
-                                this.session.rebuild_display_curves();
-                            })),
-                    ),
+                div().flex().flex_row().gap(px(6.0)).mt(px(4.0)).child(
+                    div()
+                        .id("auto_eq_btn")
+                        .px(px(12.0))
+                        .py(px(4.0))
+                        .rounded(px(metrics::RADIUS))
+                        .bg(palette.accent)
+                        .text_color(palette.on_accent)
+                        .text_size(px(theme::type_scale::CONTROL))
+                        .font_weight(FontWeight::BOLD)
+                        .cursor_pointer()
+                        .child("Auto EQ")
+                        .on_click(cx.listener(move |this, _, _, _| {
+                            let before = this.snapshot();
+                            let _ = this.session.run_auto_eq();
+                            this.history.record(before);
+                            this.session.rebuild_display_curves();
+                        })),
+                ),
             );
 
         if open {
@@ -1309,10 +1294,13 @@ impl App {
                         })
                         .cursor_pointer()
                         .child(name)
-                        .on_mouse_up(MouseButton::Left, cx.listener(move |this, _, _, _| {
-                            this.session.eq_target = Some(index);
-                            this.eq_dropdown = None;
-                        })),
+                        .on_mouse_up(
+                            MouseButton::Left,
+                            cx.listener(move |this, _, _, _| {
+                                this.session.eq_target = Some(index);
+                                this.eq_dropdown = None;
+                            }),
+                        ),
                 );
             }
             row = row.child(list);
@@ -1353,9 +1341,12 @@ impl App {
             .text_size(px(theme::type_scale::CONTROL))
             .cursor_pointer()
             .child(label)
-            .on_mouse_up(MouseButton::Left, cx.listener(move |this, _, _, _| {
-                this.session.eq_bank = bank;
-            }))
+            .on_mouse_up(
+                MouseButton::Left,
+                cx.listener(move |this, _, _, _| {
+                    this.session.eq_bank = bank;
+                }),
+            )
     }
 
     fn tools_row(&self, palette: &Palette, cx: &mut Context<Self>) -> impl IntoElement {
