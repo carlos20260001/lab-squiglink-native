@@ -24,6 +24,7 @@ description = "Multiplatform windowing, input and clipboard plugin for squiglab,
 [lib]
 name = "squiglab_platform"
 path = "src/lib.rs"
+crate-type = ["cdylib"]
 
 [features]
 default = []
