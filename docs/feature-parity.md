@@ -78,27 +78,30 @@ driven by `xdotool` — and the two were looked at side by side.
 
 | Where | What asks for the file |
 |---|---|
-| Windows, macOS, Linux | The system's own dialog, through `rfd` — the one every other program on those systems uses |
-| The browser | The file input the web has always had, through `rfd`'s browser backend |
-| The phone | The system's own document picker, written against the system's own libraries (`objc2`), because there is no third party between the program and the phone |
-| The other phone | The system's own file table, read through the JNI, because the system picker hands its answer back through the activity, which the activity the game runs in does not pass on |
 
-## What the native has that the reference does not
+## A second frontend: GPUI
 
-- The measurements and the targets in one list, rather than the reference's
-  separate list and strip.
-- A music player that reads a file from this computer or a preview from the
-  Apple Music catalogue, where the reference lists the music it holds.
-- The file paths can be typed as well as chosen, which is what a window
-  without a dialog needs.
-- The graph's editor works with the mouse alone, which the reference's does
-  too, but the native's also keeps the table and the graph in step, so a
-  band drawn on the graph can be read in the table.
+A second interface crate, `crates/squiglab-gpui`, draws the same program
+with Zed's GPUI. It is additive: the egui frontend is untouched, and both
+are written against `squiglab-core`. Its first milestone is the shell at
+1440 by 900:
 
-## What the reference has that the native does not
+- the dark header with the mark, the wordmark and the curve count;
+- the three joined tabs, the search field, and the brand and model lists,
+  with the brands behind the models under a page-coloured veil, and the
+  models panel carrying the reference's one-point left and right borders;
+- the three themes, chosen through the same preferences file the egui
+  frontend reads;
+- the brand list and the models list load from the same session, and a
+  model is added to and removed from the graph by pressing its row.
 
-- **The tutorial overlay** — the seven band names with a description beside
-  each. The reference's descriptions are placeholders ("Lorem ipsum"), so
-  there is nothing to carry.
-- **The sound tools' own gear** opens a card with the volume in it; the
-  native's does the same ✓.
+The geometry was measured from the reference at 1440 by 900 (column 350
+wide with 16 points of padding, tabs 16/36/16 with a full-width rule,
+search 36 high at 11 points, rows 40 high with six between them, the
+models panel starting 60 points in). The marks are now the reference's own vectors, served to GPUI as tiny SVG
+files through an in-memory asset source; the graph, the equalizer, the
+sound tools, the file picker and the music player are still drawn by the
+egui frontend.
+
+Building needs the `libxkbcommon-x11` development library, which the GPUI
+windowing crate links against on Linux.

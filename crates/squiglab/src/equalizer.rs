@@ -813,9 +813,12 @@ pub fn bank_rows(app: &App) -> Vec<(usize, EqRow)> {
         .eq_filters
         .get(&phone)
         .map(|rows| {
+            // The index is into this bank's own rows, not into the phone's
+            // full list: the editor and the mutators below all work in the
+            // bank's own numbering, so the two sides must agree.
             rows.iter()
+                .filter(|row| row.bank == bank)
                 .enumerate()
-                .filter(|(_, row)| row.bank == bank)
                 .map(|(index, row)| (index, row.clone()))
                 .collect()
         })
@@ -908,6 +911,28 @@ pub fn set_band_q(app: &mut App, row: usize, q: f64) {
     write_bank(app, phone, bank, rows);
     crate::sound::push_chain(app);
 }
+
+/// The change in a band's Q that the wheel asks for.
+///
+/// Pure, so the step the wheel takes can be checked without driving the
+/// graph. `current` is the band's present Q and `wheel` the (signed)
+/// vertical scroll delta.
+pub fn q_step(current: f64, wheel: f32) -> f64 {
+    if wheel == 0.0 {
+        return 0.0;
+    }
+    let fine = current <= 0.3;
+    let step: f32 = if fine { 0.01 } else { 0.1 };
+    let sensitivity: f32 = if current >= 2.0 {
+        1.0
+    } else {
+        let t = ((current as f32 - 0.1) / (2.0 - 0.1)).clamp(0.0, 1.0);
+        0.22 + 0.78 * t.powf(1.2)
+    };
+    let notches = (wheel.abs() / 42.0_f32).powf(0.58).round().clamp(1.0, 5.0);
+    (-wheel.signum() * step * notches * sensitivity) as f64
+}
+
 
 /// Add a band to the curve that is being looked at.
 ///
@@ -1051,3 +1076,27 @@ fn import(app: &mut App, phone: usize) {
         Err(problem) => app.say(format!("The file was not imported: {problem}")),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::q_step;
+
+    #[test]
+    fn q_step_is_zero_for_zero_wheel() {
+        assert_eq!(q_step(1.0, 0.0), 0.0);
+    }
+
+    #[test]
+    fn q_step_sign_follows_wheel() {
+        assert!(q_step(1.0, 42.0) < 0.0);
+        assert!(q_step(1.0, -42.0) > 0.0);
+    }
+
+    #[test]
+    fn q_step_fine_for_low_q() {
+        let fine = q_step(0.2, 42.0).abs();
+        let coarse = q_step(2.0, 42.0).abs();
+        assert!(fine < coarse);
+    }
+}
+

@@ -1,0 +1,23 @@
+# The GPUI interface.
+#
+# A second drawing of the same program. Like the egui interface, it is written
+# against `squiglab-core` and knows nothing about the rules it shows; unlike
+# the egui interface, it draws with Zed's GPUI.
+[package]
+name = "squiglab-gpui"
+version = "0.1.0"
+edition = "2021"
+default-run = "squiglab-gpui"
+
+[[bin]]
+name = "squiglab-gpui"
+path = "src/main.rs"
+
+[dependencies]
+squiglab-core = { path = "../squiglab-core" }
+gpui = "0.2.2"
+
+# gpui -> zed-async-tar -> xattr 0.2.3 still asks libc for `ENOATTR`.
+# libc removed that Linux alias in 0.2.186, so the last release that carries
+# it is pinned here until the dependency catches up.
+libc = "=0.2.185"

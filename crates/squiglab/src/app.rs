@@ -136,7 +136,7 @@ impl App {
         let paths = DataPaths {
             measurements: std::path::PathBuf::from("data"),
             headphones: std::path::PathBuf::from("data_hp"),
-            corrections: std::path::PathBuf::from("data_delta"),
+            corrections: std::path::PathBuf::from("data_deltas"),
         };
         let mut status = None;
         match session.load(&paths, None) {

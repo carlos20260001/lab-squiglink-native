@@ -22,6 +22,22 @@ use crate::theme::{self, metrics, TypeStep};
 /// `d3.merge([1,2,3].map(e => xvals.map(m => m * Math.pow(10, e)))).concat([20000])`
 /// with `xvals = [2,3,4,5,6,8,10,15]`, so the native's grid agrees with the
 /// reference's down to the last tick.
+/// The decibel tick values for a range: one when the range is narrow and
+/// five otherwise, running from the ceiling of the lower bound to the
+/// floor of the upper one.
+///
+/// Shared by the on-screen grid and the SVG export so the two cannot drift.
+fn db_tick_values(minimum: f32, maximum: f32) -> Vec<f32> {
+    let range = (maximum - minimum).max(1.0);
+    let step = if range < 40.0 { 1.0_f32 } else { 5.0_f32 };
+    let y0 = (minimum / step).ceil();
+    let y1 = (maximum / step).floor();
+    d3::array::range(f64::from(y0), Some(f64::from(y1) + 1.0), Some(1.0))
+        .into_iter()
+        .map(|v| (v * f64::from(step)) as f32)
+        .collect()
+}
+
 fn x_tick_frequencies() -> Vec<f32> {
     let xvals = [2.0_f64, 3.0, 4.0, 5.0, 6.0, 8.0, 10.0, 15.0];
     let mut lists: Vec<Vec<f64>> = Vec::new();
@@ -79,17 +95,21 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
             painter.add(shape);
         }
         let plot = plot_rect(rect);
-        // dB scale drag handle first, so the axis labels draw above it.
-        scale(app, &painter, rect, &response);
-        let curves = plot_curves(app);
-        let (minimum, maximum) = match app.session.graph_range {
-            Some(range) => range,
-            None => {
-                let (minimum, maximum) = y_range(&curves);
-                scaled_y_range((minimum, maximum), app.session.y_scale)
+        let (minimum, maximum) = {
+            let curves = plot_curves(app);
+            match app.session.graph_range {
+                Some(range) => range,
+                None => {
+                    let (mn, mx) = y_range(&curves);
+                    scaled_y_range((mn, mx), app.session.y_scale)
+                }
             }
         };
-        let transform = transform_for(app, plot);
+        let zoom = app.session.zoom;
+        let transform = Transform::new(plot, zoom.x_range(), (minimum, maximum));
+        // dB scale drag handle first, so the axis labels draw above it.
+        scale(app, &painter, rect, &response, minimum, maximum);
+        let curves = plot_curves(app);
 
         // axes (d3-backed)
         grid(&painter, rect, plot, &transform, minimum, maximum);
@@ -122,39 +142,24 @@ fn plot_rect(rect: Rect) -> Rect {
     )
 }
 
-/// The way from the plot back to the curves.
-fn transform_for(app: &App, plot: Rect) -> Transform {
-    let curves = plot_curves(app);
-    let (minimum, maximum) = match app.session.graph_range {
-        Some(range) => range,
-        None => {
-            let (minimum, maximum) = y_range(&curves);
-            scaled_y_range((minimum, maximum), app.session.y_scale)
-        }
-    };
-    let zoom = app.session.zoom;
-    Transform::new(plot, zoom.x_range(), (minimum, maximum))
-}
-
 /// The scale down the left of the graph, and the handles that move it.
 ///
 /// The reference's scale is dragged: the handle in the middle moves the
 /// range up and down, and the two ends change how far it reaches. A
 /// double-click puts it back where the curves say it should be.
-fn scale(app: &mut App, painter: &egui::Painter, rect: Rect, response: &egui::Response) {
+fn scale(
+    app: &mut App,
+    painter: &egui::Painter,
+    rect: Rect,
+    response: &egui::Response,
+    minimum: f32,
+    maximum: f32,
+) {
     let palette = theme::current_palette();
     let plot = plot_rect(rect);
     if plot.width() <= 0.0 || plot.height() <= 0.0 {
         return;
     }
-    let (minimum, maximum) = match app.session.graph_range {
-        Some(range) => range,
-        None => {
-            let curves = plot_curves(app);
-            let (minimum, maximum) = y_range(&curves);
-            scaled_y_range((minimum, maximum), app.session.y_scale)
-        }
-    };
     let centre_db = (minimum + maximum) / 2.0;
     let half_db = (maximum - minimum) / 2.0;
 
@@ -341,12 +346,22 @@ pub fn curve_color(app: &App, group_index: usize) -> squiglab_core::color::Rgb {
 /// The curves the graph draws: the measurements and the targets that are on.
 fn plot_curves(app: &App) -> Vec<PlotCurve<'_>> {
     let mut curves = Vec::new();
+    // The reference hands each target a style by its place among the loaded
+    // targets, so the count is kept here as the curves are walked.
+    let mut target_slot = 0_usize;
     for (index, curve) in app.session.display_curves.iter().enumerate() {
         let color = match curve.source {
             squiglab_core::session::CurveSource::Equalizer => {
                 squiglab_core::color::get_curve_color_with_offset(index, app.session.color_offset)
             }
             _ => squiglab_core::color::get_curve_color_with_offset(index, app.session.color_offset),
+        };
+        let slot = if curve.target {
+            let slot = target_slot;
+            target_slot += 1;
+            slot
+        } else {
+            0
         };
         curves.push(PlotCurve {
             label: &curve.label,
@@ -355,13 +370,14 @@ fn plot_curves(app: &App) -> Vec<PlotCurve<'_>> {
             color,
             dashed: curve.target,
             target: curve.target,
+            target_slot: slot,
         });
     }
     curves
 }
 
 /// The bands of the curve that is being edited, and where they sit.
-struct Marker {
+pub struct Marker {
     /// The row in the bank.
     row: usize,
     /// The frequency, in hertz.
@@ -371,7 +387,7 @@ struct Marker {
 }
 
 /// The way a drag on the graph is locked.
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Axis {
     /// The frequency, and the gain stays where it was.
     Frequency,
@@ -408,6 +424,94 @@ const MARKER_HIT_PX: f32 = 28.0;
 const MARKER_RADIUS: f32 = 2.5;
 /// How far the pointer must move before the drag is locked to one way.
 const DRAG_THRESHOLD_PX: f32 = 5.0;
+
+/// How a drag on the graph begins.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum DragStart {
+    /// An existing band's mark was hit.
+    BandExisting { row: usize, hz: f64, db: f64 },
+    /// A new band is drawn out of the curve.
+    BandNew { hz: f64, gain: f64 },
+    /// A range of frequencies is brushed.
+    Range { hz: f64 },
+    /// Nothing happens.
+    None,
+}
+
+/// Classify what a pointer-down on the graph begins.
+pub fn classify_drag_start(
+    pointer: Pos2,
+    plot: Rect,
+    markers: &[Marker],
+    transform: &Transform,
+    near_trace: bool,
+    gain_if_new: f64,
+) -> DragStart {
+    if !plot.contains(pointer) {
+        return DragStart::None;
+    }
+    let hit = markers.iter().find(|marker| {
+        (pointer - marker_centre(marker, transform)).length() <= MARKER_HIT_PX
+    });
+    match hit {
+        Some(marker) => DragStart::BandExisting {
+            row: marker.row,
+            hz: marker.hz,
+            db: marker.db,
+        },
+        None => {
+            let hz = frequency_at(transform, pointer);
+            if near_trace {
+                DragStart::BandNew {
+                    hz,
+                    gain: gain_if_new,
+                }
+            } else {
+                DragStart::Range { hz }
+            }
+        }
+    }
+}
+
+/// Update a band drag: lock the axis once the pointer has moved far enough,
+/// then compute the band's new frequency and gain.
+#[allow(clippy::too_many_arguments)]
+pub fn update_band_drag(
+    axis: Option<Axis>,
+    anchor_hz: f64,
+    anchor_db: f64,
+    origin: Pos2,
+    pointer: Pos2,
+    threshold: f32,
+    transform: &Transform,
+    trace_db: Option<f64>,
+) -> (f64, f64, Option<Axis>) {
+    let mut axis = axis;
+    let mut hz = anchor_hz;
+    let mut db = anchor_db;
+    if axis.is_none() {
+        let dx = (pointer.x - origin.x).abs();
+        let dy = (pointer.y - origin.y).abs();
+        if dx.max(dy) >= threshold {
+            axis = Some(if dx >= dy {
+                Axis::Frequency
+            } else {
+                Axis::Gain
+            });
+        }
+    }
+    if axis == Some(Axis::Frequency) {
+        hz = frequency_at(transform, pointer);
+    }
+    if axis == Some(Axis::Gain) {
+        let level = level_at(transform, pointer);
+        db = match trace_db {
+            Some(trace) => (level - trace).clamp(-40.0, 40.0),
+            None => level,
+        };
+    }
+    (hz, db, axis)
+}
 
 /// The equalizer's own graph: the bands, and what the pointer does to them.
 fn eq_editor(
@@ -505,17 +609,8 @@ fn eq_editor(
                 (pointer - marker_centre(marker, transform)).length() <= MARKER_HIT_PX
             }) {
                 let current = band_q(app, marker.row);
-                let fine = current <= 0.3;
-                let step: f32 = if fine { 0.01 } else { 0.1 };
-                let sensitivity: f32 = if current >= 2.0 {
-                    1.0
-                } else {
-                    let t = ((current as f32 - 0.1) / (2.0 - 0.1)).clamp(0.0, 1.0);
-                    0.22 + 0.78 * t.powf(1.2)
-                };
-                let notches = (wheel.abs() / 42.0_f32).powf(0.58).round().clamp(1.0, 5.0);
-                let change = -wheel.signum() * step * notches * sensitivity;
-                crate::equalizer::set_band_q(app, marker.row, current + change as f64);
+                let change = crate::equalizer::q_step(current, wheel);
+                crate::equalizer::set_band_q(app, marker.row, current + change);
             }
         }
     }
@@ -536,40 +631,39 @@ fn eq_editor(
     if response.drag_started() {
         if let Some(pointer) = response.interact_pointer_pos() {
             if plot.contains(pointer) {
-                let hit = markers.iter().find(|marker| {
-                    (pointer - marker_centre(marker, transform)).length() <= MARKER_HIT_PX
-                });
-                match hit {
-                    Some(marker) => {
+                let near = near_the_trace(app, transform, pointer);
+                let gain_if_new = if near {
+                    gain_under(app, transform, pointer)
+                } else {
+                    0.0
+                };
+                match classify_drag_start(pointer, plot, &markers, transform, near, gain_if_new) {
+                    DragStart::BandExisting { row, hz, db } => {
                         app.graph_drag = Some(GraphDrag::Band {
-                            row: Some(marker.row),
+                            row: Some(row),
                             axis: None,
-                            anchor_hz: marker.hz,
-                            anchor_db: marker.db,
+                            anchor_hz: hz,
+                            anchor_db: db,
                             origin: pointer,
                         });
                     }
-                    None => {
-                        let hz = frequency_at(transform, pointer);
-                        if near_the_trace(app, transform, pointer) {
-                            // A band is drawn out of the curve, at the
-                            // height the pointer is at above it.
-                            let gain = gain_under(app, transform, pointer);
-                            let row = crate::equalizer::add_band_at(app, hz, gain);
-                            app.graph_drag = Some(GraphDrag::Band {
-                                row,
-                                axis: None,
-                                anchor_hz: hz,
-                                anchor_db: gain,
-                                origin: pointer,
-                            });
-                        } else {
-                            app.graph_drag = Some(GraphDrag::Range {
-                                anchor_hz: hz,
-                                last_hz: hz,
-                            });
-                        }
+                    DragStart::BandNew { hz, gain } => {
+                        let row = crate::equalizer::add_band_at(app, hz, gain);
+                        app.graph_drag = Some(GraphDrag::Band {
+                            row,
+                            axis: None,
+                            anchor_hz: hz,
+                            anchor_db: gain,
+                            origin: pointer,
+                        });
                     }
+                    DragStart::Range { hz } => {
+                        app.graph_drag = Some(GraphDrag::Range {
+                            anchor_hz: hz,
+                            last_hz: hz,
+                        });
+                    }
+                    DragStart::None => {}
                 }
             }
         }
@@ -587,27 +681,38 @@ fn eq_editor(
                 origin,
             }) => {
                 let mut axis = axis;
-                let (mut hz, mut db) = (anchor_hz, anchor_db);
                 if let Some(pointer) = pointer {
-                    if axis.is_none() {
-                        let dx = (pointer.x - origin.x).abs();
-                        let dy = (pointer.y - origin.y).abs();
-                        if dx.max(dy) >= DRAG_THRESHOLD_PX {
-                            axis = Some(if dx >= dy {
-                                Axis::Frequency
-                            } else {
-                                Axis::Gain
-                            });
-                        }
-                    }
-                    if axis == Some(Axis::Frequency) {
-                        hz = frequency_at(transform, pointer);
-                    }
-                    if axis == Some(Axis::Gain) {
-                        db = gain_under(app, transform, pointer);
-                    }
+                    let trace_for_gain = app.session.eq_phone.and_then(|phone| {
+                        app.session
+                            .display_curves
+                            .iter()
+                            .find(|curve| {
+                                curve.group_index == phone
+                                    && matches!(
+                                        curve.source,
+                                        squiglab_core::session::CurveSource::Measurement
+                                    )
+                            })
+                            .map(|curve| {
+                                f64::from(squiglab_core::graph::db_at(
+                                    &curve.points,
+                                    frequency_at(transform, pointer),
+                                ))
+                            })
+                    });
+                    let (new_hz, new_db, new_axis) = update_band_drag(
+                        axis,
+                        anchor_hz,
+                        anchor_db,
+                        origin,
+                        pointer,
+                        DRAG_THRESHOLD_PX,
+                        transform,
+                        trace_for_gain,
+                    );
+                    axis = new_axis;
                     if let Some(row) = row {
-                        crate::equalizer::move_band(app, row, hz, db);
+                        crate::equalizer::move_band(app, row, new_hz, new_db);
                     }
                 }
                 app.graph_drag = Some(GraphDrag::Band {
@@ -676,7 +781,7 @@ fn gain_under(app: &App, transform: &Transform, pointer: Pos2) -> f64 {
         return level;
     };
     let hz = frequency_at(transform, pointer) as f32;
-    let trace = f64::from(db_at(&curve.points, f64::from(hz)));
+    let trace = f64::from(squiglab_core::graph::db_at(&curve.points, f64::from(hz)));
     (level - trace).clamp(-40.0, 40.0)
 }
 
@@ -707,7 +812,7 @@ fn eq_markers(app: &App, transform: &Transform) -> Vec<Marker> {
             // added to it: a shelf is drawn as the peak it would be, so that
             // turning a band into a shelf does not move its mark.
             let db = measurement
-                .map(|points| db_at(points, hz) as f64 + band.filter.gain)
+                .map(|points| squiglab_core::graph::db_at(points, hz) as f64 + band.filter.gain)
                 .unwrap_or(band.filter.gain);
             Marker { row: index, hz, db }
         })
@@ -717,30 +822,6 @@ fn eq_markers(app: &App, transform: &Transform) -> Vec<Marker> {
             x.is_finite() && y.is_finite()
         })
         .collect()
-}
-
-/// The level of a curve at a frequency.
-fn db_at(points: &[squiglab_core::data::FRPoint], hz: f64) -> f32 {
-    if points.is_empty() {
-        return 0.0;
-    }
-    for window in points.windows(2) {
-        let (left, right) = (&window[0], &window[1]);
-        if hz >= f64::from(left.hz) && hz <= f64::from(right.hz) {
-            let span = f64::from(right.hz) - f64::from(left.hz);
-            if span <= 0.0 {
-                return left.db;
-            }
-            let place = (hz - f64::from(left.hz)) / span;
-            return (f64::from(left.db) + (f64::from(right.db) - f64::from(left.db)) * place)
-                as f32;
-        }
-    }
-    if hz < f64::from(points[0].hz) {
-        points[0].db
-    } else {
-        points[points.len() - 1].db
-    }
 }
 
 /// The width of a band.
@@ -770,7 +851,7 @@ fn near_the_trace(app: &App, transform: &Transform, pointer: Pos2) -> bool {
         return false;
     };
     let hz = frequency_at(transform, pointer) as f32;
-    let db = db_at(&curve.points, f64::from(hz));
+    let db = squiglab_core::graph::db_at(&curve.points, f64::from(hz));
     let y = transform.db_to_y(db);
     (y - pointer.y).abs() <= MARKER_HIT_PX
 }
@@ -878,18 +959,8 @@ fn grid(
     // to the floor of the upper one.
     let range = (maximum - minimum).max(1.0);
     let step = if range < 40.0 { 1.0_f32 } else { 5.0_f32 };
-    let y0 = (minimum / step).ceil();
-    let y1 = (maximum / step).floor();
-    // The reference's own step: `d3.range(y1-y0+1).map(i => t*(y0+i))`.
-    // The range steps by one tick index at a time and the decibel value
-    // is taken afterwards; stepping it in decibels would skip four
-    // fifths of the ticks whenever the step is five, leaving the axis
-    // with one number.
-    let ticks: Vec<f32> = d3::array::range(f64::from(y0), Some(f64::from(y1) + 1.0), Some(1.0))
-        .into_iter()
-        .map(|v| (v * f64::from(step)) as f32)
-        .collect();
-    // One path per band of the blur, so that the whole blurred scale is
+    let ticks = db_tick_values(minimum, maximum);
+    // One path per band of the blur, so that the whole blurred scale is:
     // three tessellations, and one for the minor lines, which the
     // reference leaves sharp.
     let mut bands = [
@@ -1076,6 +1147,28 @@ fn band_names(painter: &egui::Painter, plot: Rect, transform: &Transform) {
     }
 }
 
+/// The dash and weight the reference gives each target, by its place among the
+/// loaded targets. Widths and dash lengths are in the 800-unit box and scale
+/// with the figure, as the curves' own stroke does. The dash is the on-and-off
+/// pattern in that unit.
+const TARGET_TRACE_DOT_SPECS: [(&[f32], f32); 10] = [
+    (&[6.0, 3.0], 2.5),
+    (&[18.0, 9.0], 1.5),
+    (&[3.0, 6.0], 2.0),
+    (&[2.0, 3.0], 2.0),
+    (&[8.0, 6.0], 1.0),
+    (&[10.0, 5.0], 1.3),
+    (&[14.0, 4.0, 2.0, 4.0], 1.65),
+    (&[1.0, 5.0], 1.95),
+    (&[8.0, 3.0, 2.0, 3.0], 1.4),
+    (&[4.0, 2.0, 1.0, 2.0, 8.0, 2.0], 1.7),
+];
+
+/// The graph-only fade the reference gives the second and later targets, so a
+/// stack of them stays readable. The first target is left at full strength.
+const TARGET_TRACE_OPACITY_SECOND: f32 = 0.52;
+const TARGET_TRACE_OPACITY_REST: f32 = 0.38;
+
 /// The curves themselves.
 fn curves_into(
     painter: &egui::Painter,
@@ -1103,6 +1196,17 @@ fn curves_into(
             .collect();
         let color = theme::color(curve.color);
         if curve.dashed {
+            // The reference gives each target its own weight and dash by its
+            // place among them, and fades the second and later so a stack of
+            // them stays readable.
+            let (dash, width) =
+                TARGET_TRACE_DOT_SPECS[curve.target_slot % TARGET_TRACE_DOT_SPECS.len()];
+            let alpha = match curve.target_slot {
+                0 => 1.0,
+                1 => TARGET_TRACE_OPACITY_SECOND,
+                _ => TARGET_TRACE_OPACITY_REST,
+            };
+            let color = color.gamma_multiply(alpha);
             let smooth = app.session.smooth_level > 0;
             let mut path = d3::path::Path::default();
             let mut curve_shape = if smooth {
@@ -1117,14 +1221,16 @@ fn curves_into(
             curve_shape.line_end(&mut path);
             let shapes = svg_tessellate::tessellate(
                 &path.to_string(),
-                Some(Stroke::new(1.6 * unit, color)),
+                Some(Stroke::new(width * unit, color)),
                 None,
                 svg_tessellate::Options::default(),
             );
-            // Apply dashing by walking the tessellated polyline.
+            // Apply dashing by walking the tessellated polyline, spending the
+            // pattern's on-and-off lengths in turn.
+            let pattern: Vec<f32> = dash.iter().map(|d| d * unit).collect();
             for shape in shapes {
                 if let egui::Shape::Path(path_shape) = shape {
-                    dashed_path(painter, &path_shape.points, color);
+                    dashed_path(painter, &path_shape.points, &pattern, width * unit, color);
                 }
             }
         } else {
@@ -1154,11 +1260,27 @@ fn curves_into(
 }
 
 /// A dashed line, for the targets.
-fn dashed_path(painter: &egui::Painter, path: &[Pos2], color: Color32) {
-    let dash: f32 = 6.0;
-    let gap: f32 = 4.0;
-    let mut drawn = 0.0;
-    let mut on = true;
+///
+/// The pattern is the on-and-off lengths in turn, already in points: the
+/// even-indexed entries are ink and the odd-indexed are gaps. The walk keeps
+/// its place across the polyline's corners, so the dashes carry on rather than
+/// restarting at each bend.
+fn dashed_path(
+    painter: &egui::Painter,
+    path: &[Pos2],
+    pattern: &[f32],
+    width: f32,
+    color: Color32,
+) {
+    if pattern.is_empty() || pattern.iter().all(|d| *d <= 0.0) {
+        // No pattern to speak of: draw the line whole.
+        for pair in path.windows(2) {
+            painter.line_segment([pair[0], pair[1]], Stroke::new(width, color));
+        }
+        return;
+    }
+    let mut index = 0_usize;
+    let mut remaining = pattern[0];
     for pair in path.windows(2) {
         let start = pair[0];
         let end = pair[1];
@@ -1168,19 +1290,20 @@ fn dashed_path(painter: &egui::Painter, path: &[Pos2], color: Color32) {
         }
         let mut travelled = 0.0;
         while travelled < length {
-            let want = if on { dash } else { gap };
-            let take = (want - drawn).min(length - travelled);
-            let from = start + (end - start) * (travelled / length);
-            let to = start + (end - start) * ((travelled + take) / length);
+            if remaining <= 0.0 {
+                index += 1;
+                remaining = pattern[index % pattern.len()];
+                continue;
+            }
+            let on = index.is_multiple_of(2);
+            let take = remaining.min(length - travelled);
             if on {
-                painter.line_segment([from, to], Stroke::new(1.6, color));
+                let from = start + (end - start) * (travelled / length);
+                let to = start + (end - start) * ((travelled + take) / length);
+                painter.line_segment([from, to], Stroke::new(width, color));
             }
             travelled += take;
-            drawn += take;
-            if drawn >= want - 0.01 {
-                on = !on;
-                drawn = 0.0;
-            }
+            remaining -= take;
         }
     }
 }
@@ -1422,15 +1545,7 @@ pub fn export_svg(app: &App, width: f32, height: f32) -> String {
     // The grid and the dB scale.
     let grid_color = hex(palette.border.gamma_multiply(0.6));
     let label_color = hex(palette.text_tertiary);
-    let range = maximum - minimum;
-    let t = if range < 40.0 { 1.0_f32 } else { 5.0_f32 };
-    let y0 = (minimum / t).ceil();
-    let y1 = (maximum / t).floor();
-    // As the screen's grid: the range steps in tick indices, not decibels.
-    let db_ticks: Vec<f32> = d3::array::range(f64::from(y0), Some(f64::from(y1) + 1.0), Some(1.0))
-        .into_iter()
-        .map(|v| (v * f64::from(t)) as f32)
-        .collect();
+    let db_ticks = db_tick_values(minimum, maximum);
     for db in db_ticks {
         let y = transform.db_to_y(db);
         if y >= plot.top() && y <= plot.bottom() {
@@ -1521,4 +1636,44 @@ pub fn export_svg(app: &App, width: f32, height: f32) -> String {
 /// A colour as the SVG spells it.
 fn hex(color: Color32) -> String {
     format!("#{:02x}{:02x}{:02x}", color.r(), color.g(), color.b())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use egui::{Pos2, Rect};
+
+    #[test]
+    fn classify_drag_start_returns_none_outside_plot() {
+        let plot = Rect::from_min_max(Pos2::new(10.0, 10.0), Pos2::new(100.0, 100.0));
+        let transform = Transform::new(plot, (20.0, 20000.0), (40.0, 80.0));
+        let start = classify_drag_start(
+            Pos2::new(5.0, 5.0),
+            plot,
+            &[],
+            &transform,
+            false,
+            0.0,
+        );
+        assert_eq!(start, DragStart::None);
+    }
+
+    #[test]
+    fn update_band_drag_locks_frequency_when_horizontal() {
+        let plot = Rect::from_min_max(Pos2::new(10.0, 10.0), Pos2::new(100.0, 100.0));
+        let transform = Transform::new(plot, (20.0, 20000.0), (40.0, 80.0));
+        let origin = Pos2::new(50.0, 50.0);
+        let pointer = Pos2::new(80.0, 52.0);
+        let (_hz, _db, axis) = update_band_drag(
+            None,
+            1000.0,
+            60.0,
+            origin,
+            pointer,
+            5.0,
+            &transform,
+            None,
+        );
+        assert_eq!(axis, Some(Axis::Frequency));
+    }
 }

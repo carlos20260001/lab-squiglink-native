@@ -7,8 +7,8 @@
 use crate::color::Rgb;
 use crate::data::FRPoint;
 use d3::scale::{scale_linear, scale_log, ScaleLinear, ScaleLog};
-use d3::shape::{curve_cardinal, curve_natural, Context};
-use emath::{Pos2, Rect, Vec2};
+
+use emath::Rect;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
@@ -46,6 +46,11 @@ pub struct PlotCurve<'a> {
     /// Whether this curve is a reference target rather than a measurement.
     /// Targets are excluded from the plotted dB range.
     pub target: bool,
+    /// The target's place among the loaded targets, counting from zero. The
+    /// reference gives each target its own dash and weight by this position,
+    /// so two targets on the graph are told apart by their stroke as well as
+    /// their colour. Meaningless for a curve that is not a target.
+    pub target_slot: usize,
 }
 
 /// How many labels are grouped into one corner before the rest follow their own
@@ -216,115 +221,32 @@ pub fn nearest_point(points: &[FRPoint], frequency: f32) -> Option<&FRPoint> {
         (None, None) => None,
     }
 }
-pub fn curve_control_points(points: &[Pos2], natural: bool) -> Vec<[Pos2; 4]> {
-    if points.len() < 3 {
-        return Vec::new();
-    }
 
-    // `graphtool.js` switches between curveNatural and
-    // curveCardinal.tension(0.5). Giving d3 a small recording context keeps
-    // its endpoint handling and operation order, while the interface remains
-    // free to tessellate the resulting Beziers for egui.
-    let mut context = BezierControls::default();
-    let mut curve = if natural {
-        curve_natural()
+/// The level of a curve at a frequency, linearly interpolated between the
+/// two nearest points. Shared by every frontend so the inspector and the
+/// equalizer editor agree on what the trace says.
+pub fn db_at(points: &[FRPoint], hz: f64) -> f32 {
+    if points.is_empty() {
+        return 0.0;
+    }
+    for window in points.windows(2) {
+        let (left, right) = (&window[0], &window[1]);
+        if hz >= f64::from(left.hz) && hz <= f64::from(right.hz) {
+            let span = f64::from(right.hz) - f64::from(left.hz);
+            if span <= 0.0 {
+                return left.db;
+            }
+            let place = (hz - f64::from(left.hz)) / span;
+            return (f64::from(left.db) + (f64::from(right.db) - f64::from(left.db)) * place)
+                as f32;
+        }
+    }
+    if hz < f64::from(points[0].hz) {
+        points[0].db
     } else {
-        curve_cardinal(0.5)
-    };
-    curve.line_start(&mut context);
-    for point in points {
-        curve.point(&mut context, f64::from(point.x), f64::from(point.y));
-    }
-    curve.line_end(&mut context);
-    context.controls
-}
-
-/// The parts of a d3 path that egui's tessellated line needs.
-///
-/// d3-shape writes through a context instead of returning control points. The
-/// graph only asks the two line curves for moves and cubic Beziers, so this
-/// recorder deliberately preserves just those operations.
-#[derive(Default)]
-struct BezierControls {
-    current: Option<Pos2>,
-    controls: Vec<[Pos2; 4]>,
-}
-
-impl Context for BezierControls {
-    fn move_to(&mut self, x: f64, y: f64) {
-        self.current = Some(Pos2::new(x as f32, y as f32));
-    }
-
-    fn line_to(&mut self, x: f64, y: f64) {
-        self.current = Some(Pos2::new(x as f32, y as f32));
-    }
-
-    fn close_path(&mut self) {}
-
-    fn quadratic_curve_to(&mut self, _x1: f64, _y1: f64, x: f64, y: f64) {
-        self.current = Some(Pos2::new(x as f32, y as f32));
-    }
-
-    fn bezier_curve_to(&mut self, x1: f64, y1: f64, x2: f64, y2: f64, x: f64, y: f64) {
-        let end = Pos2::new(x as f32, y as f32);
-        let start = self.current.unwrap_or(end);
-        self.controls.push([
-            start,
-            Pos2::new(x1 as f32, y1 as f32),
-            Pos2::new(x2 as f32, y2 as f32),
-            end,
-        ]);
-        self.current = Some(end);
-    }
-
-    fn arc(
-        &mut self,
-        _x: f64,
-        _y: f64,
-        _r: f64,
-        _a0: f64,
-        _a1: f64,
-        _ccw: bool,
-    ) -> Result<(), d3::path::PathError> {
-        // Neither d3 curve used above emits arcs. The trait requires this
-        // method because it is also shared by the shape generators that do.
-        Ok(())
-    }
-
-    fn rect(&mut self, x: f64, y: f64, _width: f64, _height: f64) {
-        self.current = Some(Pos2::new(x as f32, y as f32));
+        points[points.len() - 1].db
     }
 }
-
-pub fn natural_control_points(values: &[f32]) -> (Vec<f32>, Vec<f32>) {
-    let values: Vec<f64> = values.iter().map(|value| f64::from(*value)).collect();
-    let (first, second) = d3::shape::curve::control_points(&values);
-    (
-        first.into_iter().map(|value| value as f32).collect(),
-        second.into_iter().map(|value| value as f32).collect(),
-    )
-}
-pub fn cubic_bezier(start: Pos2, control1: Pos2, control2: Pos2, end: Pos2, t: f32) -> Pos2 {
-    // The reference evaluates the cubic in the browser's own numbers (IEEE 754
-    // binary64 through V8). Run the same arithmetic here, via the port's own
-    // ieee754, so the sampled curve agrees with the reference to the last bit.
-    let t = f64::from(t);
-    let inverse = 1.0 - t;
-    let inv2 = d3::ieee754::pow(inverse, 2.0);
-    let inv3 = d3::ieee754::pow(inverse, 3.0);
-    let t2 = d3::ieee754::pow(t, 2.0);
-    let t3 = d3::ieee754::pow(t, 3.0);
-    let x = f64::from(start.x) * inv3
-        + f64::from(control1.x) * (3.0 * inv2 * t)
-        + f64::from(control2.x) * (3.0 * inverse * t2)
-        + f64::from(end.x) * t3;
-    let y = f64::from(start.y) * inv3
-        + f64::from(control1.y) * (3.0 * inv2 * t)
-        + f64::from(control2.y) * (3.0 * inverse * t2)
-        + f64::from(end.y) * t3;
-    Pos2::new(x as f32, y as f32)
-}
-
 pub fn nice_limit(peak: f32) -> f32 {
     for step in [0.5_f32, 1.0, 2.0, 5.0, 10.0, 20.0, 50.0] {
         if peak <= step {
@@ -344,40 +266,6 @@ pub fn tick_db(db: f32) -> String {
         format!("{db:.0}")
     } else {
         format!("{db:.1}")
-    }
-}
-
-pub fn corner_label_position(
-    corner: LabelLayout,
-    index: usize,
-    size: Vec2,
-    plot_rect: Rect,
-    line_height: f32,
-) -> Pos2 {
-    // Inset clears the y-axis labels on the left and the tick text on the
-    // right, so the block never sits under either.
-    let inset = Vec2::new(10.0, 8.0);
-    let line = line_height;
-    let row = index.min(MAX_GROUPED_LABELS - 1) as f32;
-
-    match corner {
-        // CurveEnd never reaches here; the caller branches on it first.
-        LabelLayout::CurveEnd => Pos2::ZERO,
-        LabelLayout::CornerBottomLeft => Pos2::new(
-            plot_rect.left() + inset.x + 26.0,
-            (plot_rect.bottom() - inset.y - size.y - row * line)
-                .clamp(plot_rect.top(), plot_rect.bottom()),
-        ),
-        LabelLayout::CornerBottomRight => Pos2::new(
-            plot_rect.right() - inset.x - size.x - 26.0,
-            (plot_rect.bottom() - inset.y - size.y - row * line)
-                .clamp(plot_rect.top(), plot_rect.bottom()),
-        ),
-        LabelLayout::CornerTopLeft => Pos2::new(
-            plot_rect.left() + inset.x + 26.0,
-            (plot_rect.top() + inset.y + 16.0 + row * line)
-                .clamp(plot_rect.top(), plot_rect.bottom()),
-        ),
     }
 }
 
@@ -413,17 +301,6 @@ pub fn place_labels(mut labels: Vec<(String, f32, f32)>, plot_rect: Rect) -> BTr
         .collect()
 }
 
-pub fn clamp_label_position(position: Pos2, size: Vec2, bounds: Rect) -> Pos2 {
-    Pos2::new(
-        position
-            .x
-            .clamp(bounds.left(), (bounds.right() - size.x).max(bounds.left())),
-        position
-            .y
-            .clamp(bounds.top(), (bounds.bottom() - size.y).max(bounds.top())),
-    )
-}
-
 pub fn scaled_y_range((minimum, maximum): (f32, f32), scale: f32) -> (f32, f32) {
     // Evaluate in f64, matching the reference's number type, and clamp the
     // scale factor the same way the reference's slider does.
@@ -435,64 +312,6 @@ pub fn scaled_y_range((minimum, maximum): (f32, f32), scale: f32) -> (f32, f32) 
     ((center - half_range) as f32, (center + half_range) as f32)
 }
 
-pub fn sample_curve_path(points: &[Pos2], smooth: bool) -> Vec<Pos2> {
-    let controls = curve_control_points(points, smooth);
-    if controls.is_empty() {
-        return points.to_vec();
-    }
-
-    let mut sampled = Vec::with_capacity(controls.len() * 8 + 1);
-    sampled.push(points[0]);
-    for [start, control1, control2, end] in controls {
-        for step in 1..=8 {
-            sampled.push(cubic_bezier(
-                start,
-                control1,
-                control2,
-                end,
-                step as f32 / 8.0,
-            ));
-        }
-    }
-    sampled
-}
-
-pub fn point_segment_distance(point: Pos2, start: Pos2, end: Pos2) -> f32 {
-    // Route the square root through the port's ieee754 so the hit-testing
-    // distance agrees with the reference's own arithmetic.
-    let sx = f64::from(end.x - start.x);
-    let sy = f64::from(end.y - start.y);
-    let length_squared = sx * sx + sy * sy;
-    if length_squared == 0.0 {
-        let dx = f64::from(point.x - start.x);
-        let dy = f64::from(point.y - start.y);
-        return d3::ieee754::sqrt(dx * dx + dy * dy) as f32;
-    }
-    let px = f64::from(point.x - start.x);
-    let py = f64::from(point.y - start.y);
-    let projection = (px * sx + py * sy) / length_squared;
-    let projection = projection.clamp(0.0, 1.0);
-    let rx = f64::from(start.x) + sx * projection;
-    let ry = f64::from(start.y) + sy * projection;
-    let dx = f64::from(point.x) - rx;
-    let dy = f64::from(point.y) - ry;
-    d3::ieee754::sqrt(dx * dx + dy * dy) as f32
-}
-
-pub fn nearest_curve_index(curves: &[Vec<Pos2>], position: Pos2, threshold: f32) -> Option<usize> {
-    curves
-        .iter()
-        .enumerate()
-        .filter_map(|(index, points)| {
-            let distance = points
-                .windows(2)
-                .map(|pair| point_segment_distance(position, pair[0], pair[1]))
-                .fold(f32::INFINITY, f32::min);
-            (distance <= threshold).then_some((index, distance))
-        })
-        .min_by(|left, right| left.1.total_cmp(&right.1))
-        .map(|(index, _)| index)
-}
 #[derive(Clone)]
 pub struct Transform {
     pub rect: Rect,
@@ -541,7 +360,7 @@ impl Transform {
 
 #[cfg(test)]
 mod tests {
-    use super::{curve_control_points, Transform};
+    use super::Transform;
     use emath::{Pos2, Rect};
 
     fn assert_near(actual: f32, expected: f32) {
@@ -570,22 +389,4 @@ mod tests {
         assert_near(transform.y_at(190.0), 60.0);
     }
 
-    #[test]
-    fn unsmoothed_curve_uses_d3_cardinal_tension_one_half() {
-        let points = [
-            Pos2::new(0.0, 0.0),
-            Pos2::new(6.0, 12.0),
-            Pos2::new(14.0, 4.0),
-            Pos2::new(22.0, 10.0),
-        ];
-
-        let controls = curve_control_points(&points, false);
-        assert_eq!(controls.len(), 3);
-        assert_near(controls[0][1].x, 0.0);
-        assert_near(controls[0][2].x, 4.833_333_5);
-        assert_near(controls[1][1].y, 12.333_333);
-        assert_near(controls[1][2].x, 12.666_667);
-        assert_near(controls[2][1].x, 15.333_333);
-        assert_near(controls[2][2].y, 10.0);
-    }
 }
