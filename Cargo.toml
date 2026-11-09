@@ -5,6 +5,7 @@ members = [
     "crates/squiglab-gpui",
     "crates/svg-tessellate",
     "crates/app-bundle",
+    "crates/squiglab-platform",
 ]
 resolver = "2"
 

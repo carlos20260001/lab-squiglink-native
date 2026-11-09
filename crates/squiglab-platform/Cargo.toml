@@ -1,0 +1,77 @@
+# A multiplatform plugin crate for squiglab, modeled on egui's backend
+# architecture:
+#
+#   squiglab-core        platform-agnostic rules (like egui core)
+#   squiglab-platform    windowing/input/clipboard abstraction (like egui-winit)
+#
+# Backends translate platform events into squiglab input events so the core
+# and the GPUI interface never need to know whether they are running on
+# desktop, iOS, Android, or the web.
+#
+# Feature flags select the backend, following egui-winit's convention:
+#   default   = desktop (raw-window-handle handles the window)
+#   web       = wasm32 via web_sys / wasm-bindgen (like eframe's web backend)
+#   ios       = objc2 (like egui-winit on iOS)
+#   android   = jni + ndk (like egui-winit on Android)
+#   winit     = winit backend (stub; winit not in the offline lock yet)
+
+[package]
+name = "squiglab-platform"
+version = "0.1.0"
+edition = "2021"
+description = "Multiplatform windowing, input and clipboard plugin for squiglab, modeled on egui-winit"
+
+[lib]
+name = "squiglab_platform"
+path = "src/lib.rs"
+
+[features]
+default = []
+web = ["dep:web-sys", "dep:js-sys", "dep:wasm-bindgen"]
+ios = ["dep:objc2", "dep:objc2-foundation"]
+android = ["dep:jni", "dep:ndk", "dep:ndk-context"]
+winit = []
+
+[dependencies]
+squiglab-core = { path = "../squiglab-core" }
+
+# Window handle abstraction, available on every platform.
+raw-window-handle = "0.6"
+
+# Logging, used by backends and platform output helpers.
+log = "0.4"
+
+# Optional platform dependencies, pulled in only when their feature is on.
+# These are all already in the offline lock file (as transitive deps of
+# egui-winit / eframe / gpui), so they build without network access.
+[dependencies.web-sys]
+version = "0.3"
+optional = true
+
+[dependencies.js-sys]
+version = "0.3"
+optional = true
+
+[dependencies.wasm-bindgen]
+version = "0.2"
+optional = true
+
+[dependencies.objc2]
+version = "0.6"
+optional = true
+
+[dependencies.objc2-foundation]
+version = "0.3"
+optional = true
+
+[dependencies.jni]
+version = "0.21"
+optional = true
+
+[dependencies.ndk]
+version = "0.8"
+optional = true
+
+[dependencies.ndk-context]
+version = "0.1"
+optional = true

@@ -3702,6 +3702,7 @@ dependencies = [
  "log",
  "ndk-sys",
  "num_enum",
+ "raw-window-handle",
  "thiserror 1.0.69",
 ]
 
@@ -3999,6 +4000,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e3e0adef53c21f888deb4fa59fc59f7eb17404926ee8a6f59f5df0fd7f9f3272"
 dependencies = [
  "bitflags 2.13.2",
+ "block2",
+ "libc",
  "objc2",
  "objc2-core-foundation",
 ]
@@ -5607,6 +5610,23 @@ dependencies = [
  "libc",
  "squiglab-core",
  "unicode-segmentation",
+]
+
+[[package]]
+name = "squiglab-platform"
+version = "0.1.0"
+dependencies = [
+ "jni",
+ "js-sys",
+ "log",
+ "ndk",
+ "ndk-context",
+ "objc2",
+ "objc2-foundation",
+ "raw-window-handle",
+ "squiglab-core",
+ "wasm-bindgen",
+ "web-sys",
 ]
 
 [[package]]
