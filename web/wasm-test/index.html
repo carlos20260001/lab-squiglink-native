@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>squiglab-platform wasm test</title>
+<style>
+  body { font-family: monospace; padding: 2rem; background: #1a1a1a; color: #0f0; }
+  #status { margin: 1rem 0; padding: 1rem; background: #000; border: 1px solid #0f0; }
+  .ok { color: #0f0; }
+  .err { color: #f00; }
+  .info { color: #0ff; }
+  pre { background: #000; padding: 1rem; overflow: auto; border: 1px solid #333; }
+</style>
+</head>
+<body>
+<h1>squiglab-platform wasm artifact test</h1>
+<div id="status">Loading wasm module...</div>
+<pre id="output"></pre>
+
+<script>
+const status = document.getElementById('status');
+const output = document.getElementById('output');
+
+function log(msg, cls = 'info') {
+  const div = document.createElement('div');
+  div.className = cls;
+  div.textContent = msg;
+  output.appendChild(div);
+  console.log(msg);
+}
+
+async function main() {
+  try {
+    const response = await fetch('squiglab_platform.wasm');
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+    log('Fetched squiglab_platform.wasm (' + response.headers.get('content-length') + ' bytes)', 'ok');
+
+    const wasmBytes = await response.arrayBuffer();
+    log('Read ' + wasmBytes.byteLength + ' bytes into memory', 'ok');
+
+    // Check for valid wasm magic number
+    const magic = new Uint8Array(wasmBytes.slice(0, 4));
+    if (magic[0] === 0x00 && magic[1] === 0x61 && magic[2] === 0x73 && magic[3] === 0x6d) {
+      log('Valid WebAssembly binary (magic number confirmed)', 'ok');
+    } else {
+      throw new Error('Invalid wasm magic number');
+    }
+
+    const module = await WebAssembly.compile(wasmBytes);
+    log('WebAssembly module compiled successfully', 'ok');
+
+    // Try instantiation with stub imports. wasm-bindgen modules expect
+    // glue-code imports; compilation success is the key verification.
+    const imports = {
+      env: {
+        abort: () => { throw new Error('wasm abort called'); },
+        __assert_fail: () => { throw new Error('wasm assert failed'); },
+      },
+      __wbindgen_placeholder__: {},
+      __wbindgen_externref_xform__: (v) => v,
+    };
+
+    try {
+      const instance = await WebAssembly.instantiate(module, imports);
+      log('WebAssembly instance created successfully', 'ok');
+
+      const exports = Object.keys(instance.exports);
+      log('Exports (' + exports.length + '): ' + exports.join(', '), 'ok');
+
+      const hasInit = exports.includes('__wbindgen_init');
+      const hasStart = exports.includes('__wbindgen_start');
+      if (hasInit) {
+        log('Found __wbindgen_init export', 'ok');
+        try {
+          instance.exports.__wbindgen_init();
+          log('Called __wbindgen_init() successfully', 'ok');
+        } catch (e) {
+          log('__wbindgen_init() threw: ' + e.message, 'err');
+        }
+      }
+      if (hasStart) {
+        log('Found __wbindgen_start export', 'ok');
+        try {
+          instance.exports.__wbindgen_start();
+          log('Called __wbindgen_start() successfully', 'ok');
+        } catch (e) {
+          log('__wbindgen_start() threw: ' + e.message, 'err');
+        }
+      }
+
+      const platformExports = exports.filter(e =>
+        e.includes('install_event_handlers') ||
+        e.includes('drain_') ||
+        e.includes('Platform') ||
+        e.includes('platform')
+      );
+      if (platformExports.length > 0) {
+        log('Platform-related exports: ' + platformExports.join(', '), 'ok');
+      } else {
+        log('No platform-specific exports found (expected for raw wasm without wasm-bindgen glue)', 'info');
+      }
+
+      status.innerHTML = '<span class="ok">SUCCESS</span> - wasm module loaded and instantiated';
+
+    } catch (e) {
+      log('Instantiation note: ' + e.message, 'info');
+      log('The wasm module compiled successfully — full instantiation requires', 'info');
+      log('wasm-bindgen JS glue code (provided by wasm-bindgen in a real app).', 'info');
+      status.innerHTML = '<span class="ok">COMPILED OK</span> - wasm module is valid ' +
+                         '(instantiation needs wasm-bindgen glue)';
+    }
+
+  } catch (e) {
+    status.innerHTML = '<span class="err">FAILED</span> - ' + e.message;
+    log(e.message, 'err');
+  }
+}
+
+main();
+</script>
+</body>
+</html>

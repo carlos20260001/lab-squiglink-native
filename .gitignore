@@ -26,3 +26,4 @@ data_deltas/*
 __pycache__/
 # Users must manually install the d3 node modules for testing the native implementation
 node_modules/
+/web/wasm-test/squiglab_platform.wasm
