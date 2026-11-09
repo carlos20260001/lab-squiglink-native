@@ -21,3 +21,8 @@ gpui = "0.2.2"
 # libc removed that Linux alias in 0.2.186, so the last release that carries
 # it is pinned here until the dependency catches up.
 libc = "=0.2.185"
+
+# Unicode grapheme boundaries for the editable equalizer input's cursor
+# movement. The input only ever accepts ASCII digits, dot and minus, so this
+# is strictly correct for the characters it allows.
+unicode-segmentation = "1.13"

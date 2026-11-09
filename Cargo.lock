@@ -5606,6 +5606,7 @@ dependencies = [
  "gpui",
  "libc",
  "squiglab-core",
+ "unicode-segmentation",
 ]
 
 [[package]]
