@@ -96,7 +96,7 @@ fn copy_directory(source: &Path, destination: &Path) -> Result<()> {
         if entry.file_type()?.is_dir() {
             copy_directory(&source_path, &destination_path)?;
         } else {
-            fs::copy(source_path, destination_path)?;
+            fs::copy(&source_path, &destination_path)?;
         }
     }
     Ok(())

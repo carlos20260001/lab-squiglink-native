@@ -2,13 +2,12 @@
 members = [
     "crates/d3",
     "crates/squiglab-core",
-    "crates/squiglab",
     "crates/squiglab-gpui",
     "crates/svg-tessellate",
+    "crates/app-bundle",
 ]
 resolver = "2"
 
-# The program's own crate is the member of this workspace. The rules of the
-# program live in squiglab-core and know nothing about how anything is drawn,
-# so the interface that draws it is written against that, and not against any
-# other interface.
+# The program's core rules live in squiglab-core and know nothing about how
+# anything is drawn. The active native frontend being ported to 1:1 parity with
+# the web reference is `squiglab-gpui`.

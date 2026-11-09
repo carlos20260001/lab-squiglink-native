@@ -65,11 +65,11 @@ exit /b 2
 
 :build
 if "%TARGET_TRIPLE%"=="" (
-    set "BINARY=target\release\squiglab.exe"
-    cargo build --release
+    set "BINARY=target\release\squiglab-gpui.exe"
+    cargo build --release --bin squiglab-gpui
 ) else (
-    set "BINARY=target\%TARGET_TRIPLE%\release\squiglab.exe"
-    cargo build --release --target "%TARGET_TRIPLE%"
+    set "BINARY=target\%TARGET_TRIPLE%\release\squiglab-gpui.exe"
+    cargo build --release --bin squiglab-gpui --target "%TARGET_TRIPLE%"
 )
 if errorlevel 1 goto build_failed
 

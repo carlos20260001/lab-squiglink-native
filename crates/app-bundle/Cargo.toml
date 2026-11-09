@@ -1,0 +1,15 @@
+# The packaging tool: gathers the data, the licence and the mark around
+# the executable. It is kept out of the (removed) egui frontend and lives
+# as its own crate so the build scripts can package any frontend binary,
+# currently the GPUI one in crates/squiglab-gpui.
+[package]
+name = "app-bundle"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "app-bundle"
+path = "src/main.rs"
+
+[dependencies]
+squiglab-core = { path = "../squiglab-core" }
