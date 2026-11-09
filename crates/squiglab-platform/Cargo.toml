@@ -47,6 +47,34 @@ log = "0.4"
 [dependencies.web-sys]
 version = "0.3"
 optional = true
+features = [
+    # DOM
+    "Document",
+    "HtmlElement",
+    "HtmlCanvasElement",
+    "EventTarget",
+    "Node",
+    "Element",
+    "DomRect",
+    "Window",
+    # Events
+    "Event",
+    "KeyboardEvent",
+    "MouseEvent",
+    "PointerEvent",
+    "TouchEvent",
+    "Touch",
+    "TouchList",
+    "WheelEvent",
+    "DragEvent",
+    "DataTransfer",
+    "ClipboardEvent",
+    "FocusEvent",
+    "UiEvent",
+    "AddEventListenerOptions",
+    # Window
+    "console",
+]
 
 [dependencies.js-sys]
 version = "0.3"

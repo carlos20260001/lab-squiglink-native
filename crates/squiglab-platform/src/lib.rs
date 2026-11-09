@@ -777,9 +777,9 @@ impl Default for Clipboard {
 fn open_url_in_browser(url: &str) {
     #[cfg(feature = "web")]
     {
-        let _ = web_sys::window()
-            .and_then(|win| win.open_with_url_and_target(url, "_blank"))
-            .map_err(|err| log::warn!("Failed to open url: {:?}", err));
+        if let Some(win) = web_sys::window() {
+            let _ = win.open_with_url_and_target(url, "_blank");
+        }
     }
 
     #[cfg(not(feature = "web"))]
