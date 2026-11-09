@@ -4,7 +4,7 @@
 //! unsupported functionality as successful.
 
 /// Capabilities supported by the current platform.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct PlatformCapabilities {
     /// Whether GPU rendering (wgpu) is available.
     pub gpu_rendering: bool,
@@ -47,5 +47,13 @@ impl PlatformCapabilities {
             drag_and_drop: true,
             multiple_windows: false, // Browser tabs, not true multiple windows
         }
+    }
+}
+
+impl Default for PlatformCapabilities {
+    /// Default capabilities: the most restrictive (web-safe) set, so the
+    /// platform never reports unsupported functionality as successful.
+    fn default() -> Self {
+        Self::web()
     }
 }
