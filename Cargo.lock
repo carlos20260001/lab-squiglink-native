@@ -6880,7 +6880,6 @@ dependencies = [
  "cpal",
  "d3",
  "dirs 7.0.0",
- "emath",
  "libspa-sys",
  "once_cell",
  "pipewire",

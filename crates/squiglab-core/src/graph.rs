@@ -8,7 +8,7 @@ use crate::color::Rgb;
 use crate::data::FRPoint;
 use d3::scale::{scale_linear, scale_log, ScaleLinear, ScaleLog};
 
-use emath::Rect;
+use d3::math::Rect;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
@@ -361,7 +361,7 @@ impl Transform {
 #[cfg(test)]
 mod tests {
     use super::Transform;
-    use emath::{Pos2, Rect};
+    use d3::math::{Point as Pos2, Rect};
 
     fn assert_near(actual: f32, expected: f32) {
         assert!(

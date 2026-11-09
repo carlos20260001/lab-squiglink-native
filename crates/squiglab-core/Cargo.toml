@@ -24,7 +24,7 @@ anyhow = "1.0"
 d3 = { path = "../d3" }
 # The maths egui draws with, without the interface: the same types egui
 # re-exports, so a rule of the program can place a curve without a window.
-emath = "0.36"
+# emath removed: geometry now comes from d3::math.
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 walkdir = "2.4"

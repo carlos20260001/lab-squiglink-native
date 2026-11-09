@@ -134,11 +134,11 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
 /// units of padding at the sides, ten at the top and thirty-six at the
 /// bottom, and the box is drawn at the window's scale. The same fractions
 /// of this box are used here, so the plot sits where the reference's does.
-fn plot_rect(rect: Rect) -> Rect {
+fn plot_rect(rect: Rect) -> d3::math::Rect {
     let unit = rect.width() / 800.0;
-    Rect::from_min_max(
-        Pos2::new(rect.left() + 15.0 * unit, rect.top() + 10.0 * unit),
-        Pos2::new(rect.right() - 15.0 * unit, rect.bottom() - 36.0 * unit),
+    d3::math::Rect::from_min_max(
+        d3::math::Point::new(rect.left() + 15.0 * unit, rect.top() + 10.0 * unit),
+        d3::math::Point::new(rect.right() - 15.0 * unit, rect.bottom() - 36.0 * unit),
     )
 }
 
@@ -308,7 +308,7 @@ fn render_body(
     painter: &egui::Painter,
     app: &App,
     rect: Rect,
-    plot: Rect,
+    plot: d3::math::Rect,
     transform: &Transform,
     curves: &[PlotCurve<'_>],
     pointer: Option<Pos2>,
@@ -441,13 +441,13 @@ pub enum DragStart {
 /// Classify what a pointer-down on the graph begins.
 pub fn classify_drag_start(
     pointer: Pos2,
-    plot: Rect,
+    plot: d3::math::Rect,
     markers: &[Marker],
     transform: &Transform,
     near_trace: bool,
     gain_if_new: f64,
 ) -> DragStart {
-    if !plot.contains(pointer) {
+    if !plot.contains(d3::math::Point::new(pointer.x, pointer.y)) {
         return DragStart::None;
     }
     let hit = markers.iter().find(|marker| {
@@ -517,7 +517,7 @@ pub fn update_band_drag(
 fn eq_editor(
     app: &mut App,
     painter: &egui::Painter,
-    plot: Rect,
+    plot: d3::math::Rect,
     transform: &Transform,
     response: &egui::Response,
     ctx: &egui::Context,
@@ -528,7 +528,7 @@ fn eq_editor(
     }
     let palette = theme::current_palette();
     let markers = eq_markers(app, transform);
-    let pointer = response.hover_pos().filter(|point| plot.contains(*point));
+    let pointer = response.hover_pos().filter(|point| plot.contains(d3::math::Point::new(point.x, point.y)));
 
     // The range being brushed, which the reference shows on the plot while
     // it is being brushed.
@@ -630,7 +630,7 @@ fn eq_editor(
     // brushed for the tone generator.
     if response.drag_started() {
         if let Some(pointer) = response.interact_pointer_pos() {
-            if plot.contains(pointer) {
+            if plot.contains(d3::math::Point::new(pointer.x, pointer.y)) {
                 let near = near_the_trace(app, transform, pointer);
                 let gain_if_new = if near {
                     gain_under(app, transform, pointer)
@@ -940,7 +940,7 @@ fn stroke_path(painter: &egui::Painter, path: &d3::path::Path, stroke: Stroke) {
 fn grid(
     painter: &egui::Painter,
     rect: Rect,
-    plot: Rect,
+    plot: d3::math::Rect,
     transform: &Transform,
     minimum: f32,
     maximum: f32,
@@ -1117,7 +1117,7 @@ fn rotated_label(painter: &egui::Painter, text: &str, corner: Pos2, font: FontId
 }
 
 /// The names the reference gives the bands of the axis.
-fn band_names(painter: &egui::Painter, plot: Rect, transform: &Transform) {
+fn band_names(painter: &egui::Painter, plot: d3::math::Rect, transform: &Transform) {
     let palette = theme::current_palette();
     let font = FontId::new(TypeStep::Label.size(), egui::FontFamily::Proportional);
     // The names sit below the frequency figures, near the foot of the box,
@@ -1314,7 +1314,7 @@ fn labels(
     app: &App,
     curves: &[PlotCurve<'_>],
     transform: &Transform,
-    plot: Rect,
+    plot: d3::math::Rect,
 ) {
     if !app.session.show_labels {
         return;
@@ -1376,11 +1376,11 @@ fn inspector(
     app: &App,
     curves: &[PlotCurve<'_>],
     transform: &Transform,
-    plot: Rect,
+    plot: d3::math::Rect,
     pointer: Option<Pos2>,
 ) {
     let palette = theme::current_palette();
-    let Some(pointer) = pointer.filter(|position| plot.contains(*position)) else {
+    let Some(pointer) = pointer.filter(|position| plot.contains(d3::math::Point::new(position.x, position.y))) else {
         return;
     };
     let frequency = transform.x_at(pointer.x);
@@ -1440,7 +1440,7 @@ fn rig_line(painter: &egui::Painter, app: &App, rect: Rect) {
 }
 
 /// The mark and the name, behind the curves.
-fn watermark(painter: &egui::Painter, plot: Rect) {
+fn watermark(painter: &egui::Painter, plot: d3::math::Rect) {
     let palette = theme::current_palette();
     let center = plot.center();
     let size = 96.0;
@@ -1453,7 +1453,7 @@ fn watermark(painter: &egui::Painter, plot: Rect) {
         egui::TextureOptions::LINEAR,
         egui::load::SizeHint::Scale(1.0.into()),
     ) {
-        let rect = Rect::from_center_size(center, Vec2::splat(size));
+        let rect = Rect::from_center_size(egui::Pos2::new(center.x, center.y), Vec2::splat(size));
         let color = if palette.is_dark() {
             Color32::WHITE.gamma_multiply(0.06)
         } else {
@@ -1477,7 +1477,7 @@ fn watermark(painter: &egui::Painter, plot: Rect) {
 
 /// The frequency under the pointer, and the reading at it.
 pub fn read_at(app: &App, position: Pos2, plot: Rect, transform: &Transform) -> Option<(f32, f32)> {
-    if !plot.contains(position) {
+    if !plot.contains(egui::Pos2::new(position.x, position.y)) {
         return None;
     }
     let frequency = transform.x_at(position.x);
@@ -1526,9 +1526,9 @@ pub fn export_svg(app: &App, width: f32, height: f32) -> String {
     let top = 10.0;
     let right = 10.0;
     let bottom = 46.0;
-    let plot = Rect::from_min_max(
-        Pos2::new(left, top),
-        Pos2::new(width - right, height - bottom),
+    let plot = d3::math::Rect::from_min_max(
+        d3::math::Point::new(left, top),
+        d3::math::Point::new(width - right, height - bottom),
     );
     let transform = Transform::new(plot, zoom.x_range(), (minimum, maximum));
 
@@ -1641,11 +1641,12 @@ fn hex(color: Color32) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use egui::{Pos2, Rect};
+    use d3::math::Rect;
+    use egui::Pos2;
 
     #[test]
     fn classify_drag_start_returns_none_outside_plot() {
-        let plot = Rect::from_min_max(Pos2::new(10.0, 10.0), Pos2::new(100.0, 100.0));
+        let plot = Rect::from_min_max(d3::math::Point::new(10.0, 10.0), d3::math::Point::new(100.0, 100.0));
         let transform = Transform::new(plot, (20.0, 20000.0), (40.0, 80.0));
         let start = classify_drag_start(
             Pos2::new(5.0, 5.0),
@@ -1660,7 +1661,7 @@ mod tests {
 
     #[test]
     fn update_band_drag_locks_frequency_when_horizontal() {
-        let plot = Rect::from_min_max(Pos2::new(10.0, 10.0), Pos2::new(100.0, 100.0));
+        let plot = Rect::from_min_max(d3::math::Point::new(10.0, 10.0), d3::math::Point::new(100.0, 100.0));
         let transform = Transform::new(plot, (20.0, 20000.0), (40.0, 80.0));
         let origin = Pos2::new(50.0, 50.0);
         let pointer = Pos2::new(80.0, 52.0);
