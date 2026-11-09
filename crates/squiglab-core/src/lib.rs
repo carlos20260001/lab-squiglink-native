@@ -7,6 +7,9 @@
 
 pub mod audio;
 pub mod branding;
+// The d3 port is re-exported so that interfaces can use its math and
+// geometry without depending on the crate directly.
+pub use d3;
 pub mod color;
 pub mod config;
 pub mod constraints;

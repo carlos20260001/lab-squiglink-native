@@ -1,6 +1,7 @@
 //! The window.
 
 mod app;
+mod graph;
 mod icons;
 mod theme;
 

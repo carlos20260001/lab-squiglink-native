@@ -14,6 +14,8 @@ use gpui::{
 use squiglab_core::product;
 use squiglab_core::session::{matches_search, DataPaths, Session};
 
+use crate::graph;
+use crate::graph::GraphData;
 use crate::icons;
 use crate::icons::Icon;
 use crate::theme::{self, metrics, Palette};
@@ -561,7 +563,23 @@ impl Render for App {
                     .flex_1()
                     .min_h(px(0.0))
                     .child(self.left_column(&palette, cx))
-                    .child(div().flex_1().h_full().bg(palette.page)),
+                    .child({
+                        let data = GraphData::from_session(&self.session);
+                        div()
+                            .flex_1()
+                            .h_full()
+                            .bg(palette.page)
+                            .child(
+                                gpui::canvas(
+                                    move |bounds, _window, _cx| (bounds, data),
+                                    |_bounds, state, window, _cx| {
+                                        let (bounds, data) = state;
+                                        graph::show(&data, bounds, window);
+                                    },
+                                )
+                                .size_full(),
+                            )
+                    }),
             )
     }
 }
