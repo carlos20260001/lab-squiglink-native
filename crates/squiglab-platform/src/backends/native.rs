@@ -7,8 +7,7 @@
 
 #![allow(dead_code)]
 
-use std::time::Instant;
-
+use crate::capabilities::PlatformCapabilities;
 use crate::events::PlatformOutput;
 use crate::events::{
     Key, KeyEvent, MouseWheelUnit, PlatformInput, PlatformRawEvent, PointerButton, Pos2, Rect,
@@ -486,5 +485,9 @@ impl crate::platform::Platform for NativePlatform {
 
     fn renderer(&mut self) -> &mut dyn Renderer {
         &mut self.renderer
+    }
+
+    fn capabilities(&self) -> PlatformCapabilities {
+        PlatformCapabilities::native()
     }
 }

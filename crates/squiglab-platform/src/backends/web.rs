@@ -7,6 +7,7 @@
 
 #![allow(dead_code)]
 
+use crate::capabilities::PlatformCapabilities;
 use crate::events::{PlatformEvent, PlatformInput, PlatformOutput, PlatformRawEvent, ViewportId};
 use crate::platform::PlatformState;
 use crate::renderer::{NullRenderer, Renderer};
@@ -55,6 +56,10 @@ impl crate::platform::Platform for WebPlatform {
 
     fn renderer(&mut self) -> &mut dyn Renderer {
         &mut self.renderer
+    }
+
+    fn capabilities(&self) -> PlatformCapabilities {
+        PlatformCapabilities::web()
     }
 }
 

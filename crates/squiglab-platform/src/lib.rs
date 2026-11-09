@@ -33,34 +33,43 @@
 //! ```
 use std::time::Instant;
 
+pub use self::capabilities::PlatformCapabilities;
+pub use self::cursor::{cursor_icon_from_squiglab, cursor_icon_to_squiglab};
+pub use self::display::{displays, primary_display, Display};
 pub use self::events::{
     CursorIcon, DroppedFile, Ime, ImePurpose, Key, KeyEvent, KeyModifiers, Modifiers,
     MouseWheelUnit, PlatformEvent, PlatformInput, PlatformOutput, PlatformOutputCommand,
     PlatformRawEvent, PointerButton, Pos2, Rect, Theme, TouchPhase, Vec2, ViewportId,
 };
+pub use self::ime::ImeState;
 pub use self::platform::{Platform, PlatformBuilder, PlatformState};
 pub use self::renderer::Renderer;
+pub use self::text::TextSystem;
 pub use self::window::{Window, WindowAttributes, WindowId};
 
 // ---------------------------------------------------------------------------
 // Modules
 //
 
-mod application;
 mod backends;
+mod capabilities;
 mod clipboard;
-mod dispatcher;
+mod cursor;
+mod display;
+mod event_loop;
 mod events;
+mod ime;
 mod input;
 mod keyboard;
 mod platform;
 mod pointer;
 pub mod renderer;
+mod text;
 pub mod window;
 
 // Re-export submodules for internal use.
-pub(crate) use application::ApplicationHandler;
-pub(crate) use dispatcher::EventDispatcher;
+pub(crate) use event_loop::EventLoop;
+pub(crate) use event_loop::EventLoopApp;
 pub(crate) use input::InputState;
 pub(crate) use keyboard::KeyboardState;
 pub(crate) use pointer::PointerState;
@@ -95,5 +104,14 @@ mod tests {
         assert_eq!(rect.width(), 100.0);
         assert_eq!(rect.height(), 200.0);
         assert_eq!(rect.max, Pos2::new(110.0, 220.0));
+    }
+
+    #[test]
+    fn capabilities_default() {
+        let caps = PlatformCapabilities::default();
+        assert!(caps.clipboard);
+        assert!(caps.ime);
+        assert!(caps.drag_and_drop);
+        assert!(!caps.fullscreen); // web cannot fullscreen without user gesture
     }
 }

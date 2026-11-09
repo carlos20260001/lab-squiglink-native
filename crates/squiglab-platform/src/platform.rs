@@ -7,6 +7,7 @@
 
 use std::time::Instant;
 
+use crate::capabilities::PlatformCapabilities;
 use crate::events::{PlatformEvent, PlatformInput, PlatformOutput, PlatformRawEvent, ViewportId};
 use crate::window::Window;
 
@@ -41,6 +42,9 @@ pub trait Platform: Send + Sync {
 
     /// Get the renderer for drawing.
     fn renderer(&mut self) -> &mut dyn crate::renderer::Renderer;
+
+    /// Returns the platform's capabilities.
+    fn capabilities(&self) -> PlatformCapabilities;
 }
 
 /// Builder for creating a [`Platform`].
