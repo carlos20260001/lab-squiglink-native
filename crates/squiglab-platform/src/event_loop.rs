@@ -6,7 +6,8 @@
 //! `RedrawRequested`, `WindowEvent`, `DeviceEvent` are all used directly.
 //!
 //! No custom native event loop is implemented — Winit's `run_app` drives
-//! everything.
+//! everything. On WebAssembly, Winit's wasm32 backend drives the event
+//! loop via the browser's requestAnimationFrame.
 
 #![allow(dead_code)]
 
@@ -61,13 +62,18 @@ impl EventLoop {
 
 /// Winit `ApplicationHandler` adapter. Translates winit events into
 /// `PlatformRawEvent`s and dispatches them to `PlatformState`.
+/// Native-only; WebAssembly uses Winit's browser event loop directly.
+#[cfg(not(target_arch = "wasm32"))]
 pub struct EventLoopApp<P: crate::platform::Platform> {
     platform: Option<P>,
     /// Map from winit's `WindowId` to squiglab `WindowId`.
     windows: std::collections::HashMap<winit::window::WindowId, WindowId>,
 }
 
-impl<P: crate::platform::Platform> winit::application::ApplicationHandler<()> for EventLoopApp<P> {
+#[cfg(not(target_arch = "wasm32"))]
+impl<P: crate::platform::Platform> winit::application::ApplicationHandler<()>
+    for EventLoopApp<P>
+{
     fn new_events(
         &mut self,
         _event_loop: &winit::event_loop::ActiveEventLoop,
@@ -120,6 +126,7 @@ impl<P: crate::platform::Platform> winit::application::ApplicationHandler<()> fo
 }
 
 /// Begin and end a frame on the renderer.
+#[cfg(not(target_arch = "wasm32"))]
 fn renderer_begin_end(renderer: &mut dyn Renderer) {
     renderer.begin_frame();
     renderer.end_frame();

@@ -74,7 +74,7 @@ impl PlatformBuilder {
     }
 
     /// Build the platform for WebAssembly.
-    #[cfg(target_arch = "wasm32")]
+    #[cfg(all(target_arch = "wasm32", feature = "web"))]
     pub fn build(self) -> Box<dyn Platform> {
         Box::new(crate::backends::web::WebPlatform::new(
             self.native_pixels_per_point,

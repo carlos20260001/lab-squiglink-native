@@ -69,6 +69,7 @@ pub mod window;
 
 // Re-export submodules for internal use.
 pub(crate) use event_loop::EventLoop;
+#[cfg(not(target_arch = "wasm32"))]
 pub(crate) use event_loop::EventLoopApp;
 pub(crate) use input::InputState;
 pub(crate) use keyboard::KeyboardState;

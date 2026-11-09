@@ -9,9 +9,20 @@
 
 use crate::capabilities::PlatformCapabilities;
 use crate::events::{PlatformEvent, PlatformInput, PlatformOutput, PlatformRawEvent, ViewportId};
-use crate::platform::PlatformState;
+use crate::platform::{Platform, PlatformState};
 use crate::renderer::{NullRenderer, Renderer};
 use crate::window::{Window, WindowAttributes, WindowId};
+
+use std::cell::RefCell;
+use std::rc::Rc;
+
+use wasm_bindgen::prelude::*;
+use web_sys::window;
+
+thread_local! {
+    /// The single platform instance, shared between wasm-bindgen exports.
+    static WEB_PLATFORM: RefCell<Option<Rc<RefCell<WebPlatform>>>> = RefCell::new(None);
+}
 
 /// Web platform implementation using Winit's wasm32 backend.
 pub struct WebPlatform {
@@ -123,3 +134,66 @@ impl Window for WebWindow {
         // Browser handles redraw via requestAnimationFrame through Winit
     }
 }
+
+// ---------------------------------------------------------------------------
+// wasm-bindgen exports for browser testing
+//
+
+/// Create the web platform instance. Called from JavaScript at startup.
+#[wasm_bindgen(js_name = createApp)]
+pub fn create_app() -> Result<(), JsValue> {
+    let platform = Rc::new(RefCell::new(WebPlatform::new(None)));
+    WEB_PLATFORM.with(|cell| {
+        *cell.borrow_mut() = Some(Rc::clone(&platform));
+    });
+    log::debug!("web renderer: platform created");
+    Ok(())
+}
+
+/// Run one frame. Called from JavaScript's requestAnimationFrame loop.
+#[wasm_bindgen(js_name = frame)]
+pub fn frame() {
+    WEB_PLATFORM.with(|cell| {
+        if let Some(platform) = cell.borrow().as_ref() {
+            let mut p = platform.borrow_mut();
+            let _input = p.take_input(None);
+            let _renderer = p.renderer();
+            renderer_begin_end_web(_renderer);
+        }
+    });
+}
+
+/// Get a summary of platform capabilities as a string.
+#[wasm_bindgen(js_name = capabilities)]
+pub fn capabilities() -> Result<String, JsValue> {
+    WEB_PLATFORM.with(|cell| {
+        if let Some(platform) = cell.borrow().as_ref() {
+            let caps = platform.borrow().capabilities();
+            Ok(format!(
+                "gpu_rendering={} clipboard={} ime={} fullscreen={} file_dialogs={} drag_and_drop={} multiple_windows={}",
+                caps.gpu_rendering,
+                caps.clipboard,
+                caps.ime,
+                caps.fullscreen,
+                caps.file_dialogs,
+                caps.drag_and_drop,
+                caps.multiple_windows,
+            ))
+        } else {
+            Err(JsValue::from_str("platform not initialized"))
+        }
+    })
+}
+
+/// Application name.
+#[wasm_bindgen(js_name = appName)]
+pub fn app_name() -> String {
+    squiglab_core::product::APP_NAME.to_string()
+}
+
+/// Begin and end a frame on the renderer (web).
+fn renderer_begin_end_web(renderer: &mut dyn Renderer) {
+    renderer.begin_frame();
+    renderer.end_frame();
+}
+
