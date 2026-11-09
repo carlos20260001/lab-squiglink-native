@@ -47,13 +47,15 @@ before they're adopted on Crin's site.
 
 [View some sample graphs.](https://mlochbaum.github.io/CrinGraph/old/graph.html)
 
-This repository contains the native application and the reference it follows.
-The **native Rust/egui app is the default** — it is what `cargo run`,
-`build.sh`, `build.cmd` and the release workflow build:
+This repository contains the native application and the reference it follows:
 
-- **Native (default).** The program is in [`crates/squiglab-core/`](crates/squiglab-core),
-  which has no egui in it, and the interface that draws it is in
-  [`crates/squiglab/`](crates/squiglab). Actively maintained.
+- **GPUI Native (Active frontend).** The native interface in [`crates/squiglab-gpui/`](crates/squiglab-gpui),
+  drawn with Zed's GPUI and written against [`crates/squiglab-core/`](crates/squiglab-core).
+  Actively being ported to 1:1 parity with the web reference.
+- **egui Native (Deprecated frontend).** The earlier interface in [`crates/squiglab/`](crates/squiglab),
+  now set to deprecation.
+- **Core.** The UI-agnostic engine in [`crates/squiglab-core/`](crates/squiglab-core),
+  which has no UI framework in it at all.
 - **Web reference.** The JavaScript/HTML implementation, kept in
   [`web/`](web/) and retained as the reference the native is checked against:
   the source of the measurement processing, the equalizer and the interface's

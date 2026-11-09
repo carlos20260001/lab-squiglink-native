@@ -14,21 +14,22 @@ Two things live here:
 
 | | Where | What it is |
 |---|---|---|
-| **The native program** | `crates/squiglab-core/` + `crates/squiglab/` | The product. A Rust/egui desktop application for comparing frequency-response measurements against targets. |
+| **The native program (active)** | `crates/squiglab-core/` + `crates/squiglab-gpui/` | The product. A Rust/GPUI desktop application for comparing frequency-response measurements against targets, being ported from the web reference. |
+| **The native program (deprecated)** | `crates/squiglab/` | The earlier Rust/egui desktop application, now set to deprecation. |
 | **The web reference** | `web/` | The JavaScript/HTML implementation this native was built to match, kept whole. It is the **authority**: for the maths, for the behaviour, and for the appearance. |
 
-The native was written by porting the reference's code. The UI was
+The native was written by porting the reference's code. The UI is
 written against the reference's *observable* behaviour and geometry, and the
-result was compared against the reference, side by side, until it matched.
+result is compared against the reference, side by side, until it matches.
 
 ### The two rules that govern everything
 
-1. **`crates/squiglab-core` has no egui in it.** The rules, the state and
+1. **`crates/squiglab-core` has no UI framework in it (no egui, no gpui).** The rules, the state and
    the data live there and know nothing about how anything is drawn. The
-   interface in `crates/squiglab/` is written against the core, never the
-   other way about. Check with:
+   interface in `crates/squiglab-gpui/` (and the deprecated `crates/squiglab/`)
+   is written against the core, never the other way about. Check with:
    ```sh
-   grep -rn "egui\|eframe" crates/squiglab-core/src/   # must print nothing
+   grep -rn "egui\|eframe\|gpui" crates/squiglab-core/src/   # must print nothing
    ```
 2. **The reference decides.** When the native and the reference disagree,
    the reference is right until you have measured it and can say why not.
@@ -288,7 +289,7 @@ committing.
 ## 5. The shape of the program
 
 ```
-crates/squiglab-core/            the rules, the state, the data (no egui)
+crates/squiglab-core/            the rules, the state, the data (no egui, no gpui)
   session.rs       Session: what is loaded, what is selected, what changed
   equalizer.rs     Filter, Biquad, the filter maths (ported from web/equalizer.js)
   constraints.rs   what a fit may produce
@@ -299,7 +300,13 @@ crates/squiglab-core/            the rules, the state, the data (no egui)
   config.rs        the config file, the preferences, the share links
   theme.rs         Theme: Light, Dark, Contrast (the core's own)
 
-crates/squiglab/                 the interface (egui)
+crates/squiglab-gpui/            the active interface (GPUI)
+  app.rs           App: shell, header, tabs, search, lists, layout
+  graph.rs         the graph: grid, logarithmic frequency & dB axes, curves
+  icons.rs         SVG marks from the reference's own vectors
+  theme.rs         the palette and type scale
+
+crates/squiglab/                 the deprecated interface (egui)
   app.rs           App: the state, the frame, the column, the file picker
   header.rs        the mark, the wordmark, the curve count
   selector.rs      the tabs, the brands, the models

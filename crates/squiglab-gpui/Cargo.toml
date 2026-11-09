@@ -15,6 +15,7 @@ path = "src/main.rs"
 
 [dependencies]
 squiglab-core = { path = "../squiglab-core" }
+squiglab-platform = { path = "../squiglab-platform" }
 gpui = "0.2.2"
 
 # gpui -> zed-async-tar -> xattr 0.2.3 still asks libc for `ENOATTR`.

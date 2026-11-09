@@ -6,7 +6,7 @@
 //! through an in-memory asset source, so the same rasteriser the rest of the
 //! interface uses draws them.
 
-use gpui::{Rgba, SharedString, Styled, px, svg};
+use gpui::{px, svg, Rgba, SharedString, Styled};
 
 /// A mark one of the row's buttons carries.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

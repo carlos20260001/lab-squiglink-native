@@ -11,6 +11,8 @@
 //! coloured palette) and the light theme's accent (a step darker, so white
 //! text on it clears 4.5:1). `docs/design-system.md` is the extraction.
 
+#![allow(dead_code)]
+
 use std::borrow::Cow;
 
 use gpui::{App, Rgba};

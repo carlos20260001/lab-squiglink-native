@@ -269,6 +269,41 @@ pub fn tick_db(db: f32) -> String {
     }
 }
 
+/// The decibel tick values for a range: one decibel when the range is narrow
+/// and five otherwise, running from the ceiling of the lower bound to the
+/// floor of the upper one. Shared by the on-screen grid and the SVG export.
+pub fn db_tick_values(minimum: f32, maximum: f32) -> Vec<f32> {
+    let range = (maximum - minimum).max(1.0);
+    let step = if range < 40.0 { 1.0_f32 } else { 5.0_f32 };
+    let y0 = (minimum / step).ceil();
+    let y1 = (maximum / step).floor();
+    d3::array::range(f64::from(y0), Some(f64::from(y1) + 1.0), Some(1.0))
+        .into_iter()
+        .map(|v| (v * f64::from(step)) as f32)
+        .collect()
+}
+
+/// The frequencies the axis is marked at, taken from the reference's own
+/// `d3.merge([1,2,3].map(e => xvals.map(m => m * Math.pow(10, e)))).concat([20000])`
+/// with `xvals = [2,3,4,5,6,8,10,15]`, so the grid agrees with the
+/// reference's down to the last tick.
+pub fn x_tick_frequencies() -> Vec<f32> {
+    let xvals = [2.0_f64, 3.0, 4.0, 5.0, 6.0, 8.0, 10.0, 15.0];
+    let mut lists: Vec<Vec<f64>> = Vec::new();
+    for e in [1_i32, 2, 3] {
+        let e = e as f64;
+        lists.push(
+            xvals
+                .iter()
+                .map(|m| m * d3::ieee754::pow(10.0, e))
+                .collect(),
+        );
+    }
+    let mut ticks = d3::array::merge(&lists);
+    ticks.push(20000.0);
+    ticks.into_iter().map(|v| v as f32).collect()
+}
+
 pub fn place_labels(mut labels: Vec<(String, f32, f32)>, plot_rect: Rect) -> BTreeMap<String, f32> {
     // Keyed by the caller-supplied label key rather than the drawn text: two
     // curves can legitimately carry the same text (the left and right channel
@@ -388,5 +423,4 @@ mod tests {
         assert_near(transform.db_to_y(90.0), 10.0);
         assert_near(transform.y_at(190.0), 60.0);
     }
-
 }

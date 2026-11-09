@@ -27,6 +27,7 @@ use crate::graph::GraphData;
 use crate::icons;
 use crate::icons::Icon;
 use crate::theme::{self, metrics, Palette};
+use squiglab_platform::PlatformState;
 
 /// Which field of a filter row an editable input is editing.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Ord, PartialOrd)]
@@ -130,6 +131,11 @@ pub struct App {
     status: Option<String>,
     /// The product's mark, decoded once and kept.
     icon: Arc<Image>,
+    /// The platform state: input, clipboard, and platform-specific
+    /// integration (keyboard, pointer, touch, …). Modeled on egui-winit's
+    /// `State`.
+    #[allow(dead_code)]
+    platform_state: PlatformState,
     /// The equalizer's change history.
     history: History,
     /// Whether the constraints panel is open.
@@ -187,6 +193,10 @@ impl App {
                 ImageFormat::Png,
                 product::WINDOW_ICON_PNG.to_vec(),
             )),
+            platform_state: PlatformState::new(
+                squiglab_platform::ViewportId::ROOT,
+                None,
+            ),
             history: History::default(),
             constraints_open: false,
             eq_dropdown: None,

@@ -57,7 +57,10 @@ impl Rect {
         self.max.y - self.min.y
     }
     pub fn center(&self) -> Point {
-        Point::new((self.min.x + self.max.x) / 2.0, (self.min.y + self.max.y) / 2.0)
+        Point::new(
+            (self.min.x + self.max.x) / 2.0,
+            (self.min.y + self.max.y) / 2.0,
+        )
     }
 
     pub fn contains(&self, point: Point) -> bool {
