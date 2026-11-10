@@ -63,14 +63,19 @@ pub fn drain_main_thread_queue() {
     });
 }
 
+/// Shared state between the platform and the event loop handler.
+pub struct SquiglabState {
+    pub background_executor: BackgroundExecutor,
+    pub foreground_executor: ForegroundExecutor,
+    pub text_system: Arc<dyn PlatformTextSystem>,
+    pub active_display: Rc<dyn PlatformDisplay>,
+    pub active_window: RefCell<Option<AnyWindowHandle>>,
+    pub current_clipboard_item: Mutex<Option<ClipboardItem>>,
+}
+
 /// GPUI Platform implementation backed by squiglab-platform.
 pub struct SquiglabPlatform {
-    background_executor: BackgroundExecutor,
-    foreground_executor: ForegroundExecutor,
-    text_system: Arc<dyn PlatformTextSystem>,
-    active_display: Rc<dyn PlatformDisplay>,
-    active_window: RefCell<Option<AnyWindowHandle>>,
-    current_clipboard_item: Mutex<Option<ClipboardItem>>,
+    state: Rc<SquiglabState>,
 }
 
 impl SquiglabPlatform {
@@ -80,31 +85,37 @@ impl SquiglabPlatform {
         let foreground_executor = ForegroundExecutor::new(dispatcher);
 
         Rc::new_cyclic(|_weak| SquiglabPlatform {
-            background_executor,
-            foreground_executor,
-            text_system: Arc::new(NoopTextSystem),
-            active_display: Rc::new(SquiglabDisplay::new()),
-            active_window: RefCell::new(None),
-            current_clipboard_item: Mutex::new(None),
+            state: Rc::new(SquiglabState {
+                background_executor,
+                foreground_executor,
+                text_system: Arc::new(NoopTextSystem),
+                active_display: Rc::new(SquiglabDisplay::new()),
+                active_window: RefCell::new(None),
+                current_clipboard_item: Mutex::new(None),
+            }),
         })
+    }
+
+    pub fn state(&self) -> Rc<SquiglabState> {
+        self.state.clone()
     }
 }
 
 impl Platform for SquiglabPlatform {
     fn background_executor(&self) -> BackgroundExecutor {
-        self.background_executor.clone()
+        self.state.background_executor.clone()
     }
 
     fn foreground_executor(&self) -> ForegroundExecutor {
-        self.foreground_executor.clone()
+        self.state.foreground_executor.clone()
     }
 
     fn text_system(&self) -> Arc<dyn PlatformTextSystem> {
-        self.text_system.clone()
+        self.state.text_system.clone()
     }
 
-    fn run(&self, _on_finish_launching: Box<dyn FnOnce()>) {
-        // The Winit event loop is started by the application crate.
+    fn run(&self, on_finish_launching: Box<dyn FnOnce()>) {
+        crate::platform::squiglab::event_loop::run_event_loop(self.state.clone(), on_finish_launching);
     }
 
     fn quit(&self) {
@@ -122,15 +133,15 @@ impl Platform for SquiglabPlatform {
     fn unhide_other_apps(&self) {}
 
     fn displays(&self) -> Vec<Rc<dyn PlatformDisplay>> {
-        vec![self.active_display.clone()]
+        vec![self.state.active_display.clone()]
     }
 
     fn primary_display(&self) -> Option<Rc<dyn PlatformDisplay>> {
-        Some(self.active_display.clone())
+        Some(self.state.active_display.clone())
     }
 
     fn active_window(&self) -> Option<AnyWindowHandle> {
-        self.active_window.borrow().clone()
+        self.state.active_window.borrow().clone()
     }
 
     fn open_window(
@@ -138,8 +149,8 @@ impl Platform for SquiglabPlatform {
         handle: AnyWindowHandle,
         params: WindowParams,
     ) -> anyhow::Result<Box<dyn PlatformWindow>> {
-        let window = SquiglabWindow::new(handle, params)?;
-        *self.active_window.borrow_mut() = Some(handle);
+        let window = SquiglabWindow::new(handle, params, self.state.clone())?;
+        *self.state.active_window.borrow_mut() = Some(handle);
         Ok(Box::new(window))
     }
 
@@ -154,7 +165,7 @@ impl Platform for SquiglabPlatform {
     fn on_open_urls(&self, _callback: Box<dyn FnMut(Vec<String>)>) {}
 
     fn register_url_scheme(&self, _url: &str) -> Task<anyhow::Result<()>> {
-        self.background_executor().spawn(async { Ok(()) })
+        self.state.background_executor.spawn(async { Ok(()) })
     }
 
     fn prompt_for_paths(
@@ -215,11 +226,11 @@ impl Platform for SquiglabPlatform {
     }
 
     fn write_to_clipboard(&self, item: ClipboardItem) {
-        *self.current_clipboard_item.lock() = Some(item);
+        *self.state.current_clipboard_item.lock() = Some(item);
     }
 
     fn read_from_clipboard(&self) -> Option<ClipboardItem> {
-        self.current_clipboard_item.lock().clone()
+        self.state.current_clipboard_item.lock().clone()
     }
 
     #[cfg(any(target_os = "linux", target_os = "freebsd"))]
@@ -236,18 +247,18 @@ impl Platform for SquiglabPlatform {
         _username: &str,
         _password: &[u8],
     ) -> Task<anyhow::Result<()>> {
-        self.background_executor().spawn(async { Ok(()) })
+        self.state.background_executor.spawn(async { Ok(()) })
     }
 
     fn read_credentials(
         &self,
         _url: &str,
     ) -> Task<anyhow::Result<Option<(String, Vec<u8>)>>> {
-        self.background_executor().spawn(async { Ok(None) })
+        self.state.background_executor.spawn(async { Ok(None) })
     }
 
     fn delete_credentials(&self, _url: &str) -> Task<anyhow::Result<()>> {
-        self.background_executor().spawn(async { Ok(()) })
+        self.state.background_executor.spawn(async { Ok(()) })
     }
 
     fn keyboard_layout(&self) -> Box<dyn PlatformKeyboardLayout> {

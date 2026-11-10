@@ -12,11 +12,13 @@ use gpui::{
     PlatformInputHandler, PlatformWindow, Point, Pixels, PromptButton, PromptLevel,
     RequestFrameOptions, Scene, Size, WindowAppearance, WindowBounds, WindowParams, px, size,
 };
-use parking_lot::Mutex;
+
+use super::application::SquiglabState;
 
 /// GPUI Window backed by a wgpu surface.
 pub struct SquiglabWindow {
     handle: AnyWindowHandle,
+    state: Rc<SquiglabState>,
     bounds: Bounds<Pixels>,
     content_size: Size<Pixels>,
     scale_factor: f32,
@@ -35,11 +37,13 @@ impl SquiglabWindow {
     pub fn new(
         handle: AnyWindowHandle,
         params: WindowParams,
+        state: Rc<SquiglabState>,
     ) -> anyhow::Result<Self> {
         let bounds = params.bounds;
 
         Ok(Self {
             handle,
+            state,
             bounds,
             content_size: bounds.size,
             scale_factor: 1.0,
@@ -106,7 +110,7 @@ impl PlatformWindow for SquiglabWindow {
     }
 
     fn display(&self) -> Option<Rc<dyn PlatformDisplay>> {
-        None
+        Some(self.state.active_display.clone())
     }
 
     fn mouse_position(&self) -> Point<Pixels> {

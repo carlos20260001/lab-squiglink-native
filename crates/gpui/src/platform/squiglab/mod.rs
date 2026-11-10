@@ -12,12 +12,13 @@
 #![allow(dead_code)]
 
 pub mod application;
+pub mod event_loop;
 pub mod input;
 pub mod renderer;
 pub mod text_system;
 pub mod window;
 
-pub use application::{SquiglabPlatform, SquiglabDispatcher};
+pub use application::{SquiglabPlatform, SquiglabDispatcher, SquiglabState};
 
 /// Platform-specific screen capture frame type.
 /// Not yet implemented for squiglab.
