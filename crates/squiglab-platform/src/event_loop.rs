@@ -71,9 +71,7 @@ pub struct EventLoopApp<P: crate::platform::Platform> {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-impl<P: crate::platform::Platform> winit::application::ApplicationHandler<()>
-    for EventLoopApp<P>
-{
+impl<P: crate::platform::Platform> winit::application::ApplicationHandler<()> for EventLoopApp<P> {
     fn new_events(
         &mut self,
         _event_loop: &winit::event_loop::ActiveEventLoop,

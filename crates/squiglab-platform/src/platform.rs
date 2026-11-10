@@ -2,6 +2,11 @@
 //!
 //! Winit is the authoritative windowing system. All targets (native and
 //! WebAssembly) go through Winit's event loop and window creation.
+//!
+//! On all platforms, windows are created within the event loop (via
+//! `ActiveEventLoop::create_window`). `PlatformBuilder::create_window()`
+//! queues window attributes before `run()`; they are created when the
+//! event loop's `resumed()` handler fires.
 
 #![allow(dead_code)]
 
@@ -17,19 +22,14 @@ use crate::window::Window;
 /// One `Platform` per application. Created via [`PlatformBuilder`].
 pub trait Platform: Send + Sync {
     /// Start the event loop. Blocks until the application exits.
+    /// `on_launch` is called once the event loop has started and windows
+    /// have been created.
     /// Takes ownership via `Box<Self>` to be dyn-compatible.
-    fn run(self: Box<Self>);
+    fn run(self: Box<Self>, on_launch: Box<dyn FnOnce() + Send + Sync>);
 
     /// Process one iteration of the event loop (non-blocking).
     /// Returns `false` when the application should exit.
     fn poll_events(&mut self) -> bool;
-
-    /// Create a new window. Returns a trait object so the concrete window
-    /// type can vary by backend.
-    fn create_window(
-        &mut self,
-        attrs: &crate::window::WindowAttributes,
-    ) -> Box<dyn crate::window::Window>;
 
     /// Deliver a raw platform event to the input state.
     fn on_event(&mut self, event: &PlatformRawEvent);
@@ -48,15 +48,21 @@ pub trait Platform: Send + Sync {
 }
 
 /// Builder for creating a [`Platform`].
+///
+/// Queues window creation requests before `run()`. Windows are created
+/// when the event loop's `resumed()` handler fires.
 pub struct PlatformBuilder {
-    #[allow(dead_code)]
+    pending_windows: Vec<(crate::window::WindowId, crate::window::WindowAttributes)>,
     native_pixels_per_point: Option<f32>,
+    next_window_id: u64,
 }
 
 impl PlatformBuilder {
     pub fn new() -> Self {
         Self {
+            pending_windows: Vec::new(),
             native_pixels_per_point: None,
+            next_window_id: 1,
         }
     }
 
@@ -65,10 +71,23 @@ impl PlatformBuilder {
         self
     }
 
+    /// Queue a window for creation when the event loop starts.
+    /// Returns the window's identifier.
+    pub fn create_window(
+        &mut self,
+        attrs: crate::window::WindowAttributes,
+    ) -> crate::window::WindowId {
+        let id = crate::window::WindowId(self.next_window_id);
+        self.next_window_id += 1;
+        self.pending_windows.push((id, attrs));
+        id
+    }
+
     /// Build the platform for the current target.
     #[cfg(not(target_arch = "wasm32"))]
     pub fn build(self) -> Box<dyn Platform> {
         Box::new(crate::backends::native::NativePlatform::new(
+            self.pending_windows,
             self.native_pixels_per_point,
         ))
     }
@@ -77,6 +96,7 @@ impl PlatformBuilder {
     #[cfg(all(target_arch = "wasm32", feature = "web"))]
     pub fn build(self) -> Box<dyn Platform> {
         Box::new(crate::backends::web::WebPlatform::new(
+            self.pending_windows,
             self.native_pixels_per_point,
         ))
     }

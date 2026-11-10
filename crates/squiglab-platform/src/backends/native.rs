@@ -4,8 +4,15 @@
 //! egui-winit's `State::on_window_event` pattern.
 //!
 //! This backend is active on all non-wasm32 targets.
+//!
+//! Windows are created within the event loop (via `ActiveEventLoop::create_window`).
+//! `PlatformBuilder::create_window()` queues attributes; they are created
+//! when the event loop's `resumed()` handler fires.
 
 #![allow(dead_code)]
+
+use std::collections::HashMap;
+use std::time::Instant;
 
 use crate::capabilities::PlatformCapabilities;
 use crate::events::PlatformOutput;
@@ -20,7 +27,9 @@ use crate::window::{Window, WindowAttributes, WindowId};
 use winit::event::{
     ElementState, MouseButton, MouseScrollDelta, TouchPhase as WinitTouchPhase, WindowEvent,
 };
+use winit::event_loop::{ActiveEventLoop, EventLoop};
 use winit::keyboard::{Key as WinitKey, NamedKey};
+use winit::window::Window as WinitWindowType;
 use winit::window::{Theme as WinitTheme, WindowId as WinitWindowId};
 
 // ---------------------------------------------------------------------------
@@ -29,12 +38,12 @@ use winit::window::{Theme as WinitTheme, WindowId as WinitWindowId};
 
 /// Winit-backed window implementation.
 pub struct WinitWindow {
-    inner: winit::window::Window,
+    inner: WinitWindowType,
     id: WindowId,
 }
 
 impl WinitWindow {
-    pub fn new(inner: winit::window::Window, id: WindowId) -> Self {
+    pub fn new(inner: WinitWindowType, id: WindowId) -> Self {
         Self { inner, id }
     }
 }
@@ -441,34 +450,55 @@ fn touch_phase_from_winit(phase: WinitTouchPhase) -> TouchPhase {
 
 /// Native platform implementation using Winit's EventLoop.
 pub struct NativePlatform {
+    pending_windows: Vec<(WindowId, WindowAttributes)>,
     state: PlatformState,
     renderer: NullRenderer,
+    /// Map from squiglab WindowId to winit::window::Window
+    windows: HashMap<WindowId, winit::window::Window>,
+    /// Map from winit::window::WindowId to squiglab WindowId
+    winit_to_squiglab: HashMap<WinitWindowId, WindowId>,
+    on_launch: Option<Box<dyn FnOnce() + Send + Sync>>,
 }
 
 impl NativePlatform {
-    pub fn new(native_pixels_per_point: Option<f32>) -> Self {
+    pub fn new(
+        pending_windows: Vec<(WindowId, WindowAttributes)>,
+        native_pixels_per_point: Option<f32>,
+    ) -> Self {
         Self {
+            pending_windows,
             state: PlatformState::new(crate::events::ViewportId::ROOT, native_pixels_per_point),
             renderer: NullRenderer,
+            windows: HashMap::new(),
+            winit_to_squiglab: HashMap::new(),
+            on_launch: None,
         }
     }
 }
 
 impl crate::platform::Platform for NativePlatform {
-    fn run(self: Box<Self>) {
-        let _ = self;
-        log::debug!("native platform: run() called — event loop integration via Winit");
+    fn run(mut self: Box<Self>, on_launch: Box<dyn FnOnce() + Send + Sync>) {
+        self.on_launch = Some(on_launch);
+        let event_loop = match EventLoop::new() {
+            Ok(el) => el,
+            Err(e) => {
+                log::error!("Failed to create Winit event loop: {e}");
+                return;
+            }
+        };
+
+        let mut app = NativeApp {
+            platform: *self,
+            windows: HashMap::new(),
+        };
+
+        if let Err(e) = event_loop.run_app(&mut app) {
+            log::error!("Winit event loop error: {e}");
+        }
     }
 
     fn poll_events(&mut self) -> bool {
         true
-    }
-
-    fn create_window(&mut self, _attrs: &WindowAttributes) -> Box<dyn crate::window::Window> {
-        let _ = &self.state;
-        // Winit window creation is handled by the application via EventLoop.
-        // This is a placeholder — the application crate creates the window.
-        unimplemented!("window creation via EventLoop not yet wired")
     }
 
     fn on_event(&mut self, event: &PlatformRawEvent) {
@@ -489,5 +519,84 @@ impl crate::platform::Platform for NativePlatform {
 
     fn capabilities(&self) -> PlatformCapabilities {
         PlatformCapabilities::native()
+    }
+}
+
+/// Winit `ApplicationHandler` for the native backend.
+pub struct NativeApp {
+    platform: NativePlatform,
+    /// Map from squiglab WindowId to winit::window::Window
+    windows: HashMap<WindowId, winit::window::Window>,
+}
+
+impl winit::application::ApplicationHandler<()> for NativeApp {
+    fn resumed(&mut self, event_loop: &ActiveEventLoop) {
+        // Create all pending windows.
+        for (id, attrs) in self.platform.pending_windows.drain(..) {
+            let winit_attrs = WinitWindowType::default_attributes()
+                .with_title(&attrs.title)
+                .with_resizable(attrs.resizable);
+
+            let winit_attrs = if let Some((w, h)) = attrs.inner_size {
+                winit_attrs.with_inner_size(winit::dpi::LogicalSize::new(w, h))
+            } else {
+                winit_attrs
+            };
+
+            match event_loop.create_window(winit_attrs) {
+                Ok(window) => {
+                    let winit_id = window.id();
+                    self.platform.winit_to_squiglab.insert(winit_id, id);
+                    self.windows.insert(id, window);
+                }
+                Err(e) => {
+                    log::error!("Failed to create Winit window: {e}");
+                }
+            }
+        }
+
+        // Call the on_launch callback.
+        if let Some(callback) = self.platform.on_launch.take() {
+            callback();
+        }
+    }
+
+    fn window_event(
+        &mut self,
+        _event_loop: &ActiveEventLoop,
+        window_id: WinitWindowId,
+        event: winit::event::WindowEvent,
+    ) {
+        let squiglab_id = match self.platform.winit_to_squiglab.get(&window_id) {
+            Some(id) => *id,
+            None => return,
+        };
+
+        let raw_events = crate::backends::native::window_event_to_platform_events(&event);
+        for raw_event in raw_events {
+            self.platform.state.on_event(&raw_event);
+        }
+
+        let _ = squiglab_id;
+    }
+
+    fn device_event(
+        &mut self,
+        _event_loop: &ActiveEventLoop,
+        _device_id: winit::event::DeviceId,
+        _event: winit::event::DeviceEvent,
+    ) {
+        // Device events are not yet translated.
+    }
+
+    fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
+        // End of iteration — drain input and present.
+        let _ = self.platform.state.take_input(None);
+        self.platform.renderer.begin_frame();
+        self.platform.renderer.end_frame();
+    }
+
+    fn exiting(&mut self, _event_loop: &ActiveEventLoop) {
+        // Application is exiting.
     }
 }

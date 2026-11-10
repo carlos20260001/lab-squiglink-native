@@ -2,25 +2,27 @@
 //!
 //! Adapts squiglab-platform's Winit window to GPUI's window requirements:
 //! title, size, focus, visibility, theme, cursor, and IME.
+//!
+//! Windows are created through the `PlatformBuilder` before `run()`;
+//! Winit creates them when the event loop's `resumed()` handler fires.
 
 #![allow(dead_code)]
 
-use squiglab_platform::{
-    window::{Window, WindowAttributes},
-    Platform,
-};
+use squiglab_platform::window::{Window, WindowAttributes, WindowId};
+use squiglab_platform::PlatformBuilder;
 
-/// Creates a squiglab-platform window from GPUI window parameters.
+/// Queue a window for creation when the event loop starts.
+/// Returns the window's identifier.
 pub fn create_window(
-    platform: &mut dyn Platform,
+    builder: &mut PlatformBuilder,
     title: &str,
     width: f32,
     height: f32,
-) -> Box<dyn Window> {
+) -> WindowId {
     let attrs = WindowAttributes {
         title: title.to_string(),
         inner_size: Some((width, height)),
         ..Default::default()
     };
-    platform.create_window(&attrs)
+    builder.create_window(attrs)
 }

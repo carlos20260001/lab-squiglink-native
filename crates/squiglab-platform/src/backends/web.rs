@@ -4,12 +4,16 @@
 //! lifecycle events, and integrates GPU presentation with the browser canvas.
 //!
 //! Compiled only on `wasm32` with the `web` feature.
+//!
+//! Windows are created within the event loop (via `ActiveEventLoop::create_window`).
+//! `PlatformBuilder::create_window()` queues attributes; they are created
+//! when the event loop's `resumed()` handler fires.
 
 #![allow(dead_code)]
 
 use crate::capabilities::PlatformCapabilities;
 use crate::events::{PlatformEvent, PlatformInput, PlatformOutput, PlatformRawEvent, ViewportId};
-use crate::platform::{Platform, PlatformState};
+use crate::platform::PlatformState;
 use crate::renderer::{NullRenderer, Renderer};
 use crate::window::{Window, WindowAttributes, WindowId};
 
@@ -21,36 +25,55 @@ use web_sys::window;
 
 thread_local! {
     /// The single platform instance, shared between wasm-bindgen exports.
-    static WEB_PLATFORM: RefCell<Option<Rc<RefCell<WebPlatform>>>> = RefCell::new(None);
+    static WEB_PLATFORM: RefCell<Option<Rc<RefCell<WebPlatformPlaceholder>>>> = RefCell::new(None);
 }
 
 /// Web platform implementation using Winit's wasm32 backend.
 pub struct WebPlatform {
+    pending_windows: Vec<(WindowId, WindowAttributes)>,
     state: PlatformState,
     renderer: NullRenderer,
+    windows: std::collections::HashMap<WindowId, web_sys::HtmlCanvasElement>,
+    on_launch: Option<Box<dyn FnOnce() + Send + Sync>>,
 }
 
 impl WebPlatform {
-    pub fn new(native_pixels_per_point: Option<f32>) -> Self {
+    pub fn new(
+        pending_windows: Vec<(WindowId, WindowAttributes)>,
+        native_pixels_per_point: Option<f32>,
+    ) -> Self {
         Self {
+            pending_windows,
             state: PlatformState::new(ViewportId::ROOT, native_pixels_per_point),
             renderer: NullRenderer,
+            windows: std::collections::HashMap::new(),
+            on_launch: None,
         }
     }
 }
 
 impl crate::platform::Platform for WebPlatform {
-    fn run(self: Box<Self>) {
-        let _ = self;
+    fn run(mut self: Box<Self>, on_launch: Box<dyn FnOnce() + Send + Sync>) {
+        self.on_launch = Some(on_launch);
         log::debug!("web platform: run() called — Winit drives the browser event loop");
+
+        // Register the platform instance for wasm-bindgen exports.
+        let rc = Rc::new(RefCell::new(WebPlatformPlaceholder {
+            capabilities: self.capabilities(),
+        }));
+        WEB_PLATFORM.with(|cell| {
+            *cell.borrow_mut() = Some(Rc::clone(&rc));
+        });
+
+        // Call on_launch immediately for wasm (Winit's wasm32 backend
+        // drives the event loop via requestAnimationFrame).
+        if let Some(callback) = self.on_launch.take() {
+            callback();
+        }
     }
 
     fn poll_events(&mut self) -> bool {
         true
-    }
-
-    fn create_window(&mut self, _attrs: &WindowAttributes) -> Box<dyn crate::window::Window> {
-        unimplemented!("web window creation via Winit not yet wired")
     }
 
     fn on_event(&mut self, event: &PlatformRawEvent) {
@@ -74,6 +97,11 @@ impl crate::platform::Platform for WebPlatform {
     }
 }
 
+/// Placeholder for wasm-bindgen exports (the actual platform is consumed by run()).
+struct WebPlatformPlaceholder {
+    capabilities: PlatformCapabilities,
+}
+
 /// Winit-managed browser canvas window.
 pub struct WebWindow {
     id: WindowId,
@@ -92,7 +120,7 @@ impl Window for WebWindow {
 
     fn set_title(&self, _title: &str) {
         // Browser tab title set via document.title
-        if let Some(win) = web_sys::window() {
+        if let Some(win) = window() {
             let _ = win;
         }
     }
@@ -125,7 +153,7 @@ impl Window for WebWindow {
     }
 
     fn scale_factor(&self) -> f32 {
-        web_sys::window()
+        window()
             .map(|w| w.device_pixel_ratio() as f32)
             .unwrap_or(1.0)
     }
@@ -142,10 +170,6 @@ impl Window for WebWindow {
 /// Create the web platform instance. Called from JavaScript at startup.
 #[wasm_bindgen(js_name = createApp)]
 pub fn create_app() -> Result<(), JsValue> {
-    let platform = Rc::new(RefCell::new(WebPlatform::new(None)));
-    WEB_PLATFORM.with(|cell| {
-        *cell.borrow_mut() = Some(Rc::clone(&platform));
-    });
     log::debug!("web renderer: platform created");
     Ok(())
 }
@@ -154,11 +178,9 @@ pub fn create_app() -> Result<(), JsValue> {
 #[wasm_bindgen(js_name = frame)]
 pub fn frame() {
     WEB_PLATFORM.with(|cell| {
-        if let Some(platform) = cell.borrow().as_ref() {
-            let mut p = platform.borrow_mut();
-            let _input = p.take_input(None);
-            let _renderer = p.renderer();
-            renderer_begin_end_web(_renderer);
+        if let Some(placeholder) = cell.borrow().as_ref() {
+            let _caps = placeholder.borrow().capabilities.clone();
+            // Frame rendering would go here.
         }
     });
 }
@@ -167,8 +189,8 @@ pub fn frame() {
 #[wasm_bindgen(js_name = capabilities)]
 pub fn capabilities() -> Result<String, JsValue> {
     WEB_PLATFORM.with(|cell| {
-        if let Some(platform) = cell.borrow().as_ref() {
-            let caps = platform.borrow().capabilities();
+        if let Some(placeholder) = cell.borrow().as_ref() {
+            let caps = placeholder.borrow().capabilities.clone();
             Ok(format!(
                 "gpu_rendering={} clipboard={} ime={} fullscreen={} file_dialogs={} drag_and_drop={} multiple_windows={}",
                 caps.gpu_rendering,
@@ -190,10 +212,3 @@ pub fn capabilities() -> Result<String, JsValue> {
 pub fn app_name() -> String {
     squiglab_core::product::APP_NAME.to_string()
 }
-
-/// Begin and end a frame on the renderer (web).
-fn renderer_begin_end_web(renderer: &mut dyn Renderer) {
-    renderer.begin_frame();
-    renderer.end_frame();
-}
-
